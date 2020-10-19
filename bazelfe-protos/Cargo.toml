@@ -1,0 +1,16 @@
+[package]
+name = "bazelfe-protos"
+version = "0.1.0"
+authors = ["Ian O'Connell <ianoc@ianoc.net>"]
+edition = "2018"
+license = "Apache-2.0"
+
+
+[dependencies]
+tonic = { version = "0.3.1", features = ["tls"] }
+prost = "0.6"
+# Required for wellknown types
+prost-types = "0.6"
+ 
+[build-dependencies]
+tonic-build = { version = "0.2.0", features = ["prost"] }

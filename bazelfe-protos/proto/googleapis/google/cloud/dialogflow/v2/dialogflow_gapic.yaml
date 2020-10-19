@@ -1,0 +1,58 @@
+type: com.google.api.codegen.ConfigProto
+config_schema_version: 2.0.0
+language_settings:
+  java:
+    package_name: com.google.cloud.dialogflow.v2
+  python:
+    package_name: google.cloud.dialogflow_v2.gapic
+  go:
+    package_name: cloud.google.com/go/dialogflow/apiv2
+    release_level: GA
+  csharp:
+    package_name: Google.Cloud.Dialogflow.V2
+  ruby:
+    package_name: Google::Cloud::Dialogflow::V2
+  php:
+    package_name: Google\Cloud\Dialogflow\V2
+  nodejs:
+    package_name: dialogflow.v2
+    domain_layer_location: google-cloud
+interfaces:
+- name: google.cloud.dialogflow.v2.Agents
+  methods:
+  - name: SetAgent
+    retry_codes_name: idempotent
+  - name: DeleteAgent
+    retry_codes_name: idempotent
+  - name: SearchAgents
+    retry_codes_name: idempotent
+  - name: TrainAgent
+    retry_codes_name: idempotent
+  - name: ExportAgent
+    retry_codes_name: idempotent
+  - name: RestoreAgent
+    retry_codes_name: idempotent
+- name: google.cloud.dialogflow.v2.Contexts
+  methods:
+  - name: DeleteContext
+    retry_codes_name: idempotent
+  - name: DeleteAllContexts
+    retry_codes_name: idempotent
+- name: google.cloud.dialogflow.v2.EntityTypes
+  methods:
+  - name: DeleteEntityType
+    retry_codes_name: idempotent
+  - name: BatchDeleteEntityTypes
+    retry_codes_name: idempotent
+  - name: BatchDeleteEntities
+    retry_codes_name: idempotent
+- name: google.cloud.dialogflow.v2.Intents
+  methods:
+  - name: DeleteIntent
+    retry_codes_name: idempotent
+  - name: BatchDeleteIntents
+    retry_codes_name: idempotent
+- name: google.cloud.dialogflow.v2.SessionEntityTypes
+  methods:
+  - name: DeleteSessionEntityType
+    retry_codes_name: idempotent
