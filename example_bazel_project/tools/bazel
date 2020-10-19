@@ -1,0 +1,14 @@
+#!/bin/bash
+set -e
+
+TOOLS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+export REPO_ROOT="$(cd $TOOLS_DIR && cd .. && pwd)"
+
+
+source $REPO_ROOT/tools/bazel_fe_common.sh
+
+1>&2 fetch_binary "$BAZEL_RUNNER_LOCAL_PATH" "$BAZEL_RUNNER_URL" "$BAZEL_RUNNER_SHA_URL"
+1>&2 fetch_binary "$BUILDOZER_LOCAL_PATH" "$BUILDOZER_URL" "$BUILDOZER_SHA_URL"
+
+
+RUST_LOG="warn,bazelfe::bazel_runner=info" exec "$BAZEL_RUNNER_LOCAL_PATH" --buildozer-path "$BUILDOZER_LOCAL_PATH" $BAZEL_REAL "$@"

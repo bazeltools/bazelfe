@@ -1,0 +1,6 @@
+[workspace]
+
+members = [
+    "bazelfe-protos",
+    "bazelfe-core",
+]

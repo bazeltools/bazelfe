@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package bazel_tools;
+
+option java_package = "io.bazeltools";
+option java_outer_classname = "RequestFilesService";
+
+import "build/bazel/remote/execution/v2/remote_execution.proto";
+import "google/rpc/status.proto";
+
+service RequestFilesService {
+    rpc RequestFiles(build.bazel.remote.execution.v2.BatchReadBlobsRequest) returns (RequestFilesResponse);
+}
+
+
+message RequestFilesResponse {
+    // A response corresponding to a single blob that the client tried to download.
+    message Response {
+      // The digest to which this response corresponds.
+      build.bazel.remote.execution.v2.Digest digest = 1;
+  
+      // The raw binary path on disk.
+      string path = 2;
+  
+      // The result of attempting to download that blob.
+      google.rpc.Status status = 3;
+    }
+  
+    // The responses to the requests.
+    repeated Response responses = 1;
+  }

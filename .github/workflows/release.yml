@@ -1,0 +1,70 @@
+name: Release
+on:
+  push:
+    branches:
+      - main
+jobs:
+  rust-binaries:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+        include:
+          - os: macos-latest
+            platform: macos
+            artifact: bazelfe-macos
+          - os: ubuntu-latest
+            platform: linux
+            artifact: bazelfe-linux
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - run: rustup component add rustfmt
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --all-features
+      - name: Prepare bazel-runner output
+        run: ./.github/ci_scripts/prepare_output.sh bazel-runner-${{ matrix.platform }} staging-directory target/release/bazel-runner
+      - name: Prepare jvm-indexer
+        run: ./.github/ci_scripts/prepare_output.sh jvm-indexer-${{ matrix.platform }} staging-directory target/release/jvm-indexer
+      - uses: actions/upload-artifact@master
+        with:
+          name: ${{ matrix.artifact }}
+          path: staging-directory
+
+  make_release:
+    name: Make release
+    needs: rust-binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Download linux bazelfe
+        uses: actions/download-artifact@v1
+        with:
+          name: bazelfe-linux
+          path: downloads
+      - name: Download macos bazelfe
+        uses: actions/download-artifact@v1
+        with:
+          name: bazelfe-macos
+          path: downloads
+      - uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: "v0.1-${{ github.run_number }}"
+          prerelease: false
+          title: "Auto generated release for bazel-runner"
+          files: |
+            downloads/bazel-runner-macos
+            downloads/bazel-runner-macos.sha256
+            downloads/bazel-runner-linux
+            downloads/bazel-runner-linux.sha256
+            downloads/jvm-indexer-macos
+            downloads/jvm-indexer-macos.sha256
+            downloads/jvm-indexer-linux
+            downloads/jvm-indexer-linux.sha256
+        id: "automatic_releases"
