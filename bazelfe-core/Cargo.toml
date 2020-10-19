@@ -1,0 +1,87 @@
+[package]
+name = "bazelfe-core"
+version = "0.1.0"
+authors = ["Ian O'Connell <ianoc@ianoc.net>"]
+edition = "2018"
+license = "Apache-2.0"
+
+[dependencies]
+tui = "0.10.0"
+termion = "1.5.5"
+rand = "0.7.3"
+argh = "0.1.3"
+nom = "5.1.2"
+clap = "3.0.0-beta.2"
+regex = "1.3.9"
+lazy_static = "1.4.0"
+futures = { version = "0.3", default-features = false, features = ["alloc"] }
+tonic = { version = "0.3.1", features = ["tls"] }
+prost = "0.6"
+tokio = { version = "0.2", features = ["rt-threaded", "time", "stream", "fs", "macros", "uds", "io-util", "process", "io-std"] }
+# Required for wellknown types
+prost-types = "0.6"
+pretty_env_logger = "0.4"
+log = "0.4"
+async-stream = "0.3.0"
+bytes = "0.5.6"
+ctrlc = "3.1.6"
+async-trait = "0.1.41"
+env_logger = "0.7.1"
+dashmap = "3.11.10"
+exec = "0.3.1"
+zip = "0.5.8"
+bazelfe-protos = { path = "../bazelfe-protos" }
+
+[dev-dependencies]
+tempfile = "3.1.0"
+pinky-swear = "4.0.0"
+tower = "0.3"
+
+[features]
+dev-binaries=[]
+default = ["dev-binaries"]
+
+[lib]
+name = "bazelfe_core"
+path = "src/lib.rs"
+
+[[bin]]
+name = "scala-parser"
+path = "src/source_dependencies/scala/scala_parser_app.rs"
+required-features = ["dev-binaries"]
+
+[[bin]]
+name = "java-parser"
+path = "src/source_dependencies/java/java_parser_app.rs"
+required-features = ["dev-binaries"]
+
+
+[[bin]]
+name = "index-table"
+path = "src/index_table/load_index_table_app.rs"
+required-features = ["dev-binaries"]
+
+[[bin]]
+name = "build-events"
+path = "src/build_events/build_events_app.rs"
+required-features = ["dev-binaries"]
+
+[[bin]]
+name = "bazel-runner"
+path = "src/bazel_runner/bazel_runner_app.rs"
+
+
+[[bin]]
+name = "buildozer-driver"
+path = "src/buildozer_driver/buildozer_driver_app.rs"
+required-features = ["dev-binaries"]
+
+[[bin]]
+name = "jvm-indexer"
+path = "src/jvm_indexer/jvm_indexer_app.rs"
+
+[[bin]]
+name = "popularity-parser-app"
+path = "src/jvm_indexer/popularity_parser_app.rs"
+required-features = ["dev-binaries"]
+
