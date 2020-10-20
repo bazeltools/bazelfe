@@ -4,44 +4,59 @@ use nom::character::complete::line_ending;
 use nom::error::ParseError;
 use nom::multi::{many0, many1};
 use nom::{bytes::complete::tag, combinator::map, combinator::opt, sequence::tuple, IResult};
-use std::{collections::HashMap, collections::HashSet, error::Error};
+use tokio::sync::RwLock;
+use std::{sync::Arc, collections::HashMap, collections::HashSet, error::Error};
+
+pub struct GuardedGet<'a>{
+    key: String,
+    guard: tokio::sync::RwLockReadGuard<'a, HashMap<String, Vec<(u16, String)>>>
+}
+impl<'a> GuardedGet<'a> {
+    pub fn get(&self) -> Option<&Vec<(u16, String)>> {
+        self.guard.get(&self.key)
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct IndexTable {
-    tbl_map: HashMap<String, Vec<(u16, String)>>,
+    tbl_map: Arc<RwLock<HashMap<String, Vec<(u16, String)>>>>,
 }
 impl Default for IndexTable {
     fn default() -> Self {
         Self {
-            tbl_map: HashMap::default(),
+            tbl_map: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
 impl IndexTable {
     pub fn new() -> Self {
         Self {
-            tbl_map: HashMap::new(),
+            tbl_map: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
     pub fn from_hashmap(m: HashMap<String, Vec<(u16, String)>>) -> Self {
-        Self { tbl_map: m }
+        Self { tbl_map: Arc::new(RwLock::new(m)) }
     }
 
-    pub fn get<S>(&self, key: S) -> Option<&Vec<(u16, String)>>
+    pub async fn get<'a, S>(&'a self, key: S) -> GuardedGet<'a>
     where
         S: Into<String>,
     {
-        self.tbl_map.get(&key.into())
+        let v: tokio::sync::RwLockReadGuard<'a, HashMap<String, Vec<(u16, String)>>> = self.tbl_map.read().await;
+        GuardedGet {
+            key: key.into(),
+            guard: v        }
     }
 
-    pub fn get_from_suffix<S>(&self, key: S) -> Vec<(u16, String)>
+    pub async fn get_from_suffix<S>(&self, key: S) -> Vec<(u16, String)>
     where
         S: Into<String>,
     {
         let passed_k = key.into();
         let mut result: HashSet<(u16, String)> = HashSet::default();
-        for (k, v) in self.tbl_map.iter() {
+        let tbl_map = self.tbl_map.read().await;
+        for (k, v) in tbl_map.iter() {
             if k.ends_with(&passed_k) {
                 for e in v {
                     result.insert(e.clone());
@@ -100,7 +115,7 @@ pub fn parse_file(input: &str) -> Result<IndexTable, Box<dyn Error>> {
         index_data.insert(k, v);
     }
     Ok(IndexTable {
-        tbl_map: index_data,
+        tbl_map: Arc::new(RwLock::new(index_data)),
     })
 }
 
@@ -152,8 +167,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn parse_multiple_lines() {
+    #[tokio::test]
+    async fn parse_multiple_lines() {
         let parsed_file = parse_file(
             "scala.reflect.internal.SymbolPairs.Cursor.anon.1\t1:@third_party_jvm//3rdparty/jvm/org/scala_lang:scala_reflect
 org.apache.parquet.thrift.test.TestPerson.TestPersonTupleScheme\t0:@third_party_jvm//3rdparty/jvm/org/apache/parquet:parquet_thrift_jar_tests
@@ -185,7 +200,7 @@ javax.annotation.ParametersAreNullableByDefault\t236:@third_party_jvm//3rdparty/
         ).unwrap();
 
         assert_eq!(
-            parsed_file.get("org.apache.parquet.thrift.test.TestPerson.TestPersonTupleScheme"),
+            parsed_file.get("org.apache.parquet.thrift.test.TestPerson.TestPersonTupleScheme").await.get(),
             Some(&vec![(
                 0,
                 String::from(
@@ -195,7 +210,7 @@ javax.annotation.ParametersAreNullableByDefault\t236:@third_party_jvm//3rdparty/
         );
 
         assert_eq!(
-            parsed_file.get("javax.annotation.Nullable"),
+            parsed_file.get("javax.annotation.Nullable").await.get(),
             Some(&vec![
                 (
                     236,

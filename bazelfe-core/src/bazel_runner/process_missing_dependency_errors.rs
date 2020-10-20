@@ -15,7 +15,7 @@ use crate::{
 use dashmap::DashSet;
 use log;
 
-fn get_candidates_for_class_name(
+async fn get_candidates_for_class_name(
     error_info: &ActionFailedErrorInfo,
     class_name: &str,
     index_table: &index_table::IndexTable,
@@ -45,7 +45,8 @@ fn get_candidates_for_class_name(
 
     let mut results = index_table
         .get(class_name)
-        .map(|e| e.clone())
+        .await
+        .get().map(|e| e.clone())
         .unwrap_or(vec![]);
 
     match &error_info.target_kind {
@@ -201,9 +202,9 @@ pub async fn process_missing_dependency_errors<T: Buildozer + Clone + Send + Syn
                     action_failed_error_info,
                     &class_name,
                     &index_table,
-                ),
+                ).await,
                 Request::Suffix(suffix) => {
-                    let mut r = index_table.get_from_suffix(&suffix.suffix);
+                    let mut r = index_table.get_from_suffix(&suffix.suffix).await;
                     r.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
                     r
                 }
@@ -255,8 +256,8 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn get_candidates_from_map() {
+    #[tokio::test]
+    async fn get_candidates_from_map() {
         let mut tbl_map = HashMap::new();
         tbl_map.insert(
             String::from("com.example.foo.bar.Baz"),
@@ -271,7 +272,7 @@ mod tests {
         };
 
         assert_eq!(
-            get_candidates_for_class_name(&error_info, "com.example.bar.Baz", &index_table),
+            get_candidates_for_class_name(&error_info, "com.example.bar.Baz", &index_table).await,
             vec![
                 (0, String::from("//src/main/scala/com/example/bar:bar")),
                 (0, String::from("//src/main/java/com/example/bar:bar")),
@@ -279,7 +280,7 @@ mod tests {
         );
 
         assert_eq!(
-            get_candidates_for_class_name(&error_info, "com.example.foo.bar.Baz", &index_table),
+            get_candidates_for_class_name(&error_info, "com.example.foo.bar.Baz", &index_table).await,
             vec![
                 (13, String::from("//src/main/foop/blah:oop")),
                 (0, String::from("//src/main/scala/com/example/foo/bar:bar")),
@@ -288,7 +289,7 @@ mod tests {
         );
 
         assert_eq!(
-            get_candidates_for_class_name(&error_info, "com.example.a.b.c.Baz", &index_table),
+            get_candidates_for_class_name(&error_info, "com.example.a.b.c.Baz", &index_table).await,
             vec![
                 (0, String::from("//src/main/scala/com/example/a/b/c:c")),
                 (0, String::from("//src/main/java/com/example/a/b/c:c"))
