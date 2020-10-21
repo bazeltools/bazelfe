@@ -5,15 +5,15 @@ use nom::error::ParseError;
 use nom::multi::{many0, many1};
 use nom::{bytes::complete::tag, combinator::map, combinator::opt, sequence::tuple, IResult};
 use tokio::sync::RwLock;
-use std::{sync::Arc, collections::HashMap, collections::HashSet, error::Error};
+use std::{borrow::Cow, collections::HashMap, collections::HashSet, error::Error, sync::Arc};
 
-pub struct GuardedGet<'a>{
-    key: String,
-    guard: tokio::sync::RwLockReadGuard<'a, HashMap<String, Vec<(u16, String)>>>
-}
-impl<'a> GuardedGet<'a> {
+pub struct GuardedGet<'a, 'b>(
+    Cow<'b, str>,
+    tokio::sync::RwLockReadGuard<'a, HashMap<String, Vec<(u16, String)>>>);
+
+impl<'a, 'b> GuardedGet<'a, 'b> {
     pub fn get(&self) -> Option<&Vec<(u16, String)>> {
-        self.guard.get(&self.key)
+        self.1.get(self.0.as_ref())
     }
 }
 
@@ -39,14 +39,12 @@ impl IndexTable {
         Self { tbl_map: Arc::new(RwLock::new(m)) }
     }
 
-    pub async fn get<'a, S>(&'a self, key: S) -> GuardedGet<'a>
+    pub async fn get<'a,'b, S>(&'a self, key: S) -> GuardedGet<'a, 'b>
     where
-        S: Into<String>,
+        S: Into<Cow<'b, str>>,
     {
         let v: tokio::sync::RwLockReadGuard<'a, HashMap<String, Vec<(u16, String)>>> = self.tbl_map.read().await;
-        GuardedGet {
-            key: key.into(),
-            guard: v        }
+        GuardedGet(key.into(), v)
     }
 
     pub async fn get_from_suffix<S>(&self, key: S) -> Vec<(u16, String)>
@@ -114,9 +112,7 @@ pub fn parse_file(input: &str) -> Result<IndexTable, Box<dyn Error>> {
     for (k, v) in extracted_result.into_iter() {
         index_data.insert(k, v);
     }
-    Ok(IndexTable {
-        tbl_map: Arc::new(RwLock::new(index_data)),
-    })
+    Ok(IndexTable::from_hashmap(index_data))
 }
 
 #[cfg(test)]
