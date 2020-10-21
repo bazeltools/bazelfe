@@ -6,6 +6,9 @@ use nom::multi::{many0, many1};
 use nom::{bytes::complete::tag, combinator::map, combinator::opt, sequence::tuple, IResult};
 use tokio::sync::RwLock;
 use std::{borrow::Cow, collections::HashMap, collections::HashSet, error::Error, sync::Arc};
+mod index_table_value;
+
+pub use index_table_value::*;
 
 pub struct GuardedGet<'a, 'b>(
     Cow<'b, str>,
@@ -37,6 +40,23 @@ impl IndexTable {
 
     pub fn from_hashmap(m: HashMap<String, Vec<(u16, String)>>) -> Self {
         Self { tbl_map: Arc::new(RwLock::new(m)) }
+    }
+
+
+    pub async fn insert<'b, S>(&self, key: S, value: (u16, String)) -> ()
+    where
+        S: Into<Cow<'b, str>>,
+    {
+        let mut guard = self.tbl_map.write().await;
+        let k : Cow<'b, str> = key.into();
+        match guard.get_mut(k.as_ref()) {
+            Some(vec) => {
+                vec.push(value);
+            }
+            None => {
+                guard.insert(k.into_owned(), vec![value]);
+            }
+        }
     }
 
     pub async fn get<'a,'b, S>(&'a self, key: S) -> GuardedGet<'a, 'b>
@@ -220,5 +240,57 @@ javax.annotation.ParametersAreNullableByDefault\t236:@third_party_jvm//3rdparty/
                 ),
             ])
         );
+    }
+
+    #[tokio::test]
+    async fn updating_index() {
+        let index = IndexTable::default();
+
+        assert_eq!(
+            index.get("org.apache.parquet.thrift.test.TestPerson.TestPersonTupleScheme").await.get(),
+            None
+        );
+
+
+        // Insert new element
+        index.insert("javax.annotation.Nullable", 
+        (
+            236,
+            String::from("@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305")
+        )
+        ).await;
+
+        assert_eq!(
+            index.get("javax.annotation.Nullable").await.get(),
+            Some(&vec![
+                (
+                    236,
+                    String::from("@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305")
+                ),
+            ])
+        );
+
+
+          // Update existing element
+          index.insert("javax.annotation.Nullable", 
+          (
+              236,
+              String::from("@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305")
+          )
+          ).await;
+  
+          assert_eq!(
+              index.get("javax.annotation.Nullable").await.get(),
+              Some(&vec![
+                (
+                    236,
+                    String::from("@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305")
+                ),
+                (
+                      236,
+                      String::from("@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305")
+                  ),
+              ])
+          );
     }
 }
