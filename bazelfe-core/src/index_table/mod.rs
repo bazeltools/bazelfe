@@ -7,22 +7,22 @@ use nom::{bytes::complete::tag, combinator::map, combinator::opt, sequence::tupl
 use tokio::sync::RwLock;
 use std::{borrow::Cow, collections::HashMap, collections::HashSet, error::Error, sync::Arc};
 mod index_table_value;
-
+mod expand_target_to_guesses;
 pub use index_table_value::*;
 
 pub struct GuardedGet<'a, 'b>(
     Cow<'b, str>,
-    tokio::sync::RwLockReadGuard<'a, HashMap<String, Vec<(u16, String)>>>);
+    tokio::sync::RwLockReadGuard<'a, HashMap<String,IndexTableValue>>);
 
 impl<'a, 'b> GuardedGet<'a, 'b> {
-    pub fn get(&self) -> Option<&Vec<(u16, String)>> {
+    pub fn get(&self) -> Option<&IndexTableValue> {
         self.1.get(self.0.as_ref())
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct IndexTable {
-    tbl_map: Arc<RwLock<HashMap<String, Vec<(u16, String)>>>>,
+    tbl_map: Arc<RwLock<HashMap<String, IndexTableValue>>>,
 }
 impl Default for IndexTable {
     fn default() -> Self {
@@ -39,7 +39,10 @@ impl IndexTable {
     }
 
     pub fn from_hashmap(m: HashMap<String, Vec<(u16, String)>>) -> Self {
-        Self { tbl_map: Arc::new(RwLock::new(m)) }
+                Self { tbl_map: Arc::new(RwLock::new(m.into_iter().map(|(k,v)| {
+                    
+                    (k, IndexTableValue::from_vec(v))
+                }).collect())) }
     }
 
 
@@ -49,39 +52,62 @@ impl IndexTable {
     {
         let mut guard = self.tbl_map.write().await;
         let k : Cow<'b, str> = key.into();
+        
         match guard.get_mut(k.as_ref()) {
             Some(vec) => {
-                vec.push(value);
+                vec.update_or_add_entry(value.1, value.0).await;
             }
             None => {
-                guard.insert(k.into_owned(), vec![value]);
+                let updated_v = IndexTableValueEntry {
+                    target: value.1,
+                    priority: Priority(value.0)
+                };
+
+                guard.insert(k.into_owned(), IndexTableValue::with_value(updated_v));
             }
         }
     }
 
-    pub async fn get<'a,'b, S>(&'a self, key: S) -> GuardedGet<'a, 'b>
+    pub async fn get_or_guess<'b, S>(&self, key: S) -> IndexTableValue where
+    S: Into<Cow<'b, str>>,
+{
+    let cow_k = key.into();
+
+    match self.get(cow_k.clone()).await {
+        Some(v) => v,
+        None => {
+            let guesses = expand_target_to_guesses::get_guesses_for_class_name(&cow_k);
+            IndexTableValue::from_vec(guesses)
+        }
+    }
+}
+
+    pub async fn get<'b, S>(&self, key: S) -> Option<IndexTableValue>
     where
         S: Into<Cow<'b, str>>,
     {
-        let v: tokio::sync::RwLockReadGuard<'a, HashMap<String, Vec<(u16, String)>>> = self.tbl_map.read().await;
-        GuardedGet(key.into(), v)
+
+        let v = self.tbl_map.read().await;
+        v.get(&*key.into()).map(|e| e.clone())
     }
 
-    pub async fn get_from_suffix<S>(&self, key: S) -> Vec<(u16, String)>
+    pub async fn get_from_suffix<S>(&self, key: S) -> IndexTableValue
     where
         S: Into<String>,
     {
         let passed_k = key.into();
-        let mut result: HashSet<(u16, String)> = HashSet::default();
+        let mut result: HashSet<IndexTableValueEntry> = HashSet::default();
         let tbl_map = self.tbl_map.read().await;
         for (k, v) in tbl_map.iter() {
             if k.ends_with(&passed_k) {
-                for e in v {
+                for e in &v.read_iter().await {
                     result.insert(e.clone());
                 }
             }
         }
-        result.into_iter().collect()
+        let mut vec_result: Vec<IndexTableValueEntry> = result.into_iter().collect();
+        vec_result.sort();
+        IndexTableValue::new(vec_result)
     }
 }
 fn element_extractor<'a, E>() -> impl Fn(&'a str) -> IResult<&str, (u16, &str), E>
@@ -216,29 +242,29 @@ javax.annotation.ParametersAreNullableByDefault\t236:@third_party_jvm//3rdparty/
         ).unwrap();
 
         assert_eq!(
-            parsed_file.get("org.apache.parquet.thrift.test.TestPerson.TestPersonTupleScheme").await.get(),
-            Some(&vec![(
-                0,
-                String::from(
+            parsed_file.get("org.apache.parquet.thrift.test.TestPerson.TestPersonTupleScheme").await.unwrap().as_vec().await,
+            vec![IndexTableValueEntry{
+                priority: Priority(0),
+                target: String::from(
                     "@third_party_jvm//3rdparty/jvm/org/apache/parquet:parquet_thrift_jar_tests"
                 )
-            )])
+            }]
         );
 
         assert_eq!(
-            parsed_file.get("javax.annotation.Nullable").await.get(),
-            Some(&vec![
-                (
-                    236,
-                    String::from("@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305")
-                ),
-                (
-                    75,
-                    String::from(
+            parsed_file.get("javax.annotation.Nullable").await.unwrap().as_vec().await,
+            vec![
+                IndexTableValueEntry{
+                    priority: Priority(236),
+                    target: String::from("@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305")
+                },
+                IndexTableValueEntry{
+                    priority: Priority(75),
+                    target: String::from(
                         "@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:annotations"
                     ),
-                ),
-            ])
+                },
+            ]
         );
     }
 
@@ -247,8 +273,8 @@ javax.annotation.ParametersAreNullableByDefault\t236:@third_party_jvm//3rdparty/
         let index = IndexTable::default();
 
         assert_eq!(
-            index.get("org.apache.parquet.thrift.test.TestPerson.TestPersonTupleScheme").await.get(),
-            None
+            index.get("org.apache.parquet.thrift.test.TestPerson.TestPersonTupleScheme").await.is_none(),
+            true
         );
 
 
@@ -261,13 +287,13 @@ javax.annotation.ParametersAreNullableByDefault\t236:@third_party_jvm//3rdparty/
         ).await;
 
         assert_eq!(
-            index.get("javax.annotation.Nullable").await.get(),
-            Some(&vec![
-                (
-                    236,
-                    String::from("@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305")
-                ),
-            ])
+            index.get("javax.annotation.Nullable").await.unwrap().as_vec().await,
+            vec![
+                IndexTableValueEntry{
+                    priority: Priority(236),
+                    target: String::from("@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305")
+                },
+            ]
         );
 
 
@@ -278,19 +304,27 @@ javax.annotation.ParametersAreNullableByDefault\t236:@third_party_jvm//3rdparty/
               String::from("@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305")
           )
           ).await;
+
+
+          index.insert("javax.annotation.Nullable", 
+          (
+              1,
+              String::from("@third_party_jvm//3rdparty/jvm/com/google:guava")
+          )
+          ).await;
   
           assert_eq!(
-              index.get("javax.annotation.Nullable").await.get(),
-              Some(&vec![
-                (
-                    236,
-                    String::from("@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305")
-                ),
-                (
-                      236,
-                      String::from("@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305")
-                  ),
-              ])
+              index.get("javax.annotation.Nullable").await.unwrap().as_vec().await,
+              vec![
+                IndexTableValueEntry{
+                    priority: Priority(236),
+                    target: String::from("@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305")
+                },
+                IndexTableValueEntry{
+                    priority: Priority(1),
+                    target: String::from("@third_party_jvm//3rdparty/jvm/com/google:guava")
+                },
+              ]
           );
     }
 }
