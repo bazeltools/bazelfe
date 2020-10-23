@@ -1,4 +1,4 @@
-use crate::{build_events::build_event_server::bazel_event::ProgressEvt};
+use crate::build_events::build_event_server::bazel_event::ProgressEvt;
 use bazelfe_protos::*;
 use lazy_static::lazy_static;
 

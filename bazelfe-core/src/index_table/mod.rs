@@ -4,15 +4,16 @@ use nom::character::complete::line_ending;
 use nom::error::ParseError;
 use nom::multi::{many0, many1};
 use nom::{bytes::complete::tag, combinator::map, combinator::opt, sequence::tuple, IResult};
-use tokio::sync::RwLock;
 use std::{borrow::Cow, collections::HashMap, collections::HashSet, error::Error, sync::Arc};
-mod index_table_value;
+use tokio::sync::RwLock;
 mod expand_target_to_guesses;
+mod index_table_value;
 pub use index_table_value::*;
 
 pub struct GuardedGet<'a, 'b>(
     Cow<'b, str>,
-    tokio::sync::RwLockReadGuard<'a, HashMap<String,IndexTableValue>>);
+    tokio::sync::RwLockReadGuard<'a, HashMap<String, IndexTableValue>>,
+);
 
 impl<'a, 'b> GuardedGet<'a, 'b> {
     pub fn get(&self) -> Option<&IndexTableValue> {
@@ -39,20 +40,22 @@ impl IndexTable {
     }
 
     pub fn from_hashmap(m: HashMap<String, Vec<(u16, String)>>) -> Self {
-                Self { tbl_map: Arc::new(RwLock::new(m.into_iter().map(|(k,v)| {
-                    
-                    (k, IndexTableValue::from_vec(v))
-                }).collect())) }
+        Self {
+            tbl_map: Arc::new(RwLock::new(
+                m.into_iter()
+                    .map(|(k, v)| (k, IndexTableValue::from_vec(v)))
+                    .collect(),
+            )),
+        }
     }
-
 
     pub async fn insert<'b, S>(&self, key: S, value: (u16, String)) -> ()
     where
         S: Into<Cow<'b, str>>,
     {
         let mut guard = self.tbl_map.write().await;
-        let k : Cow<'b, str> = key.into();
-        
+        let k: Cow<'b, str> = key.into();
+
         match guard.get_mut(k.as_ref()) {
             Some(vec) => {
                 vec.update_or_add_entry(value.1, value.0).await;
@@ -60,7 +63,7 @@ impl IndexTable {
             None => {
                 let updated_v = IndexTableValueEntry {
                     target: value.1,
-                    priority: Priority(value.0)
+                    priority: Priority(value.0),
                 };
 
                 guard.insert(k.into_owned(), IndexTableValue::with_value(updated_v));
@@ -68,25 +71,25 @@ impl IndexTable {
         }
     }
 
-    pub async fn get_or_guess<'b, S>(&self, key: S) -> IndexTableValue where
-    S: Into<Cow<'b, str>>,
-{
-    let cow_k = key.into();
+    pub async fn get_or_guess<'b, S>(&self, key: S) -> IndexTableValue
+    where
+        S: Into<Cow<'b, str>>,
+    {
+        let cow_k = key.into();
 
-    match self.get(cow_k.clone()).await {
-        Some(v) => v,
-        None => {
-            let guesses = expand_target_to_guesses::get_guesses_for_class_name(&cow_k);
-            IndexTableValue::from_vec(guesses)
+        match self.get(cow_k.clone()).await {
+            Some(v) => v,
+            None => {
+                let guesses = expand_target_to_guesses::get_guesses_for_class_name(&cow_k);
+                IndexTableValue::from_vec(guesses)
+            }
         }
     }
-}
 
     pub async fn get<'b, S>(&self, key: S) -> Option<IndexTableValue>
     where
         S: Into<Cow<'b, str>>,
     {
-
         let v = self.tbl_map.read().await;
         v.get(&*key.into()).map(|e| e.clone())
     }
@@ -242,8 +245,13 @@ javax.annotation.ParametersAreNullableByDefault\t236:@third_party_jvm//3rdparty/
         ).unwrap();
 
         assert_eq!(
-            parsed_file.get("org.apache.parquet.thrift.test.TestPerson.TestPersonTupleScheme").await.unwrap().as_vec().await,
-            vec![IndexTableValueEntry{
+            parsed_file
+                .get("org.apache.parquet.thrift.test.TestPerson.TestPersonTupleScheme")
+                .await
+                .unwrap()
+                .as_vec()
+                .await,
+            vec![IndexTableValueEntry {
                 priority: Priority(0),
                 target: String::from(
                     "@third_party_jvm//3rdparty/jvm/org/apache/parquet:parquet_thrift_jar_tests"
@@ -252,13 +260,20 @@ javax.annotation.ParametersAreNullableByDefault\t236:@third_party_jvm//3rdparty/
         );
 
         assert_eq!(
-            parsed_file.get("javax.annotation.Nullable").await.unwrap().as_vec().await,
+            parsed_file
+                .get("javax.annotation.Nullable")
+                .await
+                .unwrap()
+                .as_vec()
+                .await,
             vec![
-                IndexTableValueEntry{
+                IndexTableValueEntry {
                     priority: Priority(236),
-                    target: String::from("@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305")
+                    target: String::from(
+                        "@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305"
+                    )
                 },
-                IndexTableValueEntry{
+                IndexTableValueEntry {
                     priority: Priority(75),
                     target: String::from(
                         "@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:annotations"
@@ -273,63 +288,83 @@ javax.annotation.ParametersAreNullableByDefault\t236:@third_party_jvm//3rdparty/
         let index = IndexTable::default();
 
         assert_eq!(
-            index.get("org.apache.parquet.thrift.test.TestPerson.TestPersonTupleScheme").await.is_none(),
+            index
+                .get("org.apache.parquet.thrift.test.TestPerson.TestPersonTupleScheme")
+                .await
+                .is_none(),
             true
         );
 
-
         // Insert new element
-        index.insert("javax.annotation.Nullable", 
-        (
-            236,
-            String::from("@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305")
-        )
-        ).await;
+        index
+            .insert(
+                "javax.annotation.Nullable",
+                (
+                    236,
+                    String::from("@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305"),
+                ),
+            )
+            .await;
 
         assert_eq!(
-            index.get("javax.annotation.Nullable").await.unwrap().as_vec().await,
-            vec![
-                IndexTableValueEntry{
-                    priority: Priority(236),
-                    target: String::from("@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305")
-                },
-            ]
+            index
+                .get("javax.annotation.Nullable")
+                .await
+                .unwrap()
+                .as_vec()
+                .await,
+            vec![IndexTableValueEntry {
+                priority: Priority(236),
+                target: String::from(
+                    "@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305"
+                )
+            },]
         );
 
+        // Update existing element
+        index
+            .insert(
+                "javax.annotation.Nullable",
+                (
+                    236,
+                    String::from("@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305"),
+                ),
+            )
+            .await;
 
-          // Update existing element
-          index.insert("javax.annotation.Nullable", 
-          (
-              236,
-              String::from("@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305")
-          )
-          ).await;
+        index
+            .insert(
+                "javax.annotation.Nullable",
+                (
+                    1,
+                    String::from("@third_party_jvm//3rdparty/jvm/com/google:guava"),
+                ),
+            )
+            .await;
 
-
-          index.insert("javax.annotation.Nullable", 
-          (
-              1,
-              String::from("@third_party_jvm//3rdparty/jvm/com/google:guava")
-          )
-          ).await;
-  
-          assert_eq!(
-              index.get("javax.annotation.Nullable").await.unwrap().as_vec().await,
-              vec![
-                IndexTableValueEntry{
+        assert_eq!(
+            index
+                .get("javax.annotation.Nullable")
+                .await
+                .unwrap()
+                .as_vec()
+                .await,
+            vec![
+                IndexTableValueEntry {
                     priority: Priority(236),
-                    target: String::from("@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305")
+                    target: String::from(
+                        "@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305"
+                    )
                 },
-                IndexTableValueEntry{
+                IndexTableValueEntry {
                     priority: Priority(1),
                     target: String::from("@third_party_jvm//3rdparty/jvm/com/google:guava")
                 },
-              ]
-          );
+            ]
+        );
     }
 
-
-        // #[tokio::test]
+    // #[tokio::test]
     // async fn get_candidates_from_map() {
     //     let mut tbl_map = HashMap::new();
     //     tbl_map.insert(

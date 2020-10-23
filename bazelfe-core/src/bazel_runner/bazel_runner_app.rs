@@ -158,7 +158,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Services listening on {}", addr);
 
     let (bes, sender_arc, _) =
-    bazelfe_core::build_events::build_event_server::build_bazel_build_events_service();
+        bazelfe_core::build_events::build_event_server::build_bazel_build_events_service();
 
     let bes_port: u16 = addr.port();
 
