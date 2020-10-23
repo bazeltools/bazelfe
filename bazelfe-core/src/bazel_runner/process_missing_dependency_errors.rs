@@ -9,7 +9,7 @@ use dashmap::DashSet;
 use log;
 
 
-pub fn is_potentially_valid_target(target_kind: &Option<String>, label: &str) -> bool {
+ fn is_potentially_valid_target(target_kind: &Option<String>, label: &str) -> bool {
     lazy_static! {
         // These are things that are already implicit dependencencies so we should ensure they are not included
           static ref FORBIDDEN_TARGETS_BY_TYPE: HashMap<String, HashSet<String>> = {
@@ -219,48 +219,11 @@ pub async fn process_missing_dependency_errors<T: Buildozer + Clone + Send + Syn
 mod tests {
     use std::path::PathBuf;
 
-    use super::*;
+        use crate::error_extraction::{ClassImportRequest, ClassSuffixMatch};
 
-    // #[tokio::test]
-    // async fn get_candidates_from_map() {
-    //     let mut tbl_map = HashMap::new();
-    //     tbl_map.insert(
-    //         String::from("com.example.foo.bar.Baz"),
-    //         vec![(13, String::from("//src/main/foop/blah:oop"))],
-    //     );
-    //     let index_table = index_table::IndexTable::from_hashmap(tbl_map);
+use super::*;
 
-    //     let error_info = ActionFailedErrorInfo {
-    //         label: String::from("//src/main/foo/asd/we:wer"),
-    //         output_files: vec![],
-    //         target_kind: Some(String::from("scala_library")),
-    //     };
 
-    //     assert_eq!(
-    //         get_candidates_for_class_name(&error_info, "com.example.bar.Baz", &index_table).await,
-    //         vec![
-    //             (0, String::from("//src/main/scala/com/example/bar:bar")),
-    //             (0, String::from("//src/main/java/com/example/bar:bar")),
-    //         ]
-    //     );
-
-    //     assert_eq!(
-    //         get_candidates_for_class_name(&error_info, "com.example.foo.bar.Baz", &index_table).await,
-    //         vec![
-    //             (13, String::from("//src/main/foop/blah:oop")),
-    //             (0, String::from("//src/main/scala/com/example/foo/bar:bar")),
-    //             (0, String::from("//src/main/java/com/example/foo/bar:bar"))
-    //         ]
-    //     );
-
-    //     assert_eq!(
-    //         get_candidates_for_class_name(&error_info, "com.example.a.b.c.Baz", &index_table).await,
-    //         vec![
-    //             (0, String::from("//src/main/scala/com/example/a/b/c:c")),
-    //             (0, String::from("//src/main/java/com/example/a/b/c:c"))
-    //         ]
-    //     );
-    // }
 
     #[test]
     fn test_is_potentially_valid_target() {
@@ -273,4 +236,93 @@ mod tests {
         let built_path = format!("//{}", d.to_str().unwrap());
         assert_eq!(is_potentially_valid_target(&None, &built_path), true);
     }
+
+    #[test]
+    fn test_is_potentially_valid_target_forbidden_by_type() {
+        assert_eq!(is_potentially_valid_target(&Some(String::from("scala_library")), "@third_party_jvm//3rdparty/jvm/org/scala_lang:scala_library"), false);
+    }
+
+
+    #[test]
+    fn test_output_error_paths() {
+        let action_failed_error_info = ActionFailedErrorInfo {
+            label: String::from("//src/main/com/example/foo:Bar"),
+            output_files: vec![
+                build_event_stream::file::File::Uri(String::from("remote_uri://foo/bar/baz")),
+                build_event_stream::file::File::Uri(String::from("file:///foo/bar/baz"))
+            ],
+            target_kind: Some(String::from("scala_library"))
+        };
+        
+        let result: Vec<PathBuf> = output_error_paths(&action_failed_error_info);
+        let expected: Vec<PathBuf> = vec![Path::new("/foo/bar/baz").to_path_buf()];
+        assert_eq!(result, expected);
+    }
+    use std::io::prelude::*;
+
+
+    async fn test_content_to_expected_result(
+        content: &str,
+        target_kind: &str,
+        expected_candidate_import_requests: Vec<error_extraction::ClassImportRequest>,
+        expected_suffix_requests: Vec<error_extraction::ClassSuffixMatch>
+    ) {
+        let action_failed_error_info = ActionFailedErrorInfo {
+            label: String::from("//src/main/com/example/foo:Bar"),
+            output_files: vec![
+                build_event_stream::file::File::Uri(String::from("remote_uri://foo/bar/baz")),
+                build_event_stream::file::File::Uri(String::from("file:///foo/bar/baz"))
+            ],
+            target_kind: Some(String::from(target_kind))
+        };
+
+        let mut tempfile = tempfile::NamedTempFile::new().expect("Can make a temp file");
+        tempfile.write_all(content.as_bytes()).expect("Should be able to write to temp file");
+        let tempfile_path = tempfile.into_temp_path();
+
+        let mut candidate_import_requests: Vec<error_extraction::ClassImportRequest> = Vec::default();
+        let mut suffix_requests: Vec<error_extraction::ClassSuffixMatch> = Vec::default();
+        path_to_import_requests(
+            &action_failed_error_info,
+            &(*tempfile_path).to_path_buf(),
+            &mut candidate_import_requests,
+            &mut suffix_requests,
+        ).await;
+
+        assert_eq!(candidate_import_requests, expected_candidate_import_requests);
+        assert_eq!(suffix_requests, expected_suffix_requests);
+    }
+
+    #[tokio::test]
+    async fn test_path_to_import_requests() {
+        // we are just testing that we load the file and invoke the paths, so we just need ~any error types in here.
+        test_content_to_expected_result(
+            "src/main/scala/com/example/Example.scala:2: error: object foo is not a member of package com.example
+            import com.example.foo.bar.Baz
+                               ^
+            src/main/scala/com/example/Example.scala:2: warning: Unused import
+            import com.example.foo.bar.Baz
+                                       ^
+            one warning found
+            one error found",
+            "scala_library",
+            vec![ClassImportRequest{
+                class_name: String::from("com.example.foo"), exact_only: false, src_fn: String::from("scala::extract_not_a_member_of_package"), priority: 1
+            }], 
+            Vec::default()
+        ).await;
+
+            // we are just testing that we load the file and invoke the paths, so we just need ~any error types in here.
+            test_content_to_expected_result(
+                "src/main/java/com/example/foo/bar/Baz.java:205: error: cannot access JSONObject
+                Blah key = Blah.myfun(jwk);",
+                "java_library",
+                Vec::default(), 
+                vec![
+                    ClassSuffixMatch { suffix: String::from("JSONObject"), src_fn: String::from("java::error_cannot_access")}
+                ]
+            ).await
+    }
+    
+    
 }

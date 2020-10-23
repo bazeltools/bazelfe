@@ -327,4 +327,46 @@ javax.annotation.ParametersAreNullableByDefault\t236:@third_party_jvm//3rdparty/
               ]
           );
     }
+
+
+        // #[tokio::test]
+    // async fn get_candidates_from_map() {
+    //     let mut tbl_map = HashMap::new();
+    //     tbl_map.insert(
+    //         String::from("com.example.foo.bar.Baz"),
+    //         vec![(13, String::from("//src/main/foop/blah:oop"))],
+    //     );
+    //     let index_table = index_table::IndexTable::from_hashmap(tbl_map);
+
+    //     let error_info = ActionFailedErrorInfo {
+    //         label: String::from("//src/main/foo/asd/we:wer"),
+    //         output_files: vec![],
+    //         target_kind: Some(String::from("scala_library")),
+    //     };
+
+    //     assert_eq!(
+    //         get_candidates_for_class_name(&error_info, "com.example.bar.Baz", &index_table).await,
+    //         vec![
+    //             (0, String::from("//src/main/scala/com/example/bar:bar")),
+    //             (0, String::from("//src/main/java/com/example/bar:bar")),
+    //         ]
+    //     );
+
+    //     assert_eq!(
+    //         get_candidates_for_class_name(&error_info, "com.example.foo.bar.Baz", &index_table).await,
+    //         vec![
+    //             (13, String::from("//src/main/foop/blah:oop")),
+    //             (0, String::from("//src/main/scala/com/example/foo/bar:bar")),
+    //             (0, String::from("//src/main/java/com/example/foo/bar:bar"))
+    //         ]
+    //     );
+
+    //     assert_eq!(
+    //         get_candidates_for_class_name(&error_info, "com.example.a.b.c.Baz", &index_table).await,
+    //         vec![
+    //             (0, String::from("//src/main/scala/com/example/a/b/c:c")),
+    //             (0, String::from("//src/main/java/com/example/a/b/c:c"))
+    //         ]
+    //     );
+    // }
 }
