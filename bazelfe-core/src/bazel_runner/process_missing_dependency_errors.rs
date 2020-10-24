@@ -165,7 +165,7 @@ async fn generate_all_action_requests(
     )
     .collect()
 }
-pub async fn process_missing_dependency_errors<T: Buildozer + Clone + Send + Sync + 'static>(
+pub async fn process_missing_dependency_errors<T: Buildozer>(
     global_previous_seen: &DashSet<String>,
     buildozer: T,
     action_failed_error_info: &ActionFailedErrorInfo,
@@ -186,7 +186,7 @@ pub async fn process_missing_dependency_errors<T: Buildozer + Clone + Send + Syn
     )
     .await
 }
-async fn inner_process_missing_dependency_errors<T: Buildozer + Clone + Send + Sync + 'static>(
+async fn inner_process_missing_dependency_errors<T: Buildozer>(
     global_previous_seen: &DashSet<String>,
     buildozer: T,
     label: &str,
@@ -368,6 +368,86 @@ mod tests {
         )
         .await
     }
+
+    
+
+    #[tokio::test]
+    async fn test_generate_all_action_requests() {
+
+        async fn test_content_to_expected_result(
+            content: &str,
+            target_kind: &str,
+            expected_requests: Vec<Vec<ActionRequest>>
+        ) {
+            
+            let mut tempfile = tempfile::NamedTempFile::new().expect("Can make a temp file");
+            tempfile
+                .write_all(content.as_bytes())
+                .expect("Should be able to write to temp file");
+            let tempfile_path = tempfile.into_temp_path();
+            
+            let action_failed_error_info = ActionFailedErrorInfo {
+                label: String::from("//src/main/com/example/foo:Bar"),
+                output_files: vec![
+                    build_event_stream::file::File::Uri(String::from("remote_uri://foo/bar/baz")),
+                    build_event_stream::file::File::Uri(format!(
+                        "file://{}",
+                        &(*tempfile_path).to_path_buf().to_str().unwrap().to_string()
+                    )),
+                ],
+                target_kind: Some(String::from(target_kind)),
+            };
+    
+    
+            let generated_requests = generate_all_action_requests(
+                &action_failed_error_info,
+            )
+            .await;
+    
+            assert_eq!(
+                generated_requests,
+                expected_requests
+            );
+        }
+
+        // we are just testing that we load the file and invoke the paths, so we just need ~any error types in here.
+        test_content_to_expected_result(
+            "src/main/scala/com/example/Example.scala:2: error: object foo is not a member of package com.example
+            import com.example.foo.bar.Baz
+                               ^
+            src/main/scala/com/example/Example.scala:2: warning: Unused import
+            import com.example.foo.bar.Baz
+                                       ^
+            one warning found
+            one error found",
+            "scala_library",
+            vec![
+                vec![ActionRequest::Prefix(String::from("com.example.foo"))]
+            ],
+        ).await;
+
+        // we are just testing that we load the file and invoke the paths, so we just need ~any error types in here.
+        test_content_to_expected_result(
+            "src/main/java/com/example/foo/bar/Baz.java:205: error: cannot access JSONObject
+                Blah key = Blah.myfun(jwk);
+                
+src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
+    import javax.annotation.foo.bar.baz.Nullable;
+                           ^
+      symbol:   class Nullable
+      location: package javax.annotation.foo.bar.baz",
+            "java_library",
+            vec![
+                vec![ActionRequest::Prefix(String::from("javax.annotation.foo.bar.baz.Nullable")),
+                ActionRequest::Prefix(String::from("javax.annotation.foo.bar.baz")),
+                ActionRequest::Prefix(String::from("javax.annotation.foo.bar"))],
+                vec![ActionRequest::Suffix(ClassSuffixMatch { suffix: String::from("JSONObject"), src_fn: String::from("java::error_cannot_access") })]
+            ],
+        )
+        .await
+    }
+
+    
 
     // Scenarios we need to test for processing missing dependency errors:
     // -> have some of our targets in previously seen
