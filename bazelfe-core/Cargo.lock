@@ -148,12 +148,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3441f0f7b02788e948e47f457ca01f1d7e6d92c693bc132c22b087d3141c03ff"
 
 [[package]]
-name = "bazel-fe"
+name = "bazelfe-core"
 version = "0.1.0"
 dependencies = [
  "argh",
  "async-stream 0.3.0",
  "async-trait",
+ "bazelfe-protos",
  "bytes",
  "clap",
  "ctrlc",
@@ -164,6 +165,7 @@ dependencies = [
  "lazy_static",
  "log",
  "nom",
+ "once_cell",
  "pinky-swear",
  "pretty_env_logger",
  "prost",
@@ -174,10 +176,19 @@ dependencies = [
  "termion",
  "tokio",
  "tonic",
- "tonic-build",
  "tower",
  "tui",
  "zip",
+]
+
+[[package]]
+name = "bazelfe-protos"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
+ "tonic",
+ "tonic-build",
 ]
 
 [[package]]
@@ -406,6 +417,15 @@ dependencies = [
  "crc32fast",
  "libc",
  "miniz_oxide",
+]
+
+[[package]]
+name = "flume"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9e818efa7776f4dd7df0e542f877f7a5a87bddd6a1a10f59a7732b71ffb9d55"
+dependencies = [
+ "spinning_top",
 ]
 
 [[package]]
@@ -957,11 +977,12 @@ checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 
 [[package]]
 name = "pinky-swear"
-version = "4.4.0"
+version = "5.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9bf8cda6f8e1500338634e4e3ce90ac59eb7929a1e088b6946c742be1cc44dc1"
+checksum = "dea216f5b079f60d0cfdad1e0bcf8b8e502ba53e028e30d946a2e6eea8c0915b"
 dependencies = [
  "doc-comment",
+ "flume",
  "parking_lot",
  "tracing",
 ]
@@ -1275,6 +1296,15 @@ name = "spin"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
+
+[[package]]
+name = "spinning_top"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7e529d73e80d64b5f2631f9035113347c578a1c9c7774b83a2b880788459ab36"
+dependencies = [
+ "lock_api",
+]
 
 [[package]]
 name = "static_assertions"
