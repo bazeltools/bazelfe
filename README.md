@@ -6,7 +6,7 @@ Be a suite of tools to provide ultimately a different frontend around bazel. Ini
 
 ## Requirements
 
-- Ability to run/provide a CI job or some means to run the index building code (Indexer itself in this repo isn't quite complete yet, eta ~10/15).
+- Ability to run/provide a CI job or some means to run the index building cod.
 - Not be consuming the BEP from bazel directly. The tool hooks in and tells bazel to send the BEP out to it to sniff on the results.
 
 ## Using it
