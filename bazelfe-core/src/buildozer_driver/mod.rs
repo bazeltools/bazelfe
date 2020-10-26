@@ -30,13 +30,10 @@ pub type Result<T> = std::result::Result<T, ExecuteResultError>;
 // }
 
 #[async_trait]
-pub trait Buildozer {
+pub trait Buildozer: Clone + Send + Sync + 'static {
     async fn print_deps(&self, label: &String) -> Result<Vec<String>>;
-    async fn add_dependency(
-        &self,
-        target_to_operate_on: &String,
-        label_to_add: &String,
-    ) -> Result<()>;
+    async fn add_dependency(&self, target_to_operate_on: &str, label_to_add: &String)
+        -> Result<()>;
 
     async fn remove_dependency(
         &self,
@@ -130,14 +127,14 @@ impl Buildozer for BuildozerBinaryImpl {
 
     async fn add_dependency(
         &self,
-        target_to_operate_on: &String,
+        target_to_operate_on: &str,
         label_to_add: &String,
     ) -> Result<()> {
         // buildozer 'add deps //base' //pkg:rule //pkg:rule2
         let _ = self
             .execute_command(vec![
                 &format!("add deps {}", label_to_add),
-                &target_to_operate_on,
+                &target_to_operate_on.to_string(),
             ])
             .await?;
         Ok(())

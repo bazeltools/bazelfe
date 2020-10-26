@@ -55,11 +55,7 @@ impl IndexerActionEventStream {
                         let results_map = Arc::clone(&results_map);
                         tokio::spawn(async move {
                             match e {
-                                hydrated_stream::HydratedInfo::ActionFailed(
-                                    _,
-                                ) => {
-                                  
-                                }
+                                hydrated_stream::HydratedInfo::ActionFailed(_) => {}
                                 hydrated_stream::HydratedInfo::ActionSuccess(_) => (),
                                 hydrated_stream::HydratedInfo::BazelAbort(_) => {
                                     // aborts can/will occur when we loop through things if stuff depends on an external target
@@ -94,9 +90,7 @@ impl IndexerActionEventStream {
                                     }
                                 }
 
-                                hydrated_stream::HydratedInfo::Progress(_) => {
-                                    
-                                }
+                                hydrated_stream::HydratedInfo::Progress(_) => {}
                             }
                         });
                     }

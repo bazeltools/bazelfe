@@ -2,12 +2,7 @@ use std::collections::HashMap;
 
 use nom::branch::alt;
 use nom::multi::many0;
-use nom::{
-    bytes::complete::tag,
-    combinator::{map},
-    sequence::tuple,
-    IResult,
-};
+use nom::{bytes::complete::tag, combinator::map, sequence::tuple, IResult};
 
 fn consume_quoted_strings(ln: &str) -> IResult<&str, Vec<String>> {
     map(

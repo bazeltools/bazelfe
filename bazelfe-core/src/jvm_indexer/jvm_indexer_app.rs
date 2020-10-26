@@ -1,4 +1,4 @@
-use clap::{Clap};
+use clap::Clap;
 #[macro_use]
 extern crate log;
 use regex::Regex;
@@ -19,7 +19,7 @@ use bazelfe_core::build_events::build_event_server::bazel_event;
 use bazelfe_core::build_events::build_event_server::BuildEventAction;
 use bazelfe_core::build_events::hydrated_stream::HydratedInfo;
 use bazelfe_core::jvm_indexer::bazel_query::BazelQuery;
-use dashmap::{DashMap};
+use dashmap::DashMap;
 use google::devtools::build::v1::publish_build_event_server::PublishBuildEventServer;
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
@@ -166,7 +166,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .chain(opt.extra_allowed_rule_kinds.unwrap_or_default().into_iter())
     .collect();
 
-    let bazel_query = bazelfe_core::jvm_indexer::bazel_query::from_binary_path(opt.bazel_binary_path);
+    let bazel_query =
+        bazelfe_core::jvm_indexer::bazel_query::from_binary_path(opt.bazel_binary_path);
 
     let bazel_deps_replacement_map: HashMap<String, String> = match &opt.bazel_deps_root {
         None => HashMap::default(),
@@ -347,7 +348,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     debug!("Services listening on {}", addr);
 
     let (bes, sender_arc, _) =
-    bazelfe_core::build_events::build_event_server::build_bazel_build_events_service();
+        bazelfe_core::build_events::build_event_server::build_bazel_build_events_service();
 
     let bes_port: u16 = addr.port();
 
