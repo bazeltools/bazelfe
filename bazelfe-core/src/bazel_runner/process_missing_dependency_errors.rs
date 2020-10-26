@@ -38,7 +38,6 @@ fn is_potentially_valid_target(target_kind: &Option<String>, label: &str) -> boo
         };
     }
 
-    println!("Uh.. huh {:?}", label);
     if let Some(forbidden_targets) = target_kind
         .as_ref()
         .and_then(|nme| FORBIDDEN_TARGETS_BY_TYPE.get(nme))
@@ -175,8 +174,7 @@ pub async fn process_missing_dependency_errors<T: Buildozer>(
         load_up_ignore_references(global_previous_seen, &buildozer, action_failed_error_info).await;
     let all_requests: Vec<Vec<ActionRequest>> =
         generate_all_action_requests(&action_failed_error_info).await;
-    inner_process_missing_dependency_errors(
-        global_previous_seen,
+    let (action_count, local_previous_seen) = inner_process_missing_dependency_errors(
         buildozer,
         &action_failed_error_info.label,
         &action_failed_error_info.target_kind,
@@ -184,17 +182,23 @@ pub async fn process_missing_dependency_errors<T: Buildozer>(
         all_requests,
         ignore_dep_references,
     )
-    .await
+    .await;
+
+    // concat the global perm ignore with the local_previous seen data
+    // this becomes our next global ignore for this target
+    for e in local_previous_seen.into_iter() {
+        global_previous_seen.insert(e);
+    }
+    action_count
 }
 async fn inner_process_missing_dependency_errors<T: Buildozer>(
-    global_previous_seen: &DashSet<String>,
     buildozer: T,
     label: &str,
     target_kind: &Option<String>,
     index_table: &index_table::IndexTable,
     all_requests: Vec<Vec<ActionRequest>>,
     ignore_dep_references: HashSet<String>,
-) -> u32 {
+) -> (u32, HashSet<String>) {
     let mut local_previous_seen: HashSet<String> = HashSet::new();
     let mut actions_completed: u32 = 0;
 
@@ -235,19 +239,13 @@ async fn inner_process_missing_dependency_errors<T: Buildozer>(
         }
     }
 
-    // concat the global perm ignore with the local_previous seen data
-    // this becomes our next global ignore for this target
-    for e in local_previous_seen.into_iter() {
-        global_previous_seen.insert(e);
-    }
-
-    actions_completed
+    (actions_completed, local_previous_seen)
 }
 
 #[cfg(test)]
 mod tests {
+    use once_cell::sync::Lazy;
     use std::{path::PathBuf, sync::Arc};
-
     use tokio::sync::Mutex;
 
     use crate::{
@@ -256,6 +254,8 @@ mod tests {
     };
 
     use super::*;
+
+    static RELIES_ON_CWD: Lazy<Mutex<()>> = Lazy::new(Mutex::default);
 
     #[test]
     fn test_is_potentially_valid_target() {
@@ -369,23 +369,19 @@ mod tests {
         .await
     }
 
-    
-
     #[tokio::test]
     async fn test_generate_all_action_requests() {
-
         async fn test_content_to_expected_result(
             content: &str,
             target_kind: &str,
-            expected_requests: Vec<Vec<ActionRequest>>
+            expected_requests: Vec<Vec<ActionRequest>>,
         ) {
-            
             let mut tempfile = tempfile::NamedTempFile::new().expect("Can make a temp file");
             tempfile
                 .write_all(content.as_bytes())
                 .expect("Should be able to write to temp file");
             let tempfile_path = tempfile.into_temp_path();
-            
+
             let action_failed_error_info = ActionFailedErrorInfo {
                 label: String::from("//src/main/com/example/foo:Bar"),
                 output_files: vec![
@@ -397,17 +393,10 @@ mod tests {
                 ],
                 target_kind: Some(String::from(target_kind)),
             };
-    
-    
-            let generated_requests = generate_all_action_requests(
-                &action_failed_error_info,
-            )
-            .await;
-    
-            assert_eq!(
-                generated_requests,
-                expected_requests
-            );
+
+            let generated_requests = generate_all_action_requests(&action_failed_error_info).await;
+
+            assert_eq!(generated_requests, expected_requests);
         }
 
         // we are just testing that we load the file and invoke the paths, so we just need ~any error types in here.
@@ -438,16 +427,19 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
       location: package javax.annotation.foo.bar.baz",
             "java_library",
             vec![
-                vec![ActionRequest::Prefix(String::from("javax.annotation.foo.bar.baz.Nullable")),
-                ActionRequest::Prefix(String::from("javax.annotation.foo.bar.baz")),
-                ActionRequest::Prefix(String::from("javax.annotation.foo.bar"))],
-                vec![ActionRequest::Suffix(ClassSuffixMatch { suffix: String::from("JSONObject"), src_fn: String::from("java::error_cannot_access") })]
+                vec![
+                    ActionRequest::Prefix(String::from("javax.annotation.foo.bar.baz.Nullable")),
+                    ActionRequest::Prefix(String::from("javax.annotation.foo.bar.baz")),
+                    ActionRequest::Prefix(String::from("javax.annotation.foo.bar")),
+                ],
+                vec![ActionRequest::Suffix(ClassSuffixMatch {
+                    suffix: String::from("JSONObject"),
+                    src_fn: String::from("java::error_cannot_access"),
+                })],
             ],
         )
         .await
     }
-
-    
 
     // Scenarios we need to test for processing missing dependency errors:
     // -> have some of our targets in previously seen
@@ -457,11 +449,11 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
 
     #[tokio::test]
     async fn test_process_missing_dependency_errors() {
+        let _lock = RELIES_ON_CWD.lock().await;
+
         // this is a simple scenario, nothing is in the index table, and we have our buildozer set to allow ~everything to pass through
 
-        let buildozer = FakeBuildozer {
-            action_log: Arc::new(Mutex::new(Vec::default())),
-        };
+        let buildozer = FakeBuildozer::default();
 
         let content = "src/main/scala/com/example/Example.scala:2: error: object foo is not a member of package com.example
         import com.example.foo.bar.Baz
@@ -501,7 +493,8 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
 
         // Now we need to setup the state on the disk such that things will work...
 
-        std::fs::create_dir_all(Path::new("src/main/scala/com/example/foo/bar")).unwrap();
+        std::fs::create_dir_all(Path::new("src/main/scala/com/example/foo/bar"))
+            .expect("Can create directories");
         std::fs::write(
             "src/main/scala/com/example/foo/bar/BUILD",
             "java_librar(...)",
@@ -532,6 +525,225 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
         }];
         assert_eq!(event_log, expected_action_log);
     }
+
+    #[tokio::test]
+    async fn test_inner_process_missing_dependency_errors() {
+        let _lock = RELIES_ON_CWD.lock().await;
+        async fn run_scenario(
+            paths_to_exist: Vec<&str>,
+            index_table: index_table::IndexTable,
+            ignore_dep_references: HashSet<String>,
+            buildozer: FakeBuildozer,
+            all_requests: Vec<Vec<ActionRequest>>,
+        ) -> (Vec<ActionLogEntry>, u32) {
+            // this is a simple scenario, nothing is in the index table, and we have our buildozer set to allow ~everything to pass through
+
+            let current_dir = std::env::current_dir().unwrap().to_owned();
+
+            let working_bazel_tempdir = tempfile::tempdir().expect("Can create tempdir");
+
+            std::env::set_current_dir(&working_bazel_tempdir.path())
+                .expect("Unable to set the CWD to the test folder");
+
+            // Now we need to setup the state on the disk such that things will work...
+
+            for path in paths_to_exist {
+                std::fs::create_dir_all(Path::new(path))
+                    .expect("Should be able to make directories");
+                std::fs::write(format!("{}/BUILD", path), "java_librar(...)")
+                    .expect("Should be able to write file");
+            }
+
+            let (actions, _) = inner_process_missing_dependency_errors(
+                buildozer.clone(),
+                "//src/main/com/example/foo:Bar",
+                &Some(String::from("scala_library")),
+                &index_table,
+                all_requests,
+                ignore_dep_references,
+            )
+            .await;
+
+            std::env::set_current_dir(&current_dir)
+                .expect("Unable to set the CWD back to the repo");
+
+            let event_log: Vec<ActionLogEntry> = buildozer.to_vec().await;
+
+            (event_log, actions)
+        }
+
+        // No requests
+        let (action_log_entry, actions) = run_scenario(
+            vec!["src/main/scala/com/example/foo"],
+            index_table::IndexTable::default(),
+            HashSet::new(),
+            FakeBuildozer::default(),
+            vec![],
+        )
+        .await;
+        assert_eq!(actions, 0);
+        assert_eq!(action_log_entry.len(), 0);
+
+        // Action request, and nothing in the index table.
+        // have the path on disk
+        let (action_log_entry, actions) = run_scenario(
+            vec![
+                "src/main/scala/com/example/foo",
+                "src/main/scala/com/example/foo/bar/baz",
+            ],
+            index_table::IndexTable::default(),
+            HashSet::new(),
+            FakeBuildozer::default(),
+            vec![vec![ActionRequest::Prefix(String::from(
+                "com.example.foo.bar.baz",
+            ))]],
+        )
+        .await;
+        assert_eq!(actions, 1);
+        assert_eq!(
+            action_log_entry,
+            vec![ActionLogEntry::AddDependency {
+                target_to_operate_on: String::from("//src/main/com/example/foo:Bar"),
+                label_to_add: String::from("//src/main/scala/com/example/foo/bar/baz:baz"),
+            }]
+        );
+
+        // two independent classes needed.
+        // should add both
+        let (action_log_entry, actions) = run_scenario(
+            vec![
+                "src/main/scala/com/example/foo",
+                "src/main/scala/com/example/foo/bar/baz",
+                "src/main/scala/com/example/foo/bar/noof",
+            ],
+            index_table::IndexTable::default(),
+            HashSet::new(),
+            FakeBuildozer::default(),
+            vec![
+                vec![ActionRequest::Prefix(String::from(
+                    "com.example.foo.bar.baz",
+                ))],
+                vec![ActionRequest::Prefix(String::from(
+                    "com.example.foo.bar.noof",
+                ))],
+            ],
+        )
+        .await;
+        assert_eq!(actions, 2);
+        assert_eq!(
+            action_log_entry,
+            vec![
+                ActionLogEntry::AddDependency {
+                    target_to_operate_on: String::from("//src/main/com/example/foo:Bar"),
+                    label_to_add: String::from("//src/main/scala/com/example/foo/bar/baz:baz"),
+                },
+                ActionLogEntry::AddDependency {
+                    target_to_operate_on: String::from("//src/main/com/example/foo:Bar"),
+                    label_to_add: String::from("//src/main/scala/com/example/foo/bar/noof:noof"),
+                }
+            ]
+        );
+
+        // Two not quite independent requests, via generation
+        // we expect that we will add baz:baz for the first request
+        // and such we should skip the operation on the second request, doing nothing.
+        let (action_log_entry, actions) = run_scenario(
+            vec![
+                "src/main/scala/com/example/foo",
+                "src/main/scala/com/example/foo/bar/baz",
+                "src/main/scala/com/example/foo/bar/noof",
+            ],
+            index_table::IndexTable::default(),
+            HashSet::new(),
+            FakeBuildozer::default(),
+            vec![
+                vec![ActionRequest::Prefix(String::from(
+                    "com.example.foo.bar.baz",
+                ))],
+                vec![
+                    ActionRequest::Prefix(String::from("com.example.foo.bar.baz")),
+                    ActionRequest::Prefix(String::from("com.example.foo.bar.noof")),
+                ],
+            ],
+        )
+        .await;
+        assert_eq!(actions, 1);
+        assert_eq!(
+            action_log_entry,
+            vec![ActionLogEntry::AddDependency {
+                target_to_operate_on: String::from("//src/main/com/example/foo:Bar"),
+                label_to_add: String::from("//src/main/scala/com/example/foo/bar/baz:baz"),
+            }]
+        );
+
+        // Same set of requests as above, but we are going to stick baz:baz into our global have visited list, thus
+        // it should be ignored.
+        let mut ignore_dep_references = HashSet::new();
+        ignore_dep_references.insert(String::from("//src/main/scala/com/example/foo/bar/baz:baz"));
+        let (action_log_entry, actions) = run_scenario(
+            vec![
+                "src/main/scala/com/example/foo",
+                "src/main/scala/com/example/foo/bar/baz",
+                "src/main/scala/com/example/foo/bar/noof",
+            ],
+            index_table::IndexTable::default(),
+            ignore_dep_references,
+            FakeBuildozer::default(),
+            vec![
+                vec![ActionRequest::Prefix(String::from(
+                    "com.example.foo.bar.baz",
+                ))],
+                vec![
+                    ActionRequest::Prefix(String::from("com.example.foo.bar.baz")),
+                    ActionRequest::Prefix(String::from("com.example.foo.bar.noof")),
+                ],
+            ],
+        )
+        .await;
+        assert_eq!(actions, 1);
+        assert_eq!(
+            action_log_entry,
+            vec![ActionLogEntry::AddDependency {
+                target_to_operate_on: String::from("//src/main/com/example/foo:Bar"),
+                label_to_add: String::from("//src/main/scala/com/example/foo/bar/noof:noof"),
+            }]
+        );
+
+        // Disabled till we re-do error handling to be result? or a catch unwind here could work.
+        //     // Here we are going to simulate a buildozer failure, which is a critical failure now.
+
+        //     let mut add_dependency_pairs_to_fail = HashSet::new();
+        //     add_dependency_pairs_to_fail.insert((String::from("//src/main/com/example/foo:Bar"), String::from("//src/main/scala/com/example/foo/bar/baz:baz")));
+        //     let buildozer = FakeBuildozer::new(
+        //         add_dependency_pairs_to_fail,
+        //         HashSet::new()
+        //     );
+        // let (action_log_entry, actions) = run_scenario(
+        //     vec![
+        //         "src/main/scala/com/example/foo",
+        //         "src/main/scala/com/example/foo/bar/baz",
+        //         "src/main/scala/com/example/foo/bar/noof",
+        //     ],
+        //     index_table::IndexTable::default(),
+        //     HashSet::new(),
+        //     buildozer,
+        //     vec![
+        //         vec![
+        //             ActionRequest::Prefix(String::from("com.example.foo.bar.baz")),
+        //             ActionRequest::Prefix(String::from("com.example.foo.bar.noof")),
+        //         ],
+        //     ],
+        // )
+        // .await;
+        // assert_eq!(actions, 1);
+        // assert_eq!(
+        //     action_log_entry,
+        //     vec![ActionLogEntry::AddDependency {
+        //         target_to_operate_on: String::from("//src/main/com/example/foo:Bar"),
+        //         label_to_add: String::from("//src/main/scala/com/example/foo/bar/noof:noof"),
+        //     }]
+        // );
+    }
     #[derive(Clone, Debug, PartialEq)]
     enum ActionLogEntry {
         AddDependency {
@@ -546,8 +758,25 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
     #[derive(Clone, Debug)]
     struct FakeBuildozer {
         action_log: Arc<Mutex<Vec<ActionLogEntry>>>,
+        add_dependency_pairs_to_fail: HashSet<(String, String)>,
+        remove_dependency_pairs_to_fail: HashSet<(String, String)>,
+    }
+    impl Default for FakeBuildozer {
+        fn default() -> Self {
+            FakeBuildozer::new(HashSet::new(), HashSet::new())
+        }
     }
     impl FakeBuildozer {
+        pub fn new(
+            add_dependency_pairs_to_fail: HashSet<(String, String)>,
+            remove_dependency_pairs_to_fail: HashSet<(String, String)>,
+        ) -> Self {
+            Self {
+                action_log: Arc::new(Mutex::new(Vec::default())),
+                add_dependency_pairs_to_fail: add_dependency_pairs_to_fail,
+                remove_dependency_pairs_to_fail: remove_dependency_pairs_to_fail,
+            }
+        }
         pub async fn to_vec(&self) -> Vec<ActionLogEntry> {
             let locked = self.action_log.lock().await;
             (*locked).clone()
@@ -556,7 +785,7 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
 
     #[async_trait::async_trait]
     impl Buildozer for FakeBuildozer {
-        async fn print_deps(&self, label: &String) -> Result<Vec<String>, ExecuteResultError> {
+        async fn print_deps(&self, _label: &String) -> Result<Vec<String>, ExecuteResultError> {
             Ok(Vec::default())
         }
         async fn add_dependency(
@@ -564,6 +793,16 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
             target_to_operate_on: &str,
             label_to_add: &String,
         ) -> Result<(), ExecuteResultError> {
+            if self
+                .add_dependency_pairs_to_fail
+                .contains(&(String::from(target_to_operate_on), label_to_add.clone()))
+            {
+                return Err(ExecuteResultError {
+                    exit_code: -1,
+                    stdout: String::default(),
+                    stderr: String::default(),
+                });
+            }
             let mut lock = self.action_log.lock().await;
             lock.push(ActionLogEntry::AddDependency {
                 target_to_operate_on: target_to_operate_on.to_string(),
@@ -577,6 +816,17 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
             target_to_operate_on: &String,
             label_to_add: &String,
         ) -> Result<(), ExecuteResultError> {
+            if self
+                .remove_dependency_pairs_to_fail
+                .contains(&(String::from(target_to_operate_on), label_to_add.clone()))
+            {
+                return Err(ExecuteResultError {
+                    exit_code: -1,
+                    stdout: String::default(),
+                    stderr: String::default(),
+                });
+            }
+
             let mut lock = self.action_log.lock().await;
             lock.push(ActionLogEntry::RemovedDependency {
                 target_to_operate_on: target_to_operate_on.clone(),

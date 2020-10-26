@@ -165,6 +165,7 @@ dependencies = [
  "lazy_static",
  "log",
  "nom",
+ "once_cell",
  "pinky-swear",
  "pretty_env_logger",
  "prost",
