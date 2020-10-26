@@ -34,7 +34,7 @@ bazelfe-protos = { path = "../bazelfe-protos" }
 
 [dev-dependencies]
 tempfile = "3.1.0"
-pinky-swear = "4.0.0"
+pinky-swear = "5.0.1"
 tower = "0.3"
 once_cell = "1.4.1"
 
