@@ -10,7 +10,7 @@ use google::devtools::build::v1::{
 };
 use std::pin::Pin;
 use std::sync::Arc;
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::{mpsc, Mutex};
 
 pub mod bazel_event {
     use super::*;
@@ -317,7 +317,7 @@ pub struct BuildEventService<T>
 where
     T: Send + Sync + 'static,
 {
-    pub write_channel: Arc<Mutex<Option<broadcast::Sender<BuildEventAction<T>>>>>,
+    pub write_channel: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedSender<BuildEventAction<T>>>>>,
     pub transform_fn:
         Arc<dyn Fn(&mut PublishBuildToolEventStreamRequest) -> Option<T> + Send + Sync>,
 }
@@ -328,10 +328,16 @@ fn transform_queue_error_to_status() -> Status {
 
 pub fn build_bazel_build_events_service() -> (
     BuildEventService<bazel_event::BazelBuildEvent>,
-    Arc<Mutex<Option<broadcast::Sender<BuildEventAction<bazel_event::BazelBuildEvent>>>>>,
-    broadcast::Receiver<BuildEventAction<bazel_event::BazelBuildEvent>>,
+    Arc<
+        Mutex<
+            Option<
+                tokio::sync::mpsc::UnboundedSender<BuildEventAction<bazel_event::BazelBuildEvent>>,
+            >,
+        >,
+    >,
+    mpsc::UnboundedReceiver<BuildEventAction<bazel_event::BazelBuildEvent>>,
 ) {
-    let (tx, rx) = broadcast::channel(256);
+    let (tx, rx) = mpsc::unbounded_channel();
     let write_channel_arc = Arc::new(Mutex::new(Some(tx)));
     let server_instance = BuildEventService {
         write_channel: Arc::clone(&write_channel_arc),
@@ -393,7 +399,7 @@ where
                             match err {
                                 Ok(_) => (),
                                 Err(e) =>
-                                    error!("Error publishing to queue {}", e)
+                                    error!("Error publishing to build event queue {}", e)
                             }
                         });
                     }
@@ -482,8 +488,7 @@ mod tests {
     struct ServerStateHandler {
         _temp_dir_for_uds: tempfile::TempDir,
         completion_pinky: Pinky<()>,
-        pub read_channel:
-            Option<broadcast::Receiver<BuildEventAction<bazel_event::BazelBuildEvent>>>,
+        pub read_channel: Option<mpsc::Receiver<BuildEventAction<bazel_event::BazelBuildEvent>>>,
     }
     impl Drop for ServerStateHandler {
         fn drop(&mut self) {

@@ -27,6 +27,7 @@ dashmap = "3.11.10"
 exec = "0.3.1"
 zip = "0.5.8"
 bazelfe-protos = { path = "../bazelfe-protos" }
+walkdir = "2.3.1"
 
 [dev-dependencies]
 tempfile = "3.1.0"

@@ -42,7 +42,11 @@ struct Opt {
 
 async fn spawn_bazel_attempt<T>(
     sender_arc: &Arc<
-        Mutex<Option<broadcast::Sender<BuildEventAction<bazel_event::BazelBuildEvent>>>>,
+        Mutex<
+            Option<
+                tokio::sync::mpsc::UnboundedSender<BuildEventAction<bazel_event::BazelBuildEvent>>,
+            >,
+        >,
     >,
     aes: &bazel_runner::action_event_stream::ActionEventStream<T>,
     bes_port: u16,
@@ -51,7 +55,7 @@ async fn spawn_bazel_attempt<T>(
 where
     T: bazelfe_core::buildozer_driver::Buildozer + Send + Clone + Sync + 'static,
 {
-    let (tx, rx) = broadcast::channel(8192);
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     let _ = {
         let mut locked = sender_arc.lock().await;
         *locked = Some(tx);

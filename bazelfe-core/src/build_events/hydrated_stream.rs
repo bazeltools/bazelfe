@@ -12,7 +12,6 @@ use super::build_event_server::bazel_event;
 use super::build_event_server::BuildEventAction;
 use bazelfe_protos::*;
 
-use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 
 // This is keeping some state as we go through a stream to hydrate values with things like rule kinds
@@ -123,7 +122,9 @@ fn tce_event(
 
 impl HydratedInfo {
     pub fn build_transformer(
-        mut rx: broadcast::Receiver<BuildEventAction<bazel_event::BazelBuildEvent>>,
+        mut rx: tokio::sync::mpsc::UnboundedReceiver<
+            BuildEventAction<bazel_event::BazelBuildEvent>,
+        >,
     ) -> mpsc::Receiver<Option<HydratedInfo>> {
         let (mut tx, next_rx) = mpsc::channel(256);
 
@@ -132,7 +133,7 @@ impl HydratedInfo {
             let mut named_set_of_files_lookup = HashMap::new();
             let mut buffered_tce: Vec<bazel_event::TargetCompletedEvt> = Vec::default();
 
-            while let Ok(action) = rx.recv().await {
+            while let Some(action) = rx.recv().await {
                 match action {
                     BuildEventAction::BuildCompleted => {
                         rule_kind_lookup.clear();

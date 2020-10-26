@@ -70,14 +70,18 @@ fn build_rule_queries(allowed_rule_kinds: &Vec<String>, target_roots: &Vec<Strin
 }
 async fn spawn_bazel_attempt(
     sender_arc: &Arc<
-        Mutex<Option<broadcast::Sender<BuildEventAction<bazel_event::BazelBuildEvent>>>>,
+        Mutex<
+            Option<
+                tokio::sync::mpsc::UnboundedSender<BuildEventAction<bazel_event::BazelBuildEvent>>,
+            >,
+        >,
     >,
     aes: &bazelfe_core::jvm_indexer::indexer_action_event_stream::IndexerActionEventStream,
     bes_port: u16,
     bazel_args: &Vec<String>,
     index_map: Arc<DashMap<String, Vec<String>>>,
 ) -> (usize, bazel_runner::ExecuteResult) {
-    let (tx, rx) = broadcast::channel(8192);
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     let _ = {
         let mut locked = sender_arc.lock().await;
         *locked = Some(tx);
@@ -146,9 +150,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         builder.parse_filters(&s);
     } else {
         builder.parse_filters("warn,bazelfe_core::jvm_indexer=info,jvm_indexer=info");
-        // builder.parse_filters("info");
     }
     builder.init();
+
     let bazel_binary_path: String = (&opt.bazel_binary_path.to_str().unwrap()).to_string();
 
     let allowed_rule_kinds: Vec<String> = vec![
@@ -172,6 +176,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bazel_deps_replacement_map: HashMap<String, String> = match &opt.bazel_deps_root {
         None => HashMap::default(),
         Some(bazel_deps_root) => {
+            info!("Asked to find out information about a bazel_deps root for replacement, issuing queries");
             let targets_in_bazel_deps_root = bazel_query
                 .execute(&vec![
                     String::from("query"),
@@ -180,6 +185,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ])
                 .await;
 
+            info!("Graph query now starting");
             let bazel_deps_deps = bazel_query
                 .execute(&vec![
                     String::from("query"),
@@ -370,7 +376,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     async fn run_bazel(
         bes_port: u16,
         sender_arc: Arc<
-            Mutex<Option<broadcast::Sender<BuildEventAction<bazel_event::BazelBuildEvent>>>>,
+            Mutex<
+                Option<
+                    tokio::sync::mpsc::UnboundedSender<
+                        BuildEventAction<bazel_event::BazelBuildEvent>,
+                    >,
+                >,
+            >,
         >,
         bazel_binary_path: String,
         aes: &bazelfe_core::jvm_indexer::indexer_action_event_stream::IndexerActionEventStream,
@@ -430,7 +442,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .await;
 
     info!("Building a target popularity map");
-    let ret = bazelfe_core::jvm_indexer::popularity_parser::build_popularity_map();
+    let ret = bazelfe_core::jvm_indexer::popularity_parser::build_popularity_map().await;
 
     let mut reverse_hashmap = HashMap::new();
 
