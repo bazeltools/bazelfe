@@ -41,8 +41,6 @@ fn is_not_hidden(entry: &DirEntry) -> bool {
 }
 
 pub async fn build_popularity_map() -> HashMap<String, usize> {
-    let root_dir = std::env::current_dir().unwrap();
-
     let mut results: HashMap<String, usize> = HashMap::new();
     let mut join_handles = Vec::default();
 

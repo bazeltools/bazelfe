@@ -12,8 +12,6 @@ use super::build_event_server::bazel_event;
 use super::build_event_server::BuildEventAction;
 use bazelfe_protos::*;
 
-use tokio::sync::mpsc;
-
 // This is keeping some state as we go through a stream to hydrate values with things like rule kinds
 // not on the indvidual events.
 
@@ -261,7 +259,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_no_history() {
-        let (tx, rx) = broadcast::channel(128);
+        let (tx, rx) = async_channel::unbounded();
         let mut child_rx = HydratedInfo::build_transformer(rx);
 
         tx.send(BuildEventAction::BuildEvent(bazel_event::BazelBuildEvent {
@@ -271,7 +269,7 @@ mod tests {
                 label: String::from("foo_bar_baz"),
                 success: false,
             }),
-        }))
+        })).await
         .unwrap();
 
         let received_res = child_rx.next().await.unwrap();
@@ -288,7 +286,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_with_files() {
-        let (tx, rx) = broadcast::channel(128);
+        let (tx, rx) = async_channel::unbounded();
         let mut child_rx = HydratedInfo::build_transformer(rx);
 
         tx.send(BuildEventAction::BuildEvent(bazel_event::BazelBuildEvent {
@@ -302,7 +300,7 @@ mod tests {
                 label: String::from("foo_bar_baz"),
                 success: false,
             }),
-        }))
+        })).await
         .unwrap();
 
         let received_res = child_rx.next().await.unwrap();
@@ -322,7 +320,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_with_history() {
-        let (tx, rx) = broadcast::channel(128);
+        let (tx, rx) = async_channel::unbounded();
         let mut child_rx = HydratedInfo::build_transformer(rx);
 
         tx.send(BuildEventAction::BuildEvent(bazel_event::BazelBuildEvent {
@@ -330,7 +328,7 @@ mod tests {
                 label: String::from("foo_bar_baz"),
                 rule_kind: String::from("my_madeup_rule"),
             }),
-        }))
+        })).await
         .unwrap();
 
         tx.send(BuildEventAction::BuildEvent(bazel_event::BazelBuildEvent {
@@ -344,7 +342,7 @@ mod tests {
                 label: String::from("foo_bar_baz"),
                 success: false,
             }),
-        }))
+        })).await
         .unwrap();
 
         let received_res = child_rx.next().await.unwrap();
@@ -364,7 +362,7 @@ mod tests {
 
     #[tokio::test]
     async fn state_resets_on_new_build() {
-        let (tx, rx) = broadcast::channel(128);
+        let (tx, rx) = async_channel::unbounded();
         let mut child_rx = HydratedInfo::build_transformer(rx);
 
         tx.send(BuildEventAction::BuildEvent(bazel_event::BazelBuildEvent {
@@ -372,10 +370,10 @@ mod tests {
                 label: String::from("foo_bar_baz"),
                 rule_kind: String::from("my_madeup_rule"),
             }),
-        }))
+        })).await
         .unwrap();
 
-        tx.send(BuildEventAction::BuildCompleted).unwrap();
+        tx.send(BuildEventAction::BuildCompleted).await.unwrap();
 
         tx.send(BuildEventAction::BuildEvent(bazel_event::BazelBuildEvent {
             event: bazel_event::Evt::ActionCompleted(bazel_event::ActionCompletedEvt {
@@ -388,7 +386,7 @@ mod tests {
                 label: String::from("foo_bar_baz"),
                 success: false,
             }),
-        }))
+        })).await
         .unwrap();
 
         let received_res = child_rx.next().await.unwrap();

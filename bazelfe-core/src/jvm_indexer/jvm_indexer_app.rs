@@ -25,7 +25,7 @@ use rand::Rng;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::sync::Arc;
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::Mutex;
 
 #[derive(Clap, Debug)]
 #[clap(name = "basic")]
@@ -84,7 +84,7 @@ async fn spawn_bazel_attempt(
     };
     let error_stream = HydratedInfo::build_transformer(rx);
 
-    let mut target_extracted_stream = aes.build_action_pipeline(error_stream, index_map);
+    let target_extracted_stream = aes.build_action_pipeline(error_stream, index_map);
 
     let actions_completed: Arc<std::sync::atomic::AtomicUsize> =
         Arc::new(std::sync::atomic::AtomicUsize::new(0));

@@ -8,7 +8,6 @@ use dashmap::DashMap;
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::collections::HashSet;
-use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
 pub trait ExtractClassData<U> {
@@ -35,10 +34,10 @@ impl IndexerActionEventStream {
 
     pub fn build_action_pipeline(
         &self,
-        mut rx: async_channel::Receiver<Option<hydrated_stream::HydratedInfo>>,
+        rx: async_channel::Receiver<Option<hydrated_stream::HydratedInfo>>,
         results_map: Arc<DashMap<String, Vec<String>>>,
     ) -> async_channel::Receiver<Option<usize>> {
-        let (mut tx, next_rx) = async_channel::unbounded();
+        let (tx, next_rx) = async_channel::unbounded();
 
         let allowed_rule_kind = Arc::clone(&self.allowed_rule_kinds);
 
@@ -51,7 +50,7 @@ impl IndexerActionEventStream {
                     Some(e) => {
                         let e = e.clone();
                         let allowed_rule_kind = Arc::clone(&allowed_rule_kind);
-                        let mut tx = tx.clone();
+                        let tx = tx.clone();
                         let results_map = Arc::clone(&results_map);
                         tokio::spawn(async move {
                             match e {

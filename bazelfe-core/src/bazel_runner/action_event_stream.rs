@@ -8,8 +8,6 @@ use bazelfe_protos::*;
 use dashmap::{DashMap, DashSet};
 use lazy_static::lazy_static;
 use regex::Regex;
-use tokio::sync::mpsc;
-use tokio::sync::RwLock;
 
 pub trait ExtractClassData<U> {
     fn paths(&self) -> Vec<PathBuf>;
@@ -17,8 +15,7 @@ pub trait ExtractClassData<U> {
 }
 #[derive(Clone, Debug)]
 pub struct ActionEventStream<T: Buildozer + Send + Sync + Clone + 'static> {
-    index_input_location: Option<PathBuf>,
-    index_table: Arc<RwLock<Option<index_table::IndexTable>>>,
+    index_table: index_table::IndexTable,
     previous_global_seen: Arc<DashMap<String, DashSet<String>>>,
     buildozer: T,
 }
@@ -54,23 +51,9 @@ where
     T: Buildozer + Send + Clone + Sync + 'static,
 {
     pub fn new(index_input_location: Option<PathBuf>, buildozer: T) -> Self {
-        Self {
-            index_input_location: index_input_location,
-            index_table: Arc::new(RwLock::new(None)),
-            previous_global_seen: Arc::new(DashMap::new()),
-            buildozer: buildozer,
-        }
-    }
 
-    pub async fn ensure_table_loaded(self) -> () {
-        let tbl = Arc::clone(&self.index_table);
-        let v = tbl.read().await;
-        if (*v).is_none() {
-            drop(v);
-            let mut w = tbl.write().await;
-            match *w {
-                None => {
-                    let index_tbl = match &self.index_input_location {
+ 
+                    let index_tbl = match index_input_location {
                         Some(p) => {
                             if p.exists() {
                                 let content = std::fs::read_to_string(p).unwrap();
@@ -81,14 +64,12 @@ where
                         }
                         None => index_table::IndexTable::new(),
                     };
-                    *w = Some(index_tbl);
-                }
-                Some(_) => (),
-            }
-            drop(w);
-        }
 
-        ()
+        Self {
+            index_table: index_tbl,
+            previous_global_seen: Arc::new(DashMap::new()),
+            buildozer: buildozer,
+        }
     }
 
     pub fn build_action_pipeline(
@@ -99,7 +80,7 @@ where
 
         let self_d: ActionEventStream<T> = self.clone();
 
-        for idx in 0..12 {
+        for _ in 0..12 {
             let rx = rx.clone();
             let tx = tx.clone();
             let self_d: ActionEventStream<T> = self_d.clone();
@@ -112,17 +93,13 @@ where
                         }
                         Some(e) => {
                             let e = e.clone();
-                            let mut tx = tx.clone();
+                            let tx = tx.clone();
                             let self_d: ActionEventStream<T> = self_d.clone();
                             tokio::spawn(async move {
                                 match e {
                                     hydrated_stream::HydratedInfo::ActionFailed(
                                         action_failed_error_info,
                                     ) => {
-                                        self.ensure_table_loaded().await;
-
-                                        let tbl = Arc::clone(&self_d.index_table);
-                                        let v = tbl.read().await;
                                         let arc = Arc::clone(&self_d.previous_global_seen);
 
                                         arc.entry(action_failed_error_info.label.clone())
@@ -134,7 +111,7 @@ where
                                             &prev_data,
                                             self_d.buildozer,
                                             &action_failed_error_info,
-                                            v.as_ref().unwrap(),
+                                            &self_d.index_table,
                                         ).await;
 
                                         if actions_completed > 0 {
@@ -155,7 +132,6 @@ where
                                         }
                                     }
                                     hydrated_stream::HydratedInfo::TargetComplete(tce) => {
-                                        self.ensure_table_loaded().await;
                                         let mut found_classes = Vec::default();
 
                                         for of in tce.output_files.iter() {
@@ -177,10 +153,10 @@ where
                                         }
                                         found_classes.sort();
                                         found_classes.dedup();
-                                        for clazz in found_classes.into_iter() {
-                                            self.index_table.
-                                            (&self, key: S, value: (u16, String)) 
-                                        }
+                                        // for clazz in found_classes.into_iter() {
+                                        //     self.index_table.
+                                        //     (&self, key: S, value: (u16, String)) 
+                                        // }
                                         println!("{:#?}", found_classes);
                                     }
                                     hydrated_stream::HydratedInfo::ActionSuccess(_) => (),

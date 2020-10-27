@@ -19,7 +19,7 @@ use bazelfe_core::buildozer_driver;
 use google::devtools::build::v1::publish_build_event_server::PublishBuildEventServer;
 use rand::Rng;
 use std::sync::Arc;
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::Mutex;
 
 #[derive(Clap, Debug)]
 #[clap(name = "basic", setting = AppSettings::TrailingVarArg)]
@@ -58,7 +58,7 @@ where
     };
     let error_stream = HydratedInfo::build_transformer(rx);
 
-    let mut target_extracted_stream = aes.build_action_pipeline(error_stream);
+    let target_extracted_stream = aes.build_action_pipeline(error_stream);
 
     let actions_completed: Arc<std::sync::atomic::AtomicU32> =
         Arc::new(std::sync::atomic::AtomicU32::new(0));

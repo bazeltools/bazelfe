@@ -10,7 +10,7 @@ use google::devtools::build::v1::{
 };
 use std::pin::Pin;
 use std::sync::Arc;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::Mutex;
 
 pub mod bazel_event {
     use super::*;
@@ -488,7 +488,7 @@ mod tests {
     struct ServerStateHandler {
         _temp_dir_for_uds: tempfile::TempDir,
         completion_pinky: Pinky<()>,
-        pub read_channel: Option<mpsc::Receiver<BuildEventAction<bazel_event::BazelBuildEvent>>>,
+        pub read_channel: Option<async_channel::Receiver<BuildEventAction<bazel_event::BazelBuildEvent>>>,
     }
     impl Drop for ServerStateHandler {
         fn drop(&mut self) {
@@ -575,7 +575,7 @@ mod tests {
         ret_v.for_each(|_| future::ready(())).await;
 
         let mut data_stream = vec![];
-        let mut channel = state.read_channel.take().unwrap();
+        let channel = state.read_channel.take().unwrap();
 
         tokio::spawn(async move {
             std::thread::sleep(Duration::from_millis(20));
