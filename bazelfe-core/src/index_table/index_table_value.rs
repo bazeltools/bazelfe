@@ -1,4 +1,4 @@
-use std::{borrow::Cow, sync::Arc, io::Write};
+use std::{borrow::Cow, io::Write, sync::Arc, io::Read};
 
 use tokio::sync::RwLock;
 
@@ -58,6 +58,26 @@ impl IndexTableValue {
         let w = self.0.read().await;
         w.clone()
     }
+
+    pub fn read<T>(rdr: &mut T) -> Self where T: Read {
+        use byteorder::{LittleEndian, ReadBytesExt};
+        let len = rdr.read_u16::<LittleEndian>().unwrap();
+
+        let mut v = Vec::default();
+
+        for _ in 0..len {
+            let priority = rdr.read_u16::<LittleEndian>().unwrap();
+            let target = rdr.read_u64::<LittleEndian>().unwrap();
+            v.push(
+                IndexTableValueEntry {
+                    priority: Priority(priority),
+                    target: target as usize
+                }
+            );
+        }
+        Self(Arc::new(RwLock::new(v)))
+    }
+
 
     pub async fn write<T>(&self, t: &mut T) -> () where T: Write {
         let guard = self.0.read().await;

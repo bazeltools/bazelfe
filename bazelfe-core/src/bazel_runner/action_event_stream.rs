@@ -56,8 +56,8 @@ where
                     let index_tbl = match index_input_location {
                         Some(p) => {
                             if p.exists() {
-                                let content = std::fs::read_to_string(p).unwrap();
-                                index_table::parse_file(&content).unwrap()
+                                let mut src_f = std::fs::File::open(p).unwrap();
+                                index_table::IndexTable::parse_file(&mut src_f)
                             } else {
                                 index_table::IndexTable::new()
                             }

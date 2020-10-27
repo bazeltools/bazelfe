@@ -4,7 +4,7 @@ use nom::character::complete::line_ending;
 use nom::error::ParseError;
 use nom::multi::{many0, many1};
 use nom::{bytes::complete::tag, combinator::map, combinator::opt, sequence::tuple, IResult};
-use std::{borrow::Cow, collections::HashMap, collections::HashSet, error::Error, sync::Arc, path::Path};
+use std::{borrow::Cow, collections::HashMap, collections::HashSet, path::Path, sync::Arc, io::Read};
 use tokio::sync::RwLock;
 mod expand_target_to_guesses;
 mod index_table_value;
@@ -22,7 +22,7 @@ impl<'a, 'b> GuardedGet<'a, 'b> {
     }
 }
 
-use byteorder::{LittleEndian, WriteBytesExt};
+use byteorder::{LittleEndian, WriteBytesExt, ReadBytesExt};
 
 // Index table format should be
 
@@ -67,6 +67,8 @@ impl<'a> IndexTable {
     };
 
         let tbl_map = self.tbl_map.read().await;
+        file.write_u64::<LittleEndian>(tbl_map.len() as u64).unwrap();
+
         for (k, innerv) in tbl_map.iter() {
             let bytes = k.as_bytes();
             file.write_u16::<LittleEndian>(k.len() as u16).unwrap();
@@ -75,6 +77,50 @@ impl<'a> IndexTable {
                 innerv.write(&mut file).await
         }
     }
+
+    
+pub fn parse_file<R>(rdr: & mut R) -> IndexTable where R: Read{
+    debug!("Start parsing");
+
+
+    let num_vec_entries = rdr.read_u64::<LittleEndian>().unwrap();
+    let mut index_buf = Vec::default();
+    let mut reverse_hashmap = HashMap::default();
+
+    for _ in 0..num_vec_entries  {
+        let str_len = rdr.read_u16::<LittleEndian>().unwrap();
+        let mut buf = Vec::with_capacity(str_len as usize);
+        rdr.read_exact(&mut buf).unwrap();
+
+        let val_v = Arc::new(buf);
+        let pos = index_buf.len();
+        index_buf.push(Arc::clone(&val_v));
+        reverse_hashmap.insert(Arc::clone(&val_v), pos);
+    }
+
+    let mut tbl_map = HashMap::default();
+    let map_siz = rdr.read_u64::<LittleEndian>().unwrap();
+    for _ in 0..map_siz {
+        let str_len = rdr.read_u16::<LittleEndian>().unwrap();
+        let mut buf = Vec::with_capacity(str_len as usize);
+        rdr.read_exact(&mut buf).unwrap();
+
+        let k = String::from_utf8(buf).unwrap();
+
+        let v = IndexTableValue::read(rdr);
+        tbl_map.insert(k, v);
+    }
+    
+
+    debug!("Finished parsing..");
+
+    Self {
+        tbl_map: Arc::new(RwLock::new(tbl_map)),
+        id_to_target_vec: Arc::new(RwLock::new(index_buf)),
+        id_to_target_reverse_map: Arc::new(RwLock::new(reverse_hashmap)),
+    }
+
+}
     async fn maybe_insert_target_string(&self, str: String) -> usize {
         self.maybe_insert_target_bytes(str.as_bytes().to_vec()).await
     }
@@ -213,163 +259,155 @@ impl<'a> IndexTable {
         IndexTableValue::new(vec_result)
     }
 }
-fn element_extractor<'a, E>() -> impl Fn(&'a str) -> IResult<&str, (u16, &str), E>
-where
-    E: ParseError<&'a str>,
-{
-    map(
-        tuple((
-            digit1,
-            tag(":"),
-            take_while1(|chr| chr != ',' && chr != '\r' && chr != '\n'),
-            opt(tag(",")),
-        )),
-        |(freq, _, target, _)| {
-            let f: &str = freq;
-            (f.parse::<u16>().unwrap(), target)
-        },
-    )
-}
+// fn element_extractor<'a, E>() -> impl Fn(&'a str) -> IResult<&str, (u16, &str), E>
+// where
+//     E: ParseError<&'a str>,
+// {
+//     map(
+//         tuple((
+//             digit1,
+//             tag(":"),
+//             take_while1(|chr| chr != ',' && chr != '\r' && chr != '\n'),
+//             opt(tag(",")),
+//         )),
+//         |(freq, _, target, _)| {
+//             let f: &str = freq;
+//             (f.parse::<u16>().unwrap(), target)
+//         },
+//     )
+// }
 
-fn parse_index_line<'a, E>() -> impl Fn(&'a str) -> IResult<&str, (String, Vec<(u16, String)>), E>
-where
-    E: ParseError<&'a str>,
-{
-    map(
-        tuple((
-            map(take_while1(|chr| chr != '\t'), |e: &str| e.to_string()),
-            tag("\t"),
-            many1(map(element_extractor(), |(freq, v)| (freq, v.to_string()))),
-        )),
-        |tup| (tup.0, tup.2),
-    )
-}
+// fn parse_index_line<'a, E>() -> impl Fn(&'a str) -> IResult<&[u8], (String, Vec<(u16, String)>), E>
+// where
+//     E: ParseError<&'a str>,
+// {
+//     map(
+//         tuple((
+//             map(take_while1(|chr| chr != '\t'), |e: &str| e.to_string()),
+//             tag("\t"),
+//             many1(map(element_extractor(), |(freq, v)| (freq, v.to_string()))),
+//         )),
+//         |tup| (tup.0, tup.2),
+//     )
+// }
 
-fn parse_file_e(input: &str) -> IResult<&str, Vec<(String, Vec<(u16, String)>)>> {
-    many0(map(tuple((parse_index_line(), opt(line_ending))), |e| e.0))(input)
-}
+// fn parse_file_e(input: &str) -> IResult<&str, Vec<(String, Vec<(u16, String)>)>> {
+//     many0(map(tuple((parse_index_line(), opt(line_ending))), |e| e.0))(input)
+// }
 
-pub fn parse_file(input: &str) -> Result<IndexTable, Box<dyn Error>> {
-    debug!("Start parsing");
-
-    let extracted_result: Vec<(String, Vec<(u16, String)>)> = parse_file_e(input).unwrap().1;
-    debug!("Finished parsing..");
-
-    Ok(IndexTable::from_vec(extracted_result))
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn run_parse_index_line(input: &str) -> IResult<&str, (String, Vec<(u16, String)>)> {
-        parse_index_line()(input)
-    }
+    // fn run_parse_index_line(input: &str) -> IResult<&str, (String, Vec<(u16, String)>)> {
+    //     parse_index_line()(input)
+    // }
 
-    #[test]
-    fn parse_sample_line() {
-        assert_eq!(
-            run_parse_index_line(
-                "PantsWorkaroundCache\t0:@third_party_jvm//3rdparty/jvm/com/twitter:util_cache"
-            )
-            .unwrap()
-            .1,
-            (
-                String::from("PantsWorkaroundCache"),
-                vec![(
-                    0,
-                    String::from("@third_party_jvm//3rdparty/jvm/com/twitter:util_cache")
-                )]
-            )
-        );
-    }
+//     #[test]
+//     fn parse_sample_line() {
+//         assert_eq!(
+//             run_parse_index_line(
+//                 "PantsWorkaroundCache\t0:@third_party_jvm//3rdparty/jvm/com/twitter:util_cache"
+//             )
+//             .unwrap()
+//             .1,
+//             (
+//                 String::from("PantsWorkaroundCache"),
+//                 vec![(
+//                     0,
+//                     String::from("@third_party_jvm//3rdparty/jvm/com/twitter:util_cache")
+//                 )]
+//             )
+//         );
+//     }
 
-    #[test]
-    fn test_parse_troublesome_line() {
-        assert_eq!(
-            run_parse_index_line(
-                "javax.annotation.Nullable\t236:@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305,75:@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:annotations"
-            )
-            .unwrap()
-            .1,
-            (
-                String::from("javax.annotation.Nullable"),
-                vec![(
-                    236,
-                    String::from("@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305")
-                ),
-                (
-                    75,
-                    String::from("@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:annotations"),
-                ),
-                ]
-            )
-        );
-    }
+//     #[test]
+//     fn test_parse_troublesome_line() {
+//         assert_eq!(
+//             run_parse_index_line(
+//                 "javax.annotation.Nullable\t236:@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305,75:@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:annotations"
+//             )
+//             .unwrap()
+//             .1,
+//             (
+//                 String::from("javax.annotation.Nullable"),
+//                 vec![(
+//                     236,
+//                     String::from("@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305")
+//                 ),
+//                 (
+//                     75,
+//                     String::from("@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:annotations"),
+//                 ),
+//                 ]
+//             )
+//         );
+//     }
 
-    #[tokio::test]
-    async fn parse_multiple_lines() {
-        let parsed_file = parse_file(
-            "scala.reflect.internal.SymbolPairs.Cursor.anon.1\t1:@third_party_jvm//3rdparty/jvm/org/scala_lang:scala_reflect
-org.apache.parquet.thrift.test.TestPerson.TestPersonTupleScheme\t0:@third_party_jvm//3rdparty/jvm/org/apache/parquet:parquet_thrift_jar_tests
-org.apache.commons.lang3.concurrent.MultiBackgroundInitializer\t68:@third_party_jvm//3rdparty/jvm/org/apache/commons:commons_lang3
-org.apache.hadoop.util.GcTimeMonitor\t38:@third_party_jvm//3rdparty/jvm/org/apache/hadoop:hadoop_common
-org.apache.hadoop.fs.FSProtos.FileStatusProto.FileType\t38:@third_party_jvm//3rdparty/jvm/org/apache/hadoop:hadoop_common
-com.twitter.chill.JavaIterableWrapperSerializer\t2:@third_party_jvm//3rdparty/jvm/com/twitter:chill
-org.apache.commons.collections4.map.ListOrderedMap$EntrySetView\t0:@third_party_jvm//3rdparty/jvm/org/apache/commons:commons_collections4
-scala.collection.convert.AsJavaConverters\t41:@third_party_jvm//3rdparty/jvm/org/scala_lang:scala_library
-org.ehcache.xml.XmlConfiguration.1\t0:@third_party_jvm//3rdparty/jvm/org/ehcache:ehcache
-com.ibm.icu.text.CharsetRecog_sbcs$CharsetRecog_8859_1_de\t1:@third_party_jvm//3rdparty/jvm/com/ibm/icu:icu4j
-scala.reflect.internal.Definitions$DefinitionsClass$VarArityClass\t1:@third_party_jvm//3rdparty/jvm/org/scala_lang:scala_reflect
-org.apache.http.nio.pool.AbstractNIOConnPool.1\t0:@third_party_jvm//3rdparty/jvm/org/apache/httpcomponents:httpcore_nio
-io.circe.generic.util.macros.DerivationMacros$$typecreator1$1 21:@third_party_jvm//3rdparty/jvm/io/circe:circe_generic
-org.apache.zookeeper.server.NettyServerCnxn.DumpCommand\t0:@third_party_jvm//3rdparty/jvm/org/apache/zookeeper:zookeeper
-org.apache.logging.log4j.core.appender.OutputStreamAppender$OutputStreamManagerFactory\t53:@third_party_jvm//3rdparty/jvm/org/apache/logging/log4j:log4j_core
-com.twitter.finagle.http.service.RoutingService.anonfun\t2:@third_party_jvm//3rdparty/jvm/com/twitter:finagle_http
-org.bouncycastle.util.CollectionStor\t10:@third_party_jvm//3rdparty/jvm/org/bouncycastle:bcprov_jdk15on
-org.apache.avro.io.parsing.JsonGrammarGenerator$1\t0:@third_party_jvm//3rdparty/jvm/org/apache/avro:avro
-org.terracotta.statistics.util\t0:@third_party_jvm//3rdparty/jvm/org/ehcache:ehcache
-com.ibm.icu.impl.Normalizer2Impl$1\t1:@third_party_jvm//3rdparty/jvm/com/ibm/icu:icu4j
-org.eclipse.jetty.io.ByteBufferPool.Bucket\t0:@third_party_jvm//3rdparty/jvm/org/eclipse
-javax.annotation.Nonnull$Checker\t236:@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305,75:@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:annotations
-javax.annotation.Nonnull.Checker\t236:@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305,75:@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:annotations
-javax.annotation.Nullable\t236:@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305,75:@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:annotations
-javax.annotation.OverridingMethodsMustInvokeSuper\t236:@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305,75:@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:annotations
-javax.annotation.ParametersAreNonnullByDefault\t236:@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305,75:@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:annotations
-javax.annotation.ParametersAreNullableByDefault\t236:@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305,75:@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:annotations"
-        ).unwrap();
+//     #[tokio::test]
+//     async fn parse_multiple_lines() {
+//         let parsed_file = parse_file(
+//             "scala.reflect.internal.SymbolPairs.Cursor.anon.1\t1:@third_party_jvm//3rdparty/jvm/org/scala_lang:scala_reflect
+// org.apache.parquet.thrift.test.TestPerson.TestPersonTupleScheme\t0:@third_party_jvm//3rdparty/jvm/org/apache/parquet:parquet_thrift_jar_tests
+// org.apache.commons.lang3.concurrent.MultiBackgroundInitializer\t68:@third_party_jvm//3rdparty/jvm/org/apache/commons:commons_lang3
+// org.apache.hadoop.util.GcTimeMonitor\t38:@third_party_jvm//3rdparty/jvm/org/apache/hadoop:hadoop_common
+// org.apache.hadoop.fs.FSProtos.FileStatusProto.FileType\t38:@third_party_jvm//3rdparty/jvm/org/apache/hadoop:hadoop_common
+// com.twitter.chill.JavaIterableWrapperSerializer\t2:@third_party_jvm//3rdparty/jvm/com/twitter:chill
+// org.apache.commons.collections4.map.ListOrderedMap$EntrySetView\t0:@third_party_jvm//3rdparty/jvm/org/apache/commons:commons_collections4
+// scala.collection.convert.AsJavaConverters\t41:@third_party_jvm//3rdparty/jvm/org/scala_lang:scala_library
+// org.ehcache.xml.XmlConfiguration.1\t0:@third_party_jvm//3rdparty/jvm/org/ehcache:ehcache
+// com.ibm.icu.text.CharsetRecog_sbcs$CharsetRecog_8859_1_de\t1:@third_party_jvm//3rdparty/jvm/com/ibm/icu:icu4j
+// scala.reflect.internal.Definitions$DefinitionsClass$VarArityClass\t1:@third_party_jvm//3rdparty/jvm/org/scala_lang:scala_reflect
+// org.apache.http.nio.pool.AbstractNIOConnPool.1\t0:@third_party_jvm//3rdparty/jvm/org/apache/httpcomponents:httpcore_nio
+// io.circe.generic.util.macros.DerivationMacros$$typecreator1$1 21:@third_party_jvm//3rdparty/jvm/io/circe:circe_generic
+// org.apache.zookeeper.server.NettyServerCnxn.DumpCommand\t0:@third_party_jvm//3rdparty/jvm/org/apache/zookeeper:zookeeper
+// org.apache.logging.log4j.core.appender.OutputStreamAppender$OutputStreamManagerFactory\t53:@third_party_jvm//3rdparty/jvm/org/apache/logging/log4j:log4j_core
+// com.twitter.finagle.http.service.RoutingService.anonfun\t2:@third_party_jvm//3rdparty/jvm/com/twitter:finagle_http
+// org.bouncycastle.util.CollectionStor\t10:@third_party_jvm//3rdparty/jvm/org/bouncycastle:bcprov_jdk15on
+// org.apache.avro.io.parsing.JsonGrammarGenerator$1\t0:@third_party_jvm//3rdparty/jvm/org/apache/avro:avro
+// org.terracotta.statistics.util\t0:@third_party_jvm//3rdparty/jvm/org/ehcache:ehcache
+// com.ibm.icu.impl.Normalizer2Impl$1\t1:@third_party_jvm//3rdparty/jvm/com/ibm/icu:icu4j
+// org.eclipse.jetty.io.ByteBufferPool.Bucket\t0:@third_party_jvm//3rdparty/jvm/org/eclipse
+// javax.annotation.Nonnull$Checker\t236:@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305,75:@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:annotations
+// javax.annotation.Nonnull.Checker\t236:@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305,75:@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:annotations
+// javax.annotation.Nullable\t236:@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305,75:@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:annotations
+// javax.annotation.OverridingMethodsMustInvokeSuper\t236:@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305,75:@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:annotations
+// javax.annotation.ParametersAreNonnullByDefault\t236:@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305,75:@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:annotations
+// javax.annotation.ParametersAreNullableByDefault\t236:@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305,75:@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:annotations"
+//         ).unwrap();
 
-        assert_eq!(
-            parsed_file
-                .get("org.apache.parquet.thrift.test.TestPerson.TestPersonTupleScheme")
-                .await
-                .unwrap()
-                .as_vec()
-                .await,
-            vec![IndexTableValueEntry {
-                priority: Priority(0),
-                target: 1
-            }]
-        );
+//         assert_eq!(
+//             parsed_file
+//                 .get("org.apache.parquet.thrift.test.TestPerson.TestPersonTupleScheme")
+//                 .await
+//                 .unwrap()
+//                 .as_vec()
+//                 .await,
+//             vec![IndexTableValueEntry {
+//                 priority: Priority(0),
+//                 target: 1
+//             }]
+//         );
 
-        assert_eq!(
-            parsed_file
-                .get("javax.annotation.Nullable")
-                .await
-                .unwrap()
-                .as_vec()
-                .await,
-            vec![
-                IndexTableValueEntry {
-                    priority: Priority(236),
-                    target: 16
-                },
-                IndexTableValueEntry {
-                    priority: Priority(75),
-                    target: 17,
-                },
-            ]
-        );
-    }
+//         assert_eq!(
+//             parsed_file
+//                 .get("javax.annotation.Nullable")
+//                 .await
+//                 .unwrap()
+//                 .as_vec()
+//                 .await,
+//             vec![
+//                 IndexTableValueEntry {
+//                     priority: Priority(236),
+//                     target: 16
+//                 },
+//                 IndexTableValueEntry {
+//                     priority: Priority(75),
+//                     target: 17,
+//                 },
+//             ]
+//         );
+//     }
 
     #[tokio::test]
     async fn updating_index() {
