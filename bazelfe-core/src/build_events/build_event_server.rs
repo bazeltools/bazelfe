@@ -317,7 +317,7 @@ pub struct BuildEventService<T>
 where
     T: Send + Sync + 'static,
 {
-    pub write_channel: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedSender<BuildEventAction<T>>>>>,
+    pub write_channel: Arc<Mutex<Option<async_channel::Sender<BuildEventAction<T>>>>>,
     pub transform_fn:
         Arc<dyn Fn(&mut PublishBuildToolEventStreamRequest) -> Option<T> + Send + Sync>,
 }
@@ -328,16 +328,10 @@ fn transform_queue_error_to_status() -> Status {
 
 pub fn build_bazel_build_events_service() -> (
     BuildEventService<bazel_event::BazelBuildEvent>,
-    Arc<
-        Mutex<
-            Option<
-                tokio::sync::mpsc::UnboundedSender<BuildEventAction<bazel_event::BazelBuildEvent>>,
-            >,
-        >,
-    >,
-    mpsc::UnboundedReceiver<BuildEventAction<bazel_event::BazelBuildEvent>>,
+    Arc<Mutex<Option<async_channel::Sender<BuildEventAction<bazel_event::BazelBuildEvent>>>>>,
+    async_channel::Receiver<BuildEventAction<bazel_event::BazelBuildEvent>>,
 ) {
-    let (tx, rx) = mpsc::unbounded_channel();
+    let (tx, rx) = async_channel::unbounded();
     let write_channel_arc = Arc::new(Mutex::new(Some(tx)));
     let server_instance = BuildEventService {
         write_channel: Arc::clone(&write_channel_arc),
@@ -366,6 +360,7 @@ where
     ) -> Result<Response<Self::PublishBuildToolEventStreamStream>, Status> {
         let mut stream = request.into_inner();
 
+        let mut num_events = 0;
         let sender_ref = {
             let e = Arc::clone(&self.write_channel);
             let m = e.lock().await;
@@ -377,6 +372,7 @@ where
         let output = async_stream::try_stream! {
             while let Some(inbound_evt) = stream.next().await {
                 let mut inbound_evt = inbound_evt?;
+                *(&mut num_events) += 1;
 
                 match inbound_evt.ordered_build_event.as_ref() {
                     Some(build_event) => {
@@ -389,13 +385,14 @@ where
             }
                     None => ()
                 };
+
                 let transformed_data = (transform_fn)(&mut inbound_evt);
 
                 if let Some(r) = transformed_data {
                     if let Some(tx) = cloned_v.as_ref() {
                         let tx2 = tx.clone();
                         tokio::spawn(async move {
-                            let err = tx2.send(BuildEventAction::BuildEvent(r)).map_err(|_| transform_queue_error_to_status());
+                            let err = tx2.send(BuildEventAction::BuildEvent(r)).await.map_err(|_| transform_queue_error_to_status());
                             match err {
                                 Ok(_) => (),
                                 Err(e) =>
@@ -408,8 +405,10 @@ where
 
 
             if let Some(tx) = second_writer {
-                tx.send(BuildEventAction::BuildCompleted).map_err(|_| transform_queue_error_to_status())?;
+                tx.send(BuildEventAction::BuildCompleted).await.map_err(|_| transform_queue_error_to_status())?;
             }
+            println!("Seen {} events", num_events);
+
             info!("Finished stream...");
         };
 
@@ -433,6 +432,7 @@ where
             info!("life cycle event: {:?}", inner);
 
             tx.send(BuildEventAction::LifecycleEvent(inner))
+                .await
                 .map_err(|_| transform_queue_error_to_status())?;
         }
         Ok(Response::new(()))

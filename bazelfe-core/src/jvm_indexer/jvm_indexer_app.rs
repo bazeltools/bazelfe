@@ -70,18 +70,14 @@ fn build_rule_queries(allowed_rule_kinds: &Vec<String>, target_roots: &Vec<Strin
 }
 async fn spawn_bazel_attempt(
     sender_arc: &Arc<
-        Mutex<
-            Option<
-                tokio::sync::mpsc::UnboundedSender<BuildEventAction<bazel_event::BazelBuildEvent>>,
-            >,
-        >,
+        Mutex<Option<async_channel::Sender<BuildEventAction<bazel_event::BazelBuildEvent>>>>,
     >,
     aes: &bazelfe_core::jvm_indexer::indexer_action_event_stream::IndexerActionEventStream,
     bes_port: u16,
     bazel_args: &Vec<String>,
     index_map: Arc<DashMap<String, Vec<String>>>,
 ) -> (usize, bazel_runner::ExecuteResult) {
-    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    let (tx, rx) = async_channel::unbounded();
     let _ = {
         let mut locked = sender_arc.lock().await;
         *locked = Some(tx);
@@ -95,7 +91,7 @@ async fn spawn_bazel_attempt(
 
     let recv_ver = Arc::clone(&actions_completed);
     let recv_task = tokio::spawn(async move {
-        while let Some(action) = target_extracted_stream.recv().await {
+        while let Ok(action) = target_extracted_stream.recv().await {
             match action {
                 None => (),
                 Some(err_info) => {
@@ -376,13 +372,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     async fn run_bazel(
         bes_port: u16,
         sender_arc: Arc<
-            Mutex<
-                Option<
-                    tokio::sync::mpsc::UnboundedSender<
-                        BuildEventAction<bazel_event::BazelBuildEvent>,
-                    >,
-                >,
-            >,
+            Mutex<Option<async_channel::Sender<BuildEventAction<bazel_event::BazelBuildEvent>>>>,
         >,
         bazel_binary_path: String,
         aes: &bazelfe_core::jvm_indexer::indexer_action_event_stream::IndexerActionEventStream,

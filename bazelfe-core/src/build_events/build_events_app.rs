@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Services listening on {}", addr);
 
-    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    let (tx, mut rx) = async_channel::unbounded();
 
     let greeter = BuildEventService {
         write_channel: Arc::new(Mutex::new(Some(tx))),
@@ -52,7 +52,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(async move {
         let mut file: Option<tokio::fs::File> = None;
         let mut idx: u32 = 0;
-        while let Some(action) = rx.recv().await {
+        while let Ok(action) = rx.recv().await {
             match action {
                 BuildEventAction::BuildCompleted => {
                     let _ = file.take();

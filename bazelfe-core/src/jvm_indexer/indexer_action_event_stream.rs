@@ -35,15 +35,15 @@ impl IndexerActionEventStream {
 
     pub fn build_action_pipeline(
         &self,
-        mut rx: mpsc::Receiver<Option<hydrated_stream::HydratedInfo>>,
+        mut rx: async_channel::Receiver<Option<hydrated_stream::HydratedInfo>>,
         results_map: Arc<DashMap<String, Vec<String>>>,
-    ) -> mpsc::Receiver<Option<usize>> {
-        let (mut tx, next_rx) = mpsc::channel(4096);
+    ) -> async_channel::Receiver<Option<usize>> {
+        let (mut tx, next_rx) = async_channel::unbounded();
 
         let allowed_rule_kind = Arc::clone(&self.allowed_rule_kinds);
 
         tokio::spawn(async move {
-            while let Some(action) = rx.recv().await {
+            while let Ok(action) = rx.recv().await {
                 match action {
                     None => {
                         tx.send(None).await.unwrap();
