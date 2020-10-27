@@ -4,11 +4,12 @@ use nom::character::complete::line_ending;
 use nom::error::ParseError;
 use nom::multi::{many0, many1};
 use nom::{bytes::complete::tag, combinator::map, combinator::opt, sequence::tuple, IResult};
-use std::{borrow::Cow, collections::HashMap, collections::HashSet, error::Error, sync::Arc};
+use std::{borrow::Cow, collections::HashMap, collections::HashSet, error::Error, sync::Arc, path::Path};
 use tokio::sync::RwLock;
 mod expand_target_to_guesses;
 mod index_table_value;
 pub use index_table_value::*;
+use std::io::Write;
 
 pub struct GuardedGet<'a, 'b>(
     Cow<'b, str>,
@@ -21,6 +22,7 @@ impl<'a, 'b> GuardedGet<'a, 'b> {
     }
 }
 
+use byteorder::{LittleEndian, WriteBytesExt};
 
 // Index table format should be
 
@@ -51,6 +53,28 @@ impl<'a> IndexTable {
         }
     }
 
+    pub async fn serialize_to_file(&self, path: &Path) -> () {
+        let mut file = std::fs::File::create(&path).unwrap();
+
+        let _ = {
+        let id_vec = self.id_to_target_vec.read().await;
+        file.write_u64::<LittleEndian>(id_vec.len() as u64).unwrap();
+
+        for ele in id_vec.iter() {
+            file.write_u16::<LittleEndian>(ele.len() as u16).unwrap();
+            file.write_all(&ele).unwrap();
+        }
+    };
+
+        let tbl_map = self.tbl_map.read().await;
+        for (k, innerv) in tbl_map.iter() {
+            let bytes = k.as_bytes();
+            file.write_u16::<LittleEndian>(k.len() as u16).unwrap();
+            file.write_all(bytes).unwrap();
+
+                innerv.write(&mut file).await
+        }
+    }
     async fn maybe_insert_target_string(&self, str: String) -> usize {
         self.maybe_insert_target_bytes(str.as_bytes().to_vec()).await
     }

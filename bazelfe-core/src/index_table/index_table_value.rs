@@ -1,4 +1,4 @@
-use std::{borrow::Cow, sync::Arc};
+use std::{borrow::Cow, sync::Arc, io::Write};
 
 use tokio::sync::RwLock;
 
@@ -58,6 +58,18 @@ impl IndexTableValue {
         let w = self.0.read().await;
         w.clone()
     }
+
+    pub async fn write<T>(&self, t: &mut T) -> () where T: Write {
+        let guard = self.0.read().await;
+        use byteorder::{LittleEndian, WriteBytesExt};
+        t.write_u16::<LittleEndian>(guard.len() as u16).unwrap();
+
+        for ele in guard.iter() {
+            t.write_u16::<LittleEndian>(ele.priority.0).unwrap();
+            t.write_u64::<LittleEndian>(ele.target as u64).unwrap();
+        }
+    }
+
 
     pub async fn read_iter<'a>(&'a self) -> IterGuard<'a> {
         let guard = self.0.read().await;
