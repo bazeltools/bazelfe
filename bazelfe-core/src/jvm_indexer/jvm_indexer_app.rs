@@ -459,7 +459,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Writing out index data");
 
-    index_table.serialize_to_file(&opt.index_output_location).await;
-  
+    let mut file = std::fs::File::create(&opt.index_output_location).unwrap();
+
+    index_table.write(&mut file).await;
+
     Ok(())
 }

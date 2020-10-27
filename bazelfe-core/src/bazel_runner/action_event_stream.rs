@@ -51,19 +51,17 @@ where
     T: Buildozer + Send + Clone + Sync + 'static,
 {
     pub fn new(index_input_location: Option<PathBuf>, buildozer: T) -> Self {
-
- 
-                    let index_tbl = match index_input_location {
-                        Some(p) => {
-                            if p.exists() {
-                                let mut src_f = std::fs::File::open(p).unwrap();
-                                index_table::IndexTable::parse_file(&mut src_f)
-                            } else {
-                                index_table::IndexTable::new()
-                            }
-                        }
-                        None => index_table::IndexTable::new(),
-                    };
+        let index_tbl = match index_input_location {
+            Some(p) => {
+                if p.exists() {
+                    let mut src_f = std::fs::File::open(p).unwrap();
+                    index_table::IndexTable::read(&mut src_f)
+                } else {
+                    index_table::IndexTable::new()
+                }
+            }
+            None => index_table::IndexTable::new(),
+        };
 
         Self {
             index_table: index_tbl,
@@ -155,7 +153,7 @@ where
                                         found_classes.dedup();
                                         // for clazz in found_classes.into_iter() {
                                         //     self.index_table.
-                                        //     (&self, key: S, value: (u16, String)) 
+                                        //     (&self, key: S, value: (u16, String))
                                         // }
                                         println!("{:#?}", found_classes);
                                     }

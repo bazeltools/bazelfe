@@ -1,4 +1,4 @@
-use std::{borrow::Cow, io::Write, sync::Arc, io::Read};
+use std::{borrow::Cow, io::Read, io::Write, sync::Arc};
 
 use tokio::sync::RwLock;
 
@@ -59,7 +59,10 @@ impl IndexTableValue {
         w.clone()
     }
 
-    pub fn read<T>(rdr: &mut T) -> Self where T: Read {
+    pub fn read<T>(rdr: &mut T) -> Self
+    where
+        T: Read,
+    {
         use byteorder::{LittleEndian, ReadBytesExt};
         let len = rdr.read_u16::<LittleEndian>().unwrap();
 
@@ -68,18 +71,19 @@ impl IndexTableValue {
         for _ in 0..len {
             let priority = rdr.read_u16::<LittleEndian>().unwrap();
             let target = rdr.read_u64::<LittleEndian>().unwrap();
-            v.push(
-                IndexTableValueEntry {
-                    priority: Priority(priority),
-                    target: target as usize
-                }
-            );
+            v.push(IndexTableValueEntry {
+                priority: Priority(priority),
+                target: target as usize,
+            });
         }
+
         Self(Arc::new(RwLock::new(v)))
     }
 
-
-    pub async fn write<T>(&self, t: &mut T) -> () where T: Write {
+    pub async fn write<T>(&self, t: &mut T) -> ()
+    where
+        T: Write,
+    {
         let guard = self.0.read().await;
         use byteorder::{LittleEndian, WriteBytesExt};
         t.write_u16::<LittleEndian>(guard.len() as u16).unwrap();
@@ -89,7 +93,6 @@ impl IndexTableValue {
             t.write_u64::<LittleEndian>(ele.target as u64).unwrap();
         }
     }
-
 
     pub async fn read_iter<'a>(&'a self) -> IterGuard<'a> {
         let guard = self.0.read().await;
@@ -120,8 +123,7 @@ impl IndexTableValue {
         Self::new(vec![entry])
     }
 
-    pub async fn lookup_by_value(&self, k: usize) -> Option<(usize, u16)>
-    {
+    pub async fn lookup_by_value(&self, k: usize) -> Option<(usize, u16)> {
         let mut idx = 0;
 
         for element in &self.read_iter().await {
@@ -133,8 +135,7 @@ impl IndexTableValue {
         None
     }
 
-    pub async fn update_or_add_entry(&self, target_v: usize, priority: u16) -> ()
-    {
+    pub async fn update_or_add_entry(&self, target_v: usize, priority: u16) -> () {
         match self.lookup_by_value(target_v).await {
             Some((position, old_priority)) => {
                 let mut write_vec = self.0.write().await;
@@ -197,11 +198,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_build_from_unsorted_list() {
-        let index = IndexTableValue::from_vec(vec![
-            (55, 1003),
-            (22, 1002),
-            (99, 1001),
-        ]);
+        let index = IndexTableValue::from_vec(vec![(55, 1003), (22, 1002), (99, 1001)]);
         let expected: Vec<IndexTableValueEntry> = vec![
             IndexTableValueEntry {
                 target: 1001,
@@ -221,11 +218,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_lookup_by_value() {
-        let index = IndexTableValue::from_vec(vec![
-            (55, 1003),
-            (22, 1002),
-            (99, 1001),
-        ]);
+        let index = IndexTableValue::from_vec(vec![(55, 1003), (22, 1002), (99, 1001)]);
 
         assert_eq!(index.lookup_by_value(1002).await, Some((2, 22)));
 
@@ -234,11 +227,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_or_add_entry() {
-        let index = IndexTableValue::from_vec(vec![
-            (55, 1003),
-            (22, 1002),
-            (99, 1001),
-        ]);
+        let index = IndexTableValue::from_vec(vec![(55, 1003), (22, 1002), (99, 1001)]);
 
         assert_eq!(index.lookup_by_value(1002).await, Some((2, 22)));
 
