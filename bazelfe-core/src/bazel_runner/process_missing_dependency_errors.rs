@@ -209,12 +209,13 @@ async fn inner_process_missing_dependency_errors<T: Buildozer>(
                 ActionRequest::Suffix(suffix) => index_table.get_from_suffix(&suffix.suffix).await,
             };
             for target_entry in &candidates.read_iter().await {
-                if !ignore_dep_references.contains(&target_entry.target)
-                    && is_potentially_valid_target(&target_kind, &target_entry.target)
+                let target: String = index_table.decode_string(target_entry.target).await.unwrap();
+                if !ignore_dep_references.contains(&target)
+                    && is_potentially_valid_target(&target_kind, &target)
                 {
                     // If our top candidate hits to be a local previous seen stop
                     // processing this class
-                    if local_previous_seen.contains(&target_entry.target) {
+                    if local_previous_seen.contains(&target) {
                         break 'class_entry_loop;
                     }
 
@@ -225,12 +226,12 @@ async fn inner_process_missing_dependency_errors<T: Buildozer>(
                         target_entry.target, &label
                     );
                     buildozer
-                        .add_dependency(label, &target_entry.target)
+                        .add_dependency(label, &target)
                         .await
                         .unwrap();
                     actions_completed += 1;
 
-                    local_previous_seen.insert(target_entry.target.clone());
+                    local_previous_seen.insert(target.clone());
 
                     // Now that we have a version with a match we can jump right out to the outside
                     break 'class_entry_loop;

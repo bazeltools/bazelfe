@@ -21,31 +21,96 @@ impl<'a, 'b> GuardedGet<'a, 'b> {
     }
 }
 
+
+// Index table format should be
+
+// map u64 -> Vec<u8>
+// map String -> Vec((u16, u64))
 #[derive(Clone, Debug)]
 pub struct IndexTable {
     tbl_map: Arc<RwLock<HashMap<String, IndexTableValue>>>,
+    id_to_target_vec: Arc<RwLock<Vec<Arc<Vec<u8>>>>>,
+    id_to_target_reverse_map: Arc<RwLock<HashMap<Arc<Vec<u8>>, usize>>>
 }
-impl Default for IndexTable {
+
+impl<'a> Default for IndexTable {
     fn default() -> Self {
         Self {
             tbl_map: Arc::new(RwLock::new(HashMap::new())),
+            id_to_target_vec: Arc::new(RwLock::new(Vec::new())),
+            id_to_target_reverse_map: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
-impl IndexTable {
+impl<'a> IndexTable {
     pub fn new() -> Self {
         Self {
             tbl_map: Arc::new(RwLock::new(HashMap::new())),
+            id_to_target_vec: Arc::new(RwLock::new(Vec::new())),
+            id_to_target_reverse_map: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
-    pub fn from_hashmap(m: HashMap<String, Vec<(u16, String)>>) -> Self {
+    async fn maybe_insert_target_string(&self, str: String) -> usize {
+        self.maybe_insert_target_bytes(str.as_bytes().to_vec()).await
+    }
+
+    async fn maybe_insert_target_bytes(&self, bytes: Vec<u8>) -> usize {
+        let val = Arc::new(bytes);
+        let read_lock = self.id_to_target_reverse_map.read().await;
+        if let Some(id) = read_lock.get(&val) {
+                return id.clone();
+        }
+        drop(read_lock);
+        let mut id_to_target_vec = self.id_to_target_vec.write().await;
+        let mut id_to_target_reverse_map = self.id_to_target_reverse_map.write().await;
+
+        let id = id_to_target_vec.len();
+        id_to_target_vec.push(val);
+        id_to_target_reverse_map.insert(Arc::clone(&id_to_target_vec[id]), id);
+        id
+    }
+
+    pub fn from_vec(m: Vec<(String, Vec<(u16, String)>)>) -> Self {
+        let mut id_to_target_vec = Vec::new();
+        let mut id_to_target_reverse_map:HashMap<Arc<Vec<u8>>, usize> = HashMap::new();
+        let mut tbl_map = HashMap::new();
+        for (k, v) in m.into_iter() {
+            let mut nxt = Vec::default();
+            for (freq, v) in v {
+                let val = Arc::new(v.as_bytes().to_vec());
+                match id_to_target_reverse_map.get(&val) {
+                    Some(id) => {
+                        nxt.push((freq, id.clone()));
+                    }
+                    None => {
+                        let id = id_to_target_vec.len();
+                        id_to_target_vec.push(Arc::new(v.as_bytes().to_vec()));
+                        id_to_target_reverse_map.insert(Arc::clone(&id_to_target_vec[id]), id);
+                        nxt.push((freq, id));
+                    }
+                }
+            }
+            tbl_map.insert(k, IndexTableValue::from_vec(nxt));
+        }
         Self {
-            tbl_map: Arc::new(RwLock::new(
-                m.into_iter()
-                    .map(|(k, v)| (k, IndexTableValue::from_vec(v)))
-                    .collect(),
-            )),
+            tbl_map: Arc::new(RwLock::new(tbl_map)),
+            id_to_target_vec: Arc::new(RwLock::new(id_to_target_vec)),
+            id_to_target_reverse_map: Arc::new(RwLock::new(id_to_target_reverse_map)),
+        }
+    }
+    pub fn from_hashmap(m: HashMap<String, Vec<(u16, String)>>) -> Self {
+      IndexTable::from_vec(m.into_iter().collect())
+    }
+
+    pub async fn decode_string(&self, key: usize) -> Option<String> {
+        let read_lock = self.id_to_target_vec.read().await;
+        match read_lock.get(key) {
+            Some(e) =>
+                unsafe {
+                    Some(std::str::from_utf8_unchecked(&e).to_string())
+                },
+            None => None
         }
     }
 
@@ -53,17 +118,22 @@ impl IndexTable {
     where
         S: Into<Cow<'b, str>>,
     {
+        let (freq, target) = value;
+        let key_id = {
+            self.maybe_insert_target_string(target).await
+        };
+
         let mut guard = self.tbl_map.write().await;
         let k: Cow<'b, str> = key.into();
 
         match guard.get_mut(k.as_ref()) {
             Some(vec) => {
-                vec.update_or_add_entry(value.1, value.0).await;
+                vec.update_or_add_entry(key_id, freq).await;
             }
             None => {
                 let updated_v = IndexTableValueEntry {
-                    target: value.1,
-                    priority: Priority(value.0),
+                    target: key_id,
+                    priority: Priority(freq),
                 };
 
                 guard.insert(k.into_owned(), IndexTableValue::with_value(updated_v));
@@ -81,7 +151,13 @@ impl IndexTable {
             Some(v) => v,
             None => {
                 let guesses = expand_target_to_guesses::get_guesses_for_class_name(&cow_k);
-                IndexTableValue::from_vec(guesses)
+
+                let mut guesses2 = Vec::default();
+                for (k, v) in guesses.into_iter() {
+                    guesses2.push((k, self.maybe_insert_target_string(v).await));
+                }
+
+                IndexTableValue::from_vec(guesses2)
             }
         }
     }
@@ -155,13 +231,7 @@ pub fn parse_file(input: &str) -> Result<IndexTable, Box<dyn Error>> {
     let extracted_result: Vec<(String, Vec<(u16, String)>)> = parse_file_e(input).unwrap().1;
     debug!("Finished parsing..");
 
-    let mut index_data = HashMap::new();
-    index_data.reserve(extracted_result.len());
-
-    for (k, v) in extracted_result.into_iter() {
-        index_data.insert(k, v);
-    }
-    Ok(IndexTable::from_hashmap(index_data))
+    Ok(IndexTable::from_vec(extracted_result))
 }
 
 #[cfg(test)]
@@ -253,9 +323,7 @@ javax.annotation.ParametersAreNullableByDefault\t236:@third_party_jvm//3rdparty/
                 .await,
             vec![IndexTableValueEntry {
                 priority: Priority(0),
-                target: String::from(
-                    "@third_party_jvm//3rdparty/jvm/org/apache/parquet:parquet_thrift_jar_tests"
-                )
+                target: 1
             }]
         );
 
@@ -269,15 +337,11 @@ javax.annotation.ParametersAreNullableByDefault\t236:@third_party_jvm//3rdparty/
             vec![
                 IndexTableValueEntry {
                     priority: Priority(236),
-                    target: String::from(
-                        "@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305"
-                    )
+                    target: 16
                 },
                 IndexTableValueEntry {
                     priority: Priority(75),
-                    target: String::from(
-                        "@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:annotations"
-                    ),
+                    target: 17,
                 },
             ]
         );
@@ -315,9 +379,7 @@ javax.annotation.ParametersAreNullableByDefault\t236:@third_party_jvm//3rdparty/
                 .await,
             vec![IndexTableValueEntry {
                 priority: Priority(236),
-                target: String::from(
-                    "@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305"
-                )
+                target: 0
             },]
         );
 
@@ -352,13 +414,11 @@ javax.annotation.ParametersAreNullableByDefault\t236:@third_party_jvm//3rdparty/
             vec![
                 IndexTableValueEntry {
                     priority: Priority(236),
-                    target: String::from(
-                        "@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305"
-                    )
+                    target: 0
                 },
                 IndexTableValueEntry {
                     priority: Priority(1),
-                    target: String::from("@third_party_jvm//3rdparty/jvm/com/google:guava")
+                    target: 1
                 },
             ]
         );

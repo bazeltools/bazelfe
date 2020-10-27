@@ -21,7 +21,7 @@ impl Ord for Priority {
 pub struct IndexTableValueEntry {
     ///Todo impl the ordering's manually so the order of fields here doesn't matter
     pub priority: Priority,
-    pub target: String,
+    pub target: usize,
 }
 
 pub struct IterGuard<'a> {
@@ -64,7 +64,7 @@ impl IndexTableValue {
         return IterGuard { guard };
     }
 
-    pub fn from_vec(data: Vec<(u16, String)>) -> Self {
+    pub fn from_vec(data: Vec<(u16, usize)>) -> Self {
         let transformed: Vec<IndexTableValueEntry> = data
             .into_iter()
             .map(|e| IndexTableValueEntry {
@@ -88,12 +88,8 @@ impl IndexTableValue {
         Self::new(vec![entry])
     }
 
-    pub async fn lookup_by_value<'b, S>(&self, target_v: S) -> Option<(usize, u16)>
-    where
-        S: Into<Cow<'b, str>>,
+    pub async fn lookup_by_value(&self, k: usize) -> Option<(usize, u16)>
     {
-        let k = target_v.into();
-
         let mut idx = 0;
 
         for element in &self.read_iter().await {
@@ -105,16 +101,9 @@ impl IndexTableValue {
         None
     }
 
-    pub async fn update_or_add_entry<'b, S>(&self, target_v: S, priority: u16) -> ()
-    where
-        S: Into<Cow<'b, str>>,
+    pub async fn update_or_add_entry(&self, target_v: usize, priority: u16) -> ()
     {
-        let cow: Cow<'b, str> = target_v.into();
-        let as_borrow = match &cow {
-            Cow::Borrowed(b) => Cow::Borrowed(*b),
-            Cow::Owned(own) => Cow::Borrowed(*&own.as_str()),
-        };
-        match self.lookup_by_value(as_borrow).await {
+        match self.lookup_by_value(target_v).await {
             Some((position, old_priority)) => {
                 let mut write_vec = self.0.write().await;
                 if old_priority == priority {
@@ -138,7 +127,7 @@ impl IndexTableValue {
                 write_vec.insert(
                     insert_position,
                     IndexTableValueEntry {
-                        target: cow.into_owned(),
+                        target: target_v,
                         priority: Priority(priority),
                     },
                 );
@@ -154,7 +143,7 @@ impl IndexTableValue {
                 write_vec.insert(
                     insert_position,
                     IndexTableValueEntry {
-                        target: cow.into_owned(),
+                        target: target_v,
                         priority: Priority(priority),
                     },
                 );
@@ -177,21 +166,21 @@ mod tests {
     #[tokio::test]
     async fn test_build_from_unsorted_list() {
         let index = IndexTableValue::from_vec(vec![
-            (55, String::from("foo")),
-            (22, String::from("foo2")),
-            (99, String::from("foo3")),
+            (55, 1003),
+            (22, 1002),
+            (99, 1001),
         ]);
         let expected: Vec<IndexTableValueEntry> = vec![
             IndexTableValueEntry {
-                target: String::from("foo3"),
+                target: 1001,
                 priority: Priority(99),
             },
             IndexTableValueEntry {
-                target: String::from("foo"),
+                target: 1003,
                 priority: Priority(55),
             },
             IndexTableValueEntry {
-                target: String::from("foo2"),
+                target: 1002,
                 priority: Priority(22),
             },
         ];
@@ -201,40 +190,40 @@ mod tests {
     #[tokio::test]
     async fn test_lookup_by_value() {
         let index = IndexTableValue::from_vec(vec![
-            (55, String::from("foo")),
-            (22, String::from("foo2")),
-            (99, String::from("foo3")),
+            (55, 1003),
+            (22, 1002),
+            (99, 1001),
         ]);
 
-        assert_eq!(index.lookup_by_value("foo2").await, Some((2, 22)));
+        assert_eq!(index.lookup_by_value(1002).await, Some((2, 22)));
 
-        assert_eq!(index.lookup_by_value("foo3").await, Some((0, 99)));
+        assert_eq!(index.lookup_by_value(1001).await, Some((0, 99)));
     }
 
     #[tokio::test]
     async fn test_update_or_add_entry() {
         let index = IndexTableValue::from_vec(vec![
-            (55, String::from("foo")),
-            (22, String::from("foo2")),
-            (99, String::from("foo3")),
+            (55, 1003),
+            (22, 1002),
+            (99, 1001),
         ]);
 
-        assert_eq!(index.lookup_by_value("foo2").await, Some((2, 22)));
+        assert_eq!(index.lookup_by_value(1002).await, Some((2, 22)));
 
-        index.update_or_add_entry("foo2", 1200).await;
-        assert_eq!(index.lookup_by_value("foo2").await, Some((0, 1200)));
+        index.update_or_add_entry(1002, 1200).await;
+        assert_eq!(index.lookup_by_value(1002).await, Some((0, 1200)));
 
         let expected: Vec<IndexTableValueEntry> = vec![
             IndexTableValueEntry {
-                target: String::from("foo2"),
+                target: 1002,
                 priority: Priority(1200),
             },
             IndexTableValueEntry {
-                target: String::from("foo3"),
+                target: 1001,
                 priority: Priority(99),
             },
             IndexTableValueEntry {
-                target: String::from("foo"),
+                target: 1003,
                 priority: Priority(55),
             },
         ];
