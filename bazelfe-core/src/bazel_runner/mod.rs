@@ -60,6 +60,7 @@ fn update_command<S: Into<String> + Clone>(
         cmd[0].clone(),
         String::from("--build_event_publish_all_actions"),
         String::from("--bes_timeout=30000ms"),
+        String::from("--nolegacy_important_outputs"),
         String::from("--experimental_build_event_upload_strategy=local"),
         String::from("--build_event_text_file_path_conversion"),
         String::from("--color"),
