@@ -5,13 +5,15 @@ use nom::error::ParseError;
 use nom::multi::{many0, many1};
 use nom::{bytes::complete::tag, combinator::map, combinator::opt, sequence::tuple, IResult};
 use std::{
-    borrow::Cow, collections::HashMap, collections::HashSet, io::Read, path::Path, sync::Arc,
+    borrow::Cow, collections::HashMap, collections::HashSet, io::Read, path::Path,
+    sync::atomic::Ordering, sync::Arc,
 };
 use tokio::sync::RwLock;
 mod expand_target_to_guesses;
 mod index_table_value;
 pub use index_table_value::*;
 use std::io::Write;
+use std::sync::atomic::AtomicBool;
 
 pub struct GuardedGet<'a, 'b>(
     Cow<'b, str>,
@@ -35,6 +37,7 @@ pub struct IndexTable {
     tbl_map: Arc<RwLock<HashMap<String, IndexTableValue>>>,
     id_to_target_vec: Arc<RwLock<Vec<Arc<Vec<u8>>>>>,
     id_to_target_reverse_map: Arc<RwLock<HashMap<Arc<Vec<u8>>, usize>>>,
+    mutated: Arc<AtomicBool>,
 }
 
 impl<'a> Default for IndexTable {
@@ -43,6 +46,7 @@ impl<'a> Default for IndexTable {
             tbl_map: Arc::new(RwLock::new(HashMap::new())),
             id_to_target_vec: Arc::new(RwLock::new(Vec::new())),
             id_to_target_reverse_map: Arc::new(RwLock::new(HashMap::new())),
+            mutated: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -52,7 +56,12 @@ impl<'a> IndexTable {
             tbl_map: Arc::new(RwLock::new(HashMap::new())),
             id_to_target_vec: Arc::new(RwLock::new(Vec::new())),
             id_to_target_reverse_map: Arc::new(RwLock::new(HashMap::new())),
+            mutated: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    pub fn is_mutated(&self) -> bool {
+        (*self.mutated).load(Ordering::Relaxed)
     }
 
     pub async fn write<W>(&self, file: &mut W) -> ()
@@ -73,12 +82,23 @@ impl<'a> IndexTable {
         file.write_u64::<LittleEndian>(tbl_map.len() as u64)
             .unwrap();
 
+        let mut vec_join_res = Vec::default();
         for (k, innerv) in tbl_map.iter() {
-            let bytes = k.as_bytes();
-            file.write_u16::<LittleEndian>(k.len() as u16).unwrap();
-            file.write_all(bytes).unwrap();
+            let innerv = innerv.clone();
+            let k = k.clone();
+            vec_join_res.push(tokio::spawn(async move {
+                let mut cur_buf = Vec::default();
+                let bytes = k.as_bytes();
+                cur_buf.write_u16::<LittleEndian>(k.len() as u16).unwrap();
+                cur_buf.write_all(bytes).unwrap();
 
-            innerv.write(file).await
+                innerv.write(&mut cur_buf).await;
+                cur_buf
+            }));
+        }
+        for e in vec_join_res.into_iter() {
+            let data = e.await.unwrap();
+            file.write_all(&data).unwrap();
         }
     }
 
@@ -126,6 +146,7 @@ impl<'a> IndexTable {
             tbl_map: Arc::new(RwLock::new(tbl_map)),
             id_to_target_vec: Arc::new(RwLock::new(index_buf)),
             id_to_target_reverse_map: Arc::new(RwLock::new(reverse_hashmap)),
+            mutated: Arc::new(AtomicBool::new(false)),
         }
     }
     async fn maybe_insert_target_string(&self, str: String) -> usize {
@@ -175,6 +196,7 @@ impl<'a> IndexTable {
             tbl_map: Arc::new(RwLock::new(tbl_map)),
             id_to_target_vec: Arc::new(RwLock::new(id_to_target_vec)),
             id_to_target_reverse_map: Arc::new(RwLock::new(id_to_target_reverse_map)),
+            mutated: Arc::new(AtomicBool::new(false)),
         }
     }
     pub fn from_hashmap(m: HashMap<String, Vec<(u16, String)>>) -> Self {
@@ -199,11 +221,14 @@ impl<'a> IndexTable {
         let mut guard = self.tbl_map.write().await;
         let k: Cow<'b, str> = key.into();
 
-        match guard.get_mut(k.as_ref()) {
+        match guard.get(k.as_ref()) {
             Some(vec) => {
-                vec.update_or_add_entry(key_id, freq).await;
+                if vec.update_or_add_entry(key_id, freq, true).await {
+                    self.mutated.store(true, Ordering::Relaxed);
+                };
             }
             None => {
+                self.mutated.store(true, Ordering::Relaxed);
                 let updated_v = IndexTableValueEntry {
                     target: key_id,
                     priority: Priority(freq),
@@ -213,7 +238,7 @@ impl<'a> IndexTable {
                 let k = k.into_owned();
                 for (pri, v) in expand_target_to_guesses::get_guesses_for_class_name(&k) {
                     let key_id = { self.maybe_insert_target_string(v).await };
-                    index_v.update_or_add_entry(key_id, pri).await;
+                    index_v.update_or_add_entry(key_id, pri, true).await;
                 }
 
                 guard.insert(k, index_v);

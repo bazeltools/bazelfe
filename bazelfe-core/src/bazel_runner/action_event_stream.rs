@@ -50,21 +50,9 @@ impl<T> ActionEventStream<T>
 where
     T: Buildozer + Send + Clone + Sync + 'static,
 {
-    pub fn new(index_input_location: Option<PathBuf>, buildozer: T) -> Self {
-        let index_tbl = match index_input_location {
-            Some(p) => {
-                if p.exists() {
-                    let mut src_f = std::fs::File::open(p).unwrap();
-                    index_table::IndexTable::read(&mut src_f)
-                } else {
-                    index_table::IndexTable::new()
-                }
-            }
-            None => index_table::IndexTable::new(),
-        };
-
+    pub fn new(index_table: index_table::IndexTable, buildozer: T) -> Self {
         Self {
-            index_table: index_tbl,
+            index_table: index_table,
             previous_global_seen: Arc::new(DashMap::new()),
             buildozer: buildozer,
         }
@@ -151,11 +139,13 @@ where
                                         }
                                         found_classes.sort();
                                         found_classes.dedup();
-                                        // for clazz in found_classes.into_iter() {
-                                        //     self.index_table.
-                                        //     (&self, key: S, value: (u16, String))
-                                        // }
-                                        println!("{:#?}", found_classes);
+
+                                        for clazz in found_classes.into_iter() {
+                                            self_d
+                                                .index_table
+                                                .insert(clazz, (256, tce.label.clone()))
+                                                .await
+                                        }
                                     }
                                     hydrated_stream::HydratedInfo::ActionSuccess(_) => (),
                                     hydrated_stream::HydratedInfo::Progress(progress_info) => {

@@ -6,11 +6,12 @@
 // Unknown if we should consume this as a stream and try action failures immediately
 // or wait till the operation is done not to mutate things under bazel?
 
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use super::build_event_server::bazel_event;
 use super::build_event_server::BuildEventAction;
 use bazelfe_protos::*;
+use tokio::sync::RwLock;
 
 // This is keeping some state as we go through a stream to hydrate values with things like rule kinds
 // not on the indvidual events.
@@ -56,11 +57,12 @@ pub enum HydratedInfo {
     TargetComplete(TargetCompleteInfo),
 }
 
-fn recursive_lookup(
-    lut: &HashMap<String, build_event_stream::NamedSetOfFiles>,
+async fn recursive_lookup(
+    lut_arc: &Arc<RwLock<HashMap<String, build_event_stream::NamedSetOfFiles>>>,
     results: &mut Vec<build_event_stream::file::File>,
     mut ids: Vec<String>,
 ) -> bool {
+    let lut = lut_arc.read().await;
     while !ids.is_empty() {
         if let Some(head) = ids.pop() {
             if let Some(r) = lut.get(&head) {
@@ -78,10 +80,10 @@ fn recursive_lookup(
     true
 }
 
-fn tce_event(
+async fn tce_event(
     tce: bazel_event::TargetCompletedEvt,
     rule_kind_lookup: &HashMap<String, String>,
-    named_set_of_files_lookup: &HashMap<String, build_event_stream::NamedSetOfFiles>,
+    named_set_of_files_lookup: &Arc<RwLock<HashMap<String, build_event_stream::NamedSetOfFiles>>>,
     to_revisit: &mut Vec<bazel_event::TargetCompletedEvt>,
 ) -> Option<TargetCompleteInfo> {
     let mut output_files = Vec::default();
@@ -100,6 +102,7 @@ fn tce_event(
                 .map(|fs| fs.id.clone())
                 .collect(),
         )
+        .await
     } else {
         true
     };
@@ -124,12 +127,15 @@ impl HydratedInfo {
     ) -> async_channel::Receiver<Option<HydratedInfo>> {
         let (tx, next_rx) = async_channel::unbounded();
 
+        let named_set_of_files_lookup = Arc::new(RwLock::new(HashMap::new()));
+
         for _ in 0..10 {
             let rx = rx.clone();
             let tx = tx.clone();
+            let named_set_of_files_lookup = Arc::clone(&named_set_of_files_lookup);
+
             tokio::spawn(async move {
                 let mut rule_kind_lookup = HashMap::new();
-                let mut named_set_of_files_lookup = HashMap::new();
                 let mut buffered_tce: Vec<bazel_event::TargetCompletedEvt> = Vec::default();
 
                 while let Ok(action) = rx.recv().await {
@@ -149,7 +155,10 @@ impl HydratedInfo {
                                 id,
                                 named_set_of_files,
                             } => {
-                                named_set_of_files_lookup.insert(id, named_set_of_files);
+                                let _ = {
+                                    let mut g = named_set_of_files_lookup.write().await;
+                                    g.insert(id, named_set_of_files)
+                                };
 
                                 let tmp_v: Vec<bazel_event::TargetCompletedEvt> =
                                     buffered_tce.drain(..).collect();
@@ -159,7 +168,9 @@ impl HydratedInfo {
                                         &rule_kind_lookup,
                                         &named_set_of_files_lookup,
                                         &mut buffered_tce,
-                                    ) {
+                                    )
+                                    .await
+                                    {
                                         tx.send(Some(HydratedInfo::TargetComplete(
                                             target_complete_info,
                                         )))
@@ -174,7 +185,9 @@ impl HydratedInfo {
                                     &rule_kind_lookup,
                                     &named_set_of_files_lookup,
                                     &mut buffered_tce,
-                                ) {
+                                )
+                                .await
+                                {
                                     tx.send(Some(HydratedInfo::TargetComplete(
                                         target_complete_info,
                                     )))
@@ -269,7 +282,8 @@ mod tests {
                 label: String::from("foo_bar_baz"),
                 success: false,
             }),
-        })).await
+        }))
+        .await
         .unwrap();
 
         let received_res = child_rx.next().await.unwrap();
@@ -300,7 +314,8 @@ mod tests {
                 label: String::from("foo_bar_baz"),
                 success: false,
             }),
-        })).await
+        }))
+        .await
         .unwrap();
 
         let received_res = child_rx.next().await.unwrap();
@@ -328,7 +343,8 @@ mod tests {
                 label: String::from("foo_bar_baz"),
                 rule_kind: String::from("my_madeup_rule"),
             }),
-        })).await
+        }))
+        .await
         .unwrap();
 
         tx.send(BuildEventAction::BuildEvent(bazel_event::BazelBuildEvent {
@@ -342,7 +358,8 @@ mod tests {
                 label: String::from("foo_bar_baz"),
                 success: false,
             }),
-        })).await
+        }))
+        .await
         .unwrap();
 
         let received_res = child_rx.next().await.unwrap();
@@ -370,7 +387,8 @@ mod tests {
                 label: String::from("foo_bar_baz"),
                 rule_kind: String::from("my_madeup_rule"),
             }),
-        })).await
+        }))
+        .await
         .unwrap();
 
         tx.send(BuildEventAction::BuildCompleted).await.unwrap();
@@ -386,7 +404,8 @@ mod tests {
                 label: String::from("foo_bar_baz"),
                 success: false,
             }),
-        })).await
+        }))
+        .await
         .unwrap();
 
         let received_res = child_rx.next().await.unwrap();

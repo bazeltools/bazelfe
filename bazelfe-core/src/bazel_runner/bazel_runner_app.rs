@@ -136,8 +136,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     bazel_runner::register_ctrlc_handler();
 
+    let index_table = match &opt.index_input_location {
+        Some(p) => {
+            if p.exists() {
+                let mut src_f = std::fs::File::open(p).unwrap();
+                bazelfe_core::index_table::IndexTable::read(&mut src_f)
+            } else {
+                bazelfe_core::index_table::IndexTable::new()
+            }
+        }
+        None => bazelfe_core::index_table::IndexTable::new(),
+    };
+
     let aes = bazel_runner::action_event_stream::ActionEventStream::new(
-        opt.index_input_location,
+        index_table.clone(),
         buildozer_driver::from_binary_path(opt.buildozer_path),
     );
 
@@ -184,5 +196,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     info!("Attempts/build cycles: {:?}", attempts);
+
+    if index_table.is_mutated() {
+        info!("Writing out index file...");
+
+        if let Some(e) = &opt.index_input_location {
+            if let Some(parent) = e.parent() {
+                std::fs::create_dir_all(parent).unwrap();
+            }
+            let mut file = std::fs::File::create(&e).unwrap();
+            index_table.write(&mut file).await
+        }
+        info!("Index write complete.");
+    }
     std::process::exit(final_exit_code);
 }

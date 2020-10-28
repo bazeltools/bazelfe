@@ -135,13 +135,17 @@ impl IndexTableValue {
         None
     }
 
-    pub async fn update_or_add_entry(&self, target_v: usize, priority: u16) -> () {
+    pub async fn update_or_add_entry(&self, target_v: usize, priority: u16, use_max: bool) -> bool {
         match self.lookup_by_value(target_v).await {
             Some((position, old_priority)) => {
                 let mut write_vec = self.0.write().await;
-                if old_priority == priority {
-                    return;
+                if use_max && old_priority >= priority {
+                    return false;
                 }
+                if old_priority == priority {
+                    return false;
+                }
+
                 let insert_position =
                     match write_vec.binary_search_by_key(&Priority(priority), |e| e.priority) {
                         Ok(current_position) => current_position,
@@ -149,7 +153,7 @@ impl IndexTableValue {
                     };
                 if insert_position == position {
                     write_vec[position].priority = Priority(priority);
-                    return;
+                    return true;
                 }
                 write_vec.remove(position);
                 let insert_position = if insert_position < position {
@@ -182,6 +186,7 @@ impl IndexTableValue {
                 );
             }
         }
+        true
     }
 }
 
@@ -231,7 +236,7 @@ mod tests {
 
         assert_eq!(index.lookup_by_value(1002).await, Some((2, 22)));
 
-        index.update_or_add_entry(1002, 1200).await;
+        index.update_or_add_entry(1002, 1200, false).await;
         assert_eq!(index.lookup_by_value(1002).await, Some((0, 1200)));
 
         let expected: Vec<IndexTableValueEntry> = vec![
