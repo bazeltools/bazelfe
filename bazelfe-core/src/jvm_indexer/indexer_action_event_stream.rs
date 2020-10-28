@@ -16,7 +16,7 @@ pub trait ExtractClassData<U> {
 }
 #[derive(Clone, Debug)]
 pub struct IndexerActionEventStream {
-    index_table: Arc<RwLock<index_table::IndexTable>>,
+    pub index_table: index_table::IndexTable,
     allowed_rule_kinds: Arc<HashSet<String>>,
 }
 
@@ -27,7 +27,7 @@ impl IndexerActionEventStream {
             allowed.insert(e);
         }
         Self {
-            index_table: Arc::new(RwLock::new(index_table::IndexTable::default())),
+            index_table: index_table::IndexTable::default(),
             allowed_rule_kinds: Arc::new(allowed),
         }
     }
@@ -35,12 +35,10 @@ impl IndexerActionEventStream {
     pub fn build_action_pipeline(
         &self,
         rx: async_channel::Receiver<Option<hydrated_stream::HydratedInfo>>,
-        results_map: Arc<DashMap<String, Vec<String>>>,
     ) -> async_channel::Receiver<Option<usize>> {
         let (tx, next_rx) = async_channel::unbounded();
 
-        let allowed_rule_kind = Arc::clone(&self.allowed_rule_kinds);
-
+        let self_d = self.clone();
         tokio::spawn(async move {
             while let Ok(action) = rx.recv().await {
                 match action {
@@ -49,9 +47,9 @@ impl IndexerActionEventStream {
                     }
                     Some(e) => {
                         let e = e.clone();
-                        let allowed_rule_kind = Arc::clone(&allowed_rule_kind);
                         let tx = tx.clone();
-                        let results_map = Arc::clone(&results_map);
+                        let self_d = self_d.clone();
+
                         tokio::spawn(async move {
                             match e {
                                 hydrated_stream::HydratedInfo::ActionFailed(_) => {}
@@ -62,29 +60,27 @@ impl IndexerActionEventStream {
                                 }
                                 hydrated_stream::HydratedInfo::TargetComplete(tce) => {
                                     if let Some(ref target_kind) = tce.target_kind {
-                                        if allowed_rule_kind.contains(target_kind) {
-                                            let mut found_classes = Vec::default();
-
+                                        if self_d.allowed_rule_kinds.contains(target_kind) {
+                                            let mut files = Vec::default();
                                             for of in tce.output_files.iter() {
                                                 if let build_event_stream::file::File::Uri(e) = of {
-                                                    if e.starts_with("file://") {
+                                                    if e.ends_with(".jar")
+                                                        && e.starts_with("file://")
+                                                    {
                                                         let u: PathBuf = e
                                                             .strip_prefix("file://")
                                                             .unwrap()
                                                             .into();
-                                                        let extracted_zip = crate::zip_parse::extract_classes_from_zip(u);
-                                                        found_classes.extend(
-                                                            transform_file_names_into_class_names(
-                                                                extracted_zip,
-                                                            ),
-                                                        );
+                                                        files.push(u);
                                                     }
                                                 }
                                             }
-                                            tx.send(Some(found_classes.len())).await.unwrap();
-                                            found_classes.sort();
-                                            found_classes.dedup();
-                                            results_map.insert(tce.label, found_classes);
+
+                                            self_d
+                                                .index_table
+                                                .index_jar(tce.label.clone(), files)
+                                                .await;
+                                            tx.send(Some(1)).await.unwrap();
                                         }
                                     }
                                 }

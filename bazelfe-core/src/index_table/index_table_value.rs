@@ -53,7 +53,6 @@ impl Default for IndexTableValue {
 
 impl IndexTableValue {
     /// Used in testing to convert into a simple vec for comparing.
-    #[cfg(test)]
     pub(in crate) async fn as_vec(self) -> Vec<IndexTableValueEntry> {
         let w = self.0.read().await;
         w.clone()

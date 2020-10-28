@@ -75,7 +75,6 @@ async fn spawn_bazel_attempt(
     aes: &bazelfe_core::jvm_indexer::indexer_action_event_stream::IndexerActionEventStream,
     bes_port: u16,
     bazel_args: &Vec<String>,
-    index_map: Arc<DashMap<String, Vec<String>>>,
 ) -> (usize, bazel_runner::ExecuteResult) {
     let (tx, rx) = async_channel::unbounded();
     let _ = {
@@ -84,7 +83,7 @@ async fn spawn_bazel_attempt(
     };
     let error_stream = HydratedInfo::build_transformer(rx);
 
-    let target_extracted_stream = aes.build_action_pipeline(error_stream, index_map);
+    let target_extracted_stream = aes.build_action_pipeline(error_stream);
 
     let actions_completed: Arc<std::sync::atomic::AtomicUsize> =
         Arc::new(std::sync::atomic::AtomicUsize::new(0));
@@ -334,6 +333,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         allowed_rule_kinds,
     );
 
+    let ret = bazelfe_core::jvm_indexer::popularity_parser::build_popularity_map().await;
+
+    for (k, v) in ret {
+        aes.index_table.set_popularity_str(k, v as u16).await
+    }
+
+    for (k, v) in bazel_deps_replacement_map {
+        aes.index_table.add_transformation_mapping(k, v).await;
+    }
+
     let default_port = {
         let rand_v: u16 = rng.gen();
         40000 + (rand_v % 3000)
@@ -368,7 +377,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         compile_batch_size
     );
 
-    let results_map: Arc<DashMap<String, Vec<String>>> = Arc::new(DashMap::new());
     async fn run_bazel(
         bes_port: u16,
         sender_arc: Arc<
@@ -378,7 +386,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         aes: &bazelfe_core::jvm_indexer::indexer_action_event_stream::IndexerActionEventStream,
         batch_idx: usize,
         chunk: &mut Vec<String>,
-        results_map: Arc<DashMap<String, Vec<String>>>,
     ) {
         let batch_idx = batch_idx;
         let batch_start_time = Instant::now();
@@ -389,7 +396,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ];
         current_args.extend(chunk.drain(..));
         let (_num_classes_found, bazel_result) =
-            spawn_bazel_attempt(&sender_arc, &aes, bes_port, &current_args, results_map).await;
+            spawn_bazel_attempt(&sender_arc, &aes, bes_port, &current_args).await;
         info!(
             "Batch {} had exit code: {} after {} seconds",
             batch_idx,
@@ -413,7 +420,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &aes,
                 batch_idx,
                 &mut batch_elements,
-                Arc::clone(&results_map),
             )
             .await;
             batch_idx += 1;
@@ -427,41 +433,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &aes,
         batch_idx,
         &mut batch_elements,
-        Arc::clone(&results_map),
     )
     .await;
 
     info!("Building a target popularity map");
-    let ret = bazelfe_core::jvm_indexer::popularity_parser::build_popularity_map().await;
-
-    let mut reverse_hashmap = HashMap::new();
-
-    info!("Building results map, and injecting popularity data");
-    for kv in results_map.iter() {
-        let key = kv.key();
-        let value = kv.value();
-        let re = bazel_deps_replacement_map.get(key).unwrap_or(key).clone();
-        let freq: u16 = ret.get(&re).unwrap_or(&0).clone() as u16;
-        for inner_v in value {
-            let v = reverse_hashmap.entry(inner_v.clone()).or_insert(vec![]);
-            v.push((freq, re.clone()))
-        }
-    }
-
-    let res_vec = {
-        let mut v1: Vec<(String, Vec<(u16, String)>)> = reverse_hashmap.into_iter().collect();
-
-        v1.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-        v1
-    };
-
-    let index_table = bazelfe_core::index_table::IndexTable::from_vec(res_vec);
 
     info!("Writing out index data");
 
     let mut file = std::fs::File::create(&opt.index_output_location).unwrap();
 
-    index_table.write(&mut file).await;
+    aes.index_table.write(&mut file).await;
 
     Ok(())
 }

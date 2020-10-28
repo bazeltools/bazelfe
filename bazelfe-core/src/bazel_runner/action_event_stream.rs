@@ -6,8 +6,6 @@ use super::super::index_table;
 use crate::buildozer_driver::Buildozer;
 use bazelfe_protos::*;
 use dashmap::{DashMap, DashSet};
-use lazy_static::lazy_static;
-use regex::Regex;
 
 pub trait ExtractClassData<U> {
     fn paths(&self) -> Vec<PathBuf>;
@@ -20,32 +18,6 @@ pub struct ActionEventStream<T: Buildozer + Send + Sync + Clone + 'static> {
     buildozer: T,
 }
 
-fn remove_from<'a>(haystack: &'a str, needle: &str) -> &'a str {
-    match haystack.find(needle) {
-        None => haystack,
-        Some(pos) => &haystack[0..pos],
-    }
-}
-fn transform_file_names_into_class_names(class_names: Vec<String>) -> Vec<String> {
-    lazy_static! {
-        static ref SUFFIX_ANON_CLAZZES: Regex = Regex::new(r"(\$\d*)?\.class$").unwrap();
-    }
-
-    let mut vec: Vec<String> = class_names
-        .into_iter()
-        .filter_map(|e| {
-            if e.ends_with(".class") {
-                Some(remove_from(&SUFFIX_ANON_CLAZZES.replace(&e, ""), "$$").to_string())
-            } else {
-                None
-            }
-        })
-        .map(|e| e.replace("$", ".").replace("/", "."))
-        .collect();
-    vec.sort();
-    vec.dedup();
-    vec
-}
 impl<T> ActionEventStream<T>
 where
     T: Buildozer + Send + Clone + Sync + 'static,
@@ -118,34 +90,21 @@ where
                                         }
                                     }
                                     hydrated_stream::HydratedInfo::TargetComplete(tce) => {
-                                        let mut found_classes = Vec::default();
-
+                                        let mut files = Vec::default();
                                         for of in tce.output_files.iter() {
                                             if let build_event_stream::file::File::Uri(e) = of {
                                                 if e.ends_with(".jar") && e.starts_with("file://") {
                                                     let u: PathBuf =
                                                         e.strip_prefix("file://").unwrap().into();
-                                                    let extracted_zip =
-                                                        crate::zip_parse::extract_classes_from_zip(
-                                                            u,
-                                                        );
-                                                    found_classes.extend(
-                                                        transform_file_names_into_class_names(
-                                                            extracted_zip,
-                                                        ),
-                                                    );
+                                                    files.push(u);
                                                 }
                                             }
                                         }
-                                        found_classes.sort();
-                                        found_classes.dedup();
 
-                                        for clazz in found_classes.into_iter() {
-                                            self_d
-                                                .index_table
-                                                .insert(clazz, (256, tce.label.clone()))
-                                                .await
-                                        }
+                                        self_d
+                                            .index_table
+                                            .index_jar(tce.label.clone(), files)
+                                            .await;
                                     }
                                     hydrated_stream::HydratedInfo::ActionSuccess(_) => (),
                                     hydrated_stream::HydratedInfo::Progress(progress_info) => {

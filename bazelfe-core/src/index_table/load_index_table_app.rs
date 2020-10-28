@@ -13,13 +13,17 @@ struct Opt {
     files: Vec<PathBuf>,
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     let opt = Opt::parse();
 
-    // for f in opt.files.iter() {
-    //     let content = fs::read_to_string(f)?;
+    let _ = tokio::runtime::Handle::current();
 
-    //     let _parsed_file = parse_file(&content).unwrap();
-    // }
+    for f in opt.files.iter() {
+        let mut file = std::fs::File::open(&f).unwrap();
+
+        let index_table = bazelfe_core::index_table::IndexTable::read(&mut file);
+        println!("{:#?}", index_table);
+    }
     Ok(())
 }

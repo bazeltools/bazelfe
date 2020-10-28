@@ -5,8 +5,8 @@ use nom::error::ParseError;
 use nom::multi::{many0, many1};
 use nom::{bytes::complete::tag, combinator::map, combinator::opt, sequence::tuple, IResult};
 use std::{
-    borrow::Cow, collections::HashMap, collections::HashSet, io::Read, path::Path,
-    sync::atomic::Ordering, sync::Arc,
+    borrow::Cow, collections::HashMap, collections::HashSet, io::Read, path::Path, path::PathBuf,
+    sync::atomic::Ordering, sync::Arc, time::SystemTime,
 };
 use tokio::sync::RwLock;
 mod expand_target_to_guesses;
@@ -14,6 +14,36 @@ mod index_table_value;
 pub use index_table_value::*;
 use std::io::Write;
 use std::sync::atomic::AtomicBool;
+
+use lazy_static::lazy_static;
+use regex::Regex;
+
+fn remove_from<'a>(haystack: &'a str, needle: &str) -> &'a str {
+    match haystack.find(needle) {
+        None => haystack,
+        Some(pos) => &haystack[0..pos],
+    }
+}
+fn transform_file_names_into_class_names(class_names: Vec<String>) -> Vec<String> {
+    lazy_static! {
+        static ref SUFFIX_ANON_CLAZZES: Regex = Regex::new(r"(\$\d*)?\.class$").unwrap();
+    }
+
+    let mut vec: Vec<String> = class_names
+        .into_iter()
+        .filter_map(|e| {
+            if e.ends_with(".class") {
+                Some(remove_from(&SUFFIX_ANON_CLAZZES.replace(&e, ""), "$$").to_string())
+            } else {
+                None
+            }
+        })
+        .map(|e| e.replace("$", ".").replace("/", "."))
+        .collect();
+    vec.sort();
+    vec.dedup();
+    vec
+}
 
 pub struct GuardedGet<'a, 'b>(
     Cow<'b, str>,
@@ -32,32 +62,106 @@ use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
 // map u64 -> Vec<u8>
 // map String -> Vec((u16, u64))
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct IndexTable {
     tbl_map: Arc<RwLock<HashMap<String, IndexTableValue>>>,
+    id_to_ctime: Arc<RwLock<Vec<u64>>>,
+    id_to_popularity: Arc<RwLock<Vec<u16>>>,
+    id_to_replacement_id: Arc<RwLock<Vec<i64>>>,
     id_to_target_vec: Arc<RwLock<Vec<Arc<Vec<u8>>>>>,
     id_to_target_reverse_map: Arc<RwLock<HashMap<Arc<Vec<u8>>, usize>>>,
     mutated: Arc<AtomicBool>,
 }
 
+impl std::fmt::Debug for IndexTable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str_lut = ::futures_executor::block_on(self.id_to_target_vec.read());
+        let tbl = ::futures_executor::block_on(self.tbl_map.read());
+
+        let mut id_to_str: Vec<String> = Vec::default();
+        for e in str_lut.iter() {
+            id_to_str.push(String::from_utf8_lossy(&*e).into_owned());
+        }
+        let mut res_map = HashMap::new();
+        #[derive(Clone, Debug)]
+        struct ValueBlock {
+            priority: u16,
+            label: String,
+        }
+        for (k, v) in tbl.iter() {
+            let data = futures_executor::block_on(v.clone().as_vec());
+            let mut r3 = Vec::default();
+            for d in data.iter() {
+                r3.push(ValueBlock {
+                    label: id_to_str[d.target].clone(),
+                    priority: d.priority.0,
+                });
+            }
+            res_map.insert(k.clone(), r3);
+        }
+
+        f.debug_struct("IndexTable")
+            .field("data_tbl", &res_map)
+            .finish()
+    }
+}
 impl<'a> Default for IndexTable {
     fn default() -> Self {
-        Self {
-            tbl_map: Arc::new(RwLock::new(HashMap::new())),
-            id_to_target_vec: Arc::new(RwLock::new(Vec::new())),
-            id_to_target_reverse_map: Arc::new(RwLock::new(HashMap::new())),
-            mutated: Arc::new(AtomicBool::new(false)),
-        }
+        Self::new()
     }
 }
 impl<'a> IndexTable {
     pub fn new() -> Self {
         Self {
             tbl_map: Arc::new(RwLock::new(HashMap::new())),
+            id_to_ctime: Arc::new(RwLock::new(Vec::new())),
+            id_to_popularity: Arc::new(RwLock::new(Vec::new())),
+            id_to_replacement_id: Arc::new(RwLock::new(Vec::new())),
             id_to_target_vec: Arc::new(RwLock::new(Vec::new())),
             id_to_target_reverse_map: Arc::new(RwLock::new(HashMap::new())),
             mutated: Arc::new(AtomicBool::new(false)),
         }
+    }
+    pub async fn add_transformation_mapping(&self, src_str: String, dest_str: String) {
+        let src_id = self.maybe_insert_target_string(src_str).await;
+        let dest_id = self.maybe_insert_target_string(dest_str).await;
+        let mut lock = self.id_to_replacement_id.write().await;
+        if src_id >= lock.len() {
+            lock.resize_with((src_id + 100) as usize, || -1);
+        }
+        lock[src_id] = dest_id as i64;
+    }
+
+    pub async fn maybe_update_id(&self, src_id: usize) -> usize {
+        let lock = self.id_to_replacement_id.read().await;
+        if src_id < lock.len() {
+            let o = lock[src_id];
+            if o >= 0 {
+                return o as usize;
+            }
+        }
+        src_id
+    }
+    pub async fn get_popularity(&self, label_id: usize) -> u16 {
+        let lock = self.id_to_popularity.read().await;
+        if label_id >= lock.len() {
+            0
+        } else {
+            lock[label_id]
+        }
+    }
+
+    pub async fn set_popularity(&self, label_id: usize, popularity: u16) -> () {
+        let mut lock = self.id_to_popularity.write().await;
+        if label_id >= lock.len() {
+            lock.resize_with((label_id + 100) as usize, Default::default);
+        }
+        lock[label_id] = popularity;
+    }
+
+    pub async fn set_popularity_str(&self, label: String, popularity: u16) -> () {
+        let id = self.maybe_insert_target_string(label).await;
+        self.set_popularity(id, popularity).await
     }
 
     pub fn is_mutated(&self) -> bool {
@@ -100,6 +204,28 @@ impl<'a> IndexTable {
             let data = e.await.unwrap();
             file.write_all(&data).unwrap();
         }
+
+        let id_to_ctime = self.id_to_ctime.read().await;
+
+        file.write_u64::<LittleEndian>(id_to_ctime.len() as u64)
+            .unwrap();
+        for e in id_to_ctime.iter() {
+            file.write_u64::<LittleEndian>(*e as u64).unwrap();
+        }
+
+        let id_to_popularity = self.id_to_popularity.read().await;
+        file.write_u64::<LittleEndian>(id_to_popularity.len() as u64)
+            .unwrap();
+        for e in id_to_popularity.iter() {
+            file.write_u16::<LittleEndian>(*e).unwrap();
+        }
+
+        let id_to_replacement_id = self.id_to_replacement_id.read().await;
+        file.write_u64::<LittleEndian>(id_to_replacement_id.len() as u64)
+            .unwrap();
+        for e in id_to_replacement_id.iter() {
+            file.write_i64::<LittleEndian>(*e).unwrap();
+        }
     }
 
     pub fn read<R>(rdr: &mut R) -> IndexTable
@@ -140,13 +266,89 @@ impl<'a> IndexTable {
             tbl_map.insert(k, v);
         }
 
+        let id_to_ctime_size = rdr.read_u64::<LittleEndian>().unwrap();
+        let mut id_to_ctime = Vec::default();
+        for _ in 0..id_to_ctime_size {
+            let ctimestamp = rdr.read_u64::<LittleEndian>().unwrap();
+            id_to_ctime.push(ctimestamp);
+        }
+
+        let id_to_popularity_size = rdr.read_u64::<LittleEndian>().unwrap();
+        let mut id_to_popularity = Vec::default();
+        for _ in 0..id_to_popularity_size {
+            let popularity = rdr.read_u16::<LittleEndian>().unwrap();
+            id_to_popularity.push(popularity);
+        }
+
+        let id_to_replacement_id_size = rdr.read_u64::<LittleEndian>().unwrap();
+        let mut id_to_replacement_id = Vec::default();
+        for _ in 0..id_to_replacement_id_size {
+            let replacement_id = rdr.read_i64::<LittleEndian>().unwrap();
+            id_to_replacement_id.push(replacement_id);
+        }
+
         debug!("Finished parsing..");
 
         Self {
             tbl_map: Arc::new(RwLock::new(tbl_map)),
+            id_to_ctime: Arc::new(RwLock::new(id_to_ctime)),
+            id_to_popularity: Arc::new(RwLock::new(id_to_popularity)),
+            id_to_replacement_id: Arc::new(RwLock::new(id_to_replacement_id)),
             id_to_target_vec: Arc::new(RwLock::new(index_buf)),
             id_to_target_reverse_map: Arc::new(RwLock::new(reverse_hashmap)),
             mutated: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    pub async fn index_jar(&self, target_name: String, paths: Vec<PathBuf>) -> () {
+        let current_time_since_epoch = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let newest_ctime = paths
+            .iter()
+            .map(|p| match p.metadata() {
+                Ok(metadata) => metadata
+                    .created()
+                    .map(|e| e.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs())
+                    .unwrap_or(current_time_since_epoch),
+                Err(_) => current_time_since_epoch,
+            })
+            .max()
+            .unwrap_or(current_time_since_epoch);
+
+        let key_id = self
+            .maybe_update_id(self.maybe_insert_target_string(target_name).await)
+            .await;
+
+        let should_update = {
+            let read_guard = self.id_to_ctime.read().await;
+            match read_guard.get(key_id) {
+                None => true,
+                Some(prev) => *prev < newest_ctime,
+            }
+        };
+
+        if should_update {
+            let _ = {
+                let mut w = self.id_to_ctime.write().await;
+                if key_id > w.len() {
+                    w.resize_with((key_id + 100) as usize, Default::default);
+                }
+                w.insert(key_id, newest_ctime);
+            };
+
+            let popularity = self.get_popularity(key_id).await;
+
+            let mut found_classes = Vec::default();
+            for p in paths.into_iter() {
+                let extracted_zip = crate::zip_parse::extract_classes_from_zip(p);
+                found_classes.extend(transform_file_names_into_class_names(extracted_zip));
+            }
+
+            for clazz in found_classes.into_iter() {
+                self.insert_with_id(clazz, key_id, popularity).await
+            }
         }
     }
     async fn maybe_insert_target_string(&self, str: String) -> usize {
@@ -194,6 +396,9 @@ impl<'a> IndexTable {
         }
         Self {
             tbl_map: Arc::new(RwLock::new(tbl_map)),
+            id_to_ctime: Arc::new(RwLock::new(Vec::default())),
+            id_to_popularity: Arc::new(RwLock::new(Vec::default())),
+            id_to_replacement_id: Arc::new(RwLock::new(Vec::default())),
             id_to_target_vec: Arc::new(RwLock::new(id_to_target_vec)),
             id_to_target_reverse_map: Arc::new(RwLock::new(id_to_target_reverse_map)),
             mutated: Arc::new(AtomicBool::new(false)),
@@ -211,27 +416,24 @@ impl<'a> IndexTable {
         }
     }
 
-    pub async fn insert<'b, S>(&self, key: S, value: (u16, String)) -> ()
+    pub async fn insert_with_id<'b, S>(&self, key: S, target_id: usize, priority: u16) -> ()
     where
         S: Into<Cow<'b, str>>,
     {
-        let (freq, target) = value;
-        let key_id = { self.maybe_insert_target_string(target).await };
-
         let mut guard = self.tbl_map.write().await;
         let k: Cow<'b, str> = key.into();
 
         match guard.get(k.as_ref()) {
             Some(vec) => {
-                if vec.update_or_add_entry(key_id, freq, true).await {
+                if vec.update_or_add_entry(target_id, priority, true).await {
                     self.mutated.store(true, Ordering::Relaxed);
                 };
             }
             None => {
                 self.mutated.store(true, Ordering::Relaxed);
                 let updated_v = IndexTableValueEntry {
-                    target: key_id,
-                    priority: Priority(freq),
+                    target: target_id,
+                    priority: Priority(priority),
                 };
 
                 let index_v = IndexTableValue::with_value(updated_v);
@@ -244,6 +446,16 @@ impl<'a> IndexTable {
                 guard.insert(k, index_v);
             }
         }
+    }
+
+    pub async fn insert<'b, S>(&self, key: S, value: (u16, String)) -> ()
+    where
+        S: Into<Cow<'b, str>>,
+    {
+        let (freq, target) = value;
+        let key_id = { self.maybe_insert_target_string(target).await };
+
+        self.insert_with_id(key, key_id, freq).await;
     }
 
     pub async fn get_or_guess<'b, S>(&self, key: S) -> IndexTableValue
