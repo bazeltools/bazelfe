@@ -128,19 +128,21 @@ impl HydratedInfo {
         let (tx, next_rx) = async_channel::unbounded();
 
         let named_set_of_files_lookup = Arc::new(RwLock::new(HashMap::new()));
+        let rule_kind_lookup = Arc::new(RwLock::new(HashMap::new()));
 
         for _ in 0..10 {
             let rx = rx.clone();
             let tx = tx.clone();
             let named_set_of_files_lookup = Arc::clone(&named_set_of_files_lookup);
+            let rule_kind_lookup = Arc::clone(&rule_kind_lookup);
 
             tokio::spawn(async move {
-                let mut rule_kind_lookup = HashMap::new();
                 let mut buffered_tce: Vec<bazel_event::TargetCompletedEvt> = Vec::default();
 
                 while let Ok(action) = rx.recv().await {
                     match action {
                         BuildEventAction::BuildCompleted => {
+                            let mut rule_kind_lookup = rule_kind_lookup.write().await;
                             rule_kind_lookup.clear();
                             tx.send(None).await.unwrap();
                         }
@@ -148,7 +150,8 @@ impl HydratedInfo {
                         BuildEventAction::BuildEvent(msg) => match msg.event {
                             bazel_event::Evt::BazelEvent(_) => {}
                             bazel_event::Evt::TargetConfigured(tgt_cfg) => {
-                                rule_kind_lookup.insert(tgt_cfg.label, tgt_cfg.rule_kind);
+                                let mut guard = rule_kind_lookup.write().await;
+                                guard.insert(tgt_cfg.label, tgt_cfg.rule_kind);
                             }
 
                             bazel_event::Evt::NamedSetOfFiles {
@@ -162,6 +165,8 @@ impl HydratedInfo {
 
                                 let tmp_v: Vec<bazel_event::TargetCompletedEvt> =
                                     buffered_tce.drain(..).collect();
+                                let rule_kind_lookup = rule_kind_lookup.read().await;
+
                                 for tce in tmp_v.into_iter() {
                                     if let Some(target_complete_info) = tce_event(
                                         tce,
@@ -180,6 +185,7 @@ impl HydratedInfo {
                                 }
                             }
                             bazel_event::Evt::TargetCompleted(tce) => {
+                                let rule_kind_lookup = rule_kind_lookup.read().await;
                                 if let Some(target_complete_info) = tce_event(
                                     tce,
                                     &rule_kind_lookup,
@@ -197,6 +203,7 @@ impl HydratedInfo {
                             }
 
                             bazel_event::Evt::ActionCompleted(ace) => {
+                                let rule_kind_lookup = rule_kind_lookup.read().await;
                                 if !ace.success {
                                     let err_info = ActionFailedErrorInfo {
                                         output_files: ace
@@ -229,6 +236,7 @@ impl HydratedInfo {
                             }
 
                             bazel_event::Evt::TestFailure(tfe) => {
+                                let rule_kind_lookup = rule_kind_lookup.read().await;
                                 let err_info = ActionFailedErrorInfo {
                                     output_files: tfe.failed_files,
                                     target_kind: rule_kind_lookup

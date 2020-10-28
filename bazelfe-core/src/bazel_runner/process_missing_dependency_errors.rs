@@ -209,7 +209,10 @@ async fn inner_process_missing_dependency_errors<T: Buildozer>(
                 ActionRequest::Suffix(suffix) => index_table.get_from_suffix(&suffix.suffix).await,
             };
             for target_entry in &candidates.read_iter().await {
-                let target: String = index_table.decode_string(target_entry.target).await.unwrap();
+                let target: String = index_table
+                    .decode_string(target_entry.target)
+                    .await
+                    .unwrap();
                 if !ignore_dep_references.contains(&target)
                     && is_potentially_valid_target(&target_kind, &target)
                 {
@@ -225,10 +228,7 @@ async fn inner_process_missing_dependency_errors<T: Buildozer>(
                         "Buildozer action: add dependency {:?} to {:?}",
                         target_entry.target, &label
                     );
-                    buildozer
-                        .add_dependency(label, &target)
-                        .await
-                        .unwrap();
+                    buildozer.add_dependency(label, &target).await.unwrap();
                     actions_completed += 1;
 
                     local_previous_seen.insert(target.clone());
