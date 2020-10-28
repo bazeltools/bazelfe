@@ -321,9 +321,7 @@ impl<'a> IndexTable {
             .max()
             .unwrap_or(current_time_since_epoch);
 
-        let key_id = self
-            .maybe_update_id(self.maybe_insert_target_string(target_name).await)
-            .await;
+        let key_id = self.maybe_insert_target_string(target_name).await;
 
         let should_update = {
             let read_guard = self.id_to_ctime.read().await;
@@ -350,6 +348,7 @@ impl<'a> IndexTable {
                 found_classes.extend(transform_file_names_into_class_names(extracted_zip));
             }
 
+            let key_id = self.maybe_update_id(key_id).await;
             for clazz in found_classes.into_iter() {
                 self.insert_with_id(clazz, key_id, popularity).await
             }

@@ -169,6 +169,9 @@ impl IndexTableValue {
                         priority: Priority(priority),
                     },
                 );
+                if write_vec.len() > 10 {
+                    write_vec.truncate(10);
+                }
             }
             None => {
                 let mut write_vec = self.0.write().await;
@@ -185,6 +188,9 @@ impl IndexTableValue {
                         priority: Priority(priority),
                     },
                 );
+                if write_vec.len() > 10 {
+                    write_vec.truncate(10);
+                }
             }
         }
         true

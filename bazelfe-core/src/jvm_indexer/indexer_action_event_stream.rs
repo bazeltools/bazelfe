@@ -47,7 +47,6 @@ impl IndexerActionEventStream {
                     }
                     Some(e) => {
                         let e = e.clone();
-                        let tx = tx.clone();
                         let self_d = self_d.clone();
 
                         tokio::spawn(async move {
@@ -90,6 +89,9 @@ impl IndexerActionEventStream {
                                         }
                                     }
 
+                                    if (label.contains("client_logger_service_java_proto")) {
+                                        println!("Seen {} --> files...{:#?}", label, files);
+                                    }
                                     self_d.index_table.index_jar(label, files).await;
                                 }
 
