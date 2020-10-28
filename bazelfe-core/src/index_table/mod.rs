@@ -228,7 +228,7 @@ impl<'a> IndexTable {
     where
         R: Read,
     {
-        warn!("Starting to parse index");
+        debug!("Starting to parse index");
         use std::io::BufReader;
 
         let mut rdr = BufReader::with_capacity(512 * 1024, rdr);
@@ -249,7 +249,7 @@ impl<'a> IndexTable {
             reverse_hashmap.insert(Arc::clone(&val_v), pos);
         }
 
-        warn!("Complete target string table");
+        debug!("Complete target string table");
         let mut tbl_map = HashMap::default();
         let map_siz = rdr.read_u64::<LittleEndian>().unwrap();
 
@@ -265,14 +265,14 @@ impl<'a> IndexTable {
             tbl_map.insert(k, v);
         }
 
-        warn!("Complete main map");
+        debug!("Complete main map");
         let id_to_ctime_size = rdr.read_u64::<LittleEndian>().unwrap();
         let mut id_to_ctime = Vec::default();
         for _ in 0..id_to_ctime_size {
             let ctimestamp = rdr.read_u64::<LittleEndian>().unwrap();
             id_to_ctime.push(ctimestamp);
         }
-        warn!("Complete id_to_ctime");
+        debug!("Complete id_to_ctime");
 
         let id_to_popularity_size = rdr.read_u64::<LittleEndian>().unwrap();
         let mut id_to_popularity = Vec::default();
@@ -281,7 +281,7 @@ impl<'a> IndexTable {
             id_to_popularity.push(popularity);
         }
 
-        warn!("Complete id_to_popularity");
+        debug!("Complete id_to_popularity");
         let id_to_replacement_id_size = rdr.read_u64::<LittleEndian>().unwrap();
         let mut id_to_replacement_id = HashMap::default();
         for _ in 0..id_to_replacement_id_size {
@@ -289,7 +289,7 @@ impl<'a> IndexTable {
             let v = rdr.read_u64::<LittleEndian>().unwrap();
             id_to_replacement_id.insert(k as usize, v as usize);
         }
-        warn!("Complete id_to_replacement_id");
+        debug!("Complete id_to_replacement_id");
 
         debug!("Finished parsing..");
 
