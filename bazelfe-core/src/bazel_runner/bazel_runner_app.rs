@@ -136,6 +136,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     bazel_runner::register_ctrlc_handler();
 
+    info!("Loading index..");
     let index_table = match &opt.index_input_location {
         Some(p) => {
             if p.exists() {
@@ -147,6 +148,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         None => bazelfe_core::index_table::IndexTable::new(),
     };
+
+    info!("Index loading complete..");
 
     let aes = bazel_runner::action_event_stream::ActionEventStream::new(
         index_table.clone(),

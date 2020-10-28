@@ -90,21 +90,38 @@ where
                                         }
                                     }
                                     hydrated_stream::HydratedInfo::TargetComplete(tce) => {
+                                        let label = tce.label.clone();
                                         let mut files = Vec::default();
+
+                                        let external_match = if label.starts_with("@") {
+                                            let idx = label.find('/').unwrap();
+                                            let repo = &label[1..idx];
+                                            let path_segment = format!("external/{}", repo);
+                                            Some(path_segment)
+                                        } else {
+                                            None
+                                        };
+
                                         for of in tce.output_files.iter() {
                                             if let build_event_stream::file::File::Uri(e) = of {
                                                 if e.ends_with(".jar") && e.starts_with("file://") {
-                                                    let u: PathBuf =
-                                                        e.strip_prefix("file://").unwrap().into();
-                                                    files.push(u);
+                                                    let a = e.strip_prefix("file://").unwrap();
+                                                    let allowed = if let Some(ref external_repo) =
+                                                        external_match
+                                                    {
+                                                        a.contains(external_repo)
+                                                    } else {
+                                                        !a.contains("/external/")
+                                                    };
+                                                    if allowed {
+                                                        let u: PathBuf = a.into();
+                                                        files.push(u);
+                                                    }
                                                 }
                                             }
                                         }
 
-                                        self_d
-                                            .index_table
-                                            .index_jar(tce.label.clone(), files)
-                                            .await;
+                                        self_d.index_table.index_jar(label, files).await;
                                     }
                                     hydrated_stream::HydratedInfo::ActionSuccess(_) => (),
                                     hydrated_stream::HydratedInfo::Progress(progress_info) => {

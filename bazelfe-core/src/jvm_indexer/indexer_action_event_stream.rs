@@ -59,30 +59,38 @@ impl IndexerActionEventStream {
                                     // we don't have configured
                                 }
                                 hydrated_stream::HydratedInfo::TargetComplete(tce) => {
-                                    if let Some(ref target_kind) = tce.target_kind {
-                                        if self_d.allowed_rule_kinds.contains(target_kind) {
-                                            let mut files = Vec::default();
-                                            for of in tce.output_files.iter() {
-                                                if let build_event_stream::file::File::Uri(e) = of {
-                                                    if e.ends_with(".jar")
-                                                        && e.starts_with("file://")
-                                                    {
-                                                        let u: PathBuf = e
-                                                            .strip_prefix("file://")
-                                                            .unwrap()
-                                                            .into();
-                                                        files.push(u);
-                                                    }
+                                    let label = tce.label.clone();
+                                    let mut files = Vec::default();
+
+                                    let external_match = if label.starts_with("@") {
+                                        let idx = label.find('/').unwrap();
+                                        let repo = &label[1..idx];
+                                        let path_segment = format!("external/{}", repo);
+                                        Some(path_segment)
+                                    } else {
+                                        None
+                                    };
+
+                                    for of in tce.output_files.iter() {
+                                        if let build_event_stream::file::File::Uri(e) = of {
+                                            if e.ends_with(".jar") && e.starts_with("file://") {
+                                                let a = e.strip_prefix("file://").unwrap();
+                                                let allowed = if let Some(ref external_repo) =
+                                                    external_match
+                                                {
+                                                    a.contains(external_repo)
+                                                } else {
+                                                    !a.contains("/external/")
+                                                };
+                                                if allowed {
+                                                    let u: PathBuf = a.into();
+                                                    files.push(u);
                                                 }
                                             }
-
-                                            self_d
-                                                .index_table
-                                                .index_jar(tce.label.clone(), files)
-                                                .await;
-                                            tx.send(Some(1)).await.unwrap();
                                         }
                                     }
+
+                                    self_d.index_table.index_jar(label, files).await;
                                 }
 
                                 hydrated_stream::HydratedInfo::Progress(_) => {}

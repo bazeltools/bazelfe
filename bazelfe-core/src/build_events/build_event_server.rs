@@ -360,7 +360,6 @@ where
     ) -> Result<Response<Self::PublishBuildToolEventStreamStream>, Status> {
         let mut stream = request.into_inner();
 
-        let mut num_events = 0;
         let sender_ref = {
             let e = Arc::clone(&self.write_channel);
             let m = e.lock().await;
@@ -372,7 +371,6 @@ where
         let output = async_stream::try_stream! {
             while let Some(inbound_evt) = stream.next().await {
                 let mut inbound_evt = inbound_evt?;
-                *(&mut num_events) += 1;
 
                 match inbound_evt.ordered_build_event.as_ref() {
                     Some(build_event) => {
@@ -407,7 +405,6 @@ where
             if let Some(tx) = second_writer {
                 tx.send(BuildEventAction::BuildCompleted).await.map_err(|_| transform_queue_error_to_status())?;
             }
-            println!("Seen {} events", num_events);
 
             info!("Finished stream...");
         };
@@ -488,7 +485,8 @@ mod tests {
     struct ServerStateHandler {
         _temp_dir_for_uds: tempfile::TempDir,
         completion_pinky: Pinky<()>,
-        pub read_channel: Option<async_channel::Receiver<BuildEventAction<bazel_event::BazelBuildEvent>>>,
+        pub read_channel:
+            Option<async_channel::Receiver<BuildEventAction<bazel_event::BazelBuildEvent>>>,
     }
     impl Drop for ServerStateHandler {
         fn drop(&mut self) {

@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let mut file = std::fs::File::open(&f).unwrap();
 
         let index_table = bazelfe_core::index_table::IndexTable::read(&mut file);
-        println!("{:#?}", index_table);
+        println!("{:#?}", index_table.to_debug_table().await);
     }
     Ok(())
 }
