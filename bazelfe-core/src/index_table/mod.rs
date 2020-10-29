@@ -353,7 +353,10 @@ impl<'a> IndexTable {
             }
 
             let key_id = self.maybe_update_id(key_id).await;
-            for clazz in found_classes.into_iter() {
+            for clazz in found_classes
+                .into_iter()
+                .flat_map(|e| crate::bazel_runner::sanitization_tools::split_clazz_to_lst(&e))
+            {
                 self.insert_with_id(clazz, key_id, popularity).await
             }
         }

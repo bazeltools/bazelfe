@@ -51,99 +51,94 @@ where
                         }
                         Some(e) => {
                             let e = e.clone();
-                            let tx = tx.clone();
-                            let self_d: ActionEventStream<T> = self_d.clone();
-                            tokio::spawn(async move {
-                                match e {
-                                    hydrated_stream::HydratedInfo::ActionFailed(
-                                        action_failed_error_info,
-                                    ) => {
-                                        let arc = Arc::clone(&self_d.previous_global_seen);
+                            match e {
+                                hydrated_stream::HydratedInfo::ActionFailed(
+                                    action_failed_error_info,
+                                ) => {
+                                    let arc = Arc::clone(&self_d.previous_global_seen);
 
-                                        arc.entry(action_failed_error_info.label.clone())
-                                            .or_insert(DashSet::new());
-                                        let prev_data =
-                                            arc.get(&action_failed_error_info.label).unwrap();
-
-                                        let actions_completed = super::process_missing_dependency_errors::process_missing_dependency_errors(
+                                    arc.entry(action_failed_error_info.label.clone())
+                                        .or_insert(DashSet::new());
+                                    let prev_data =
+                                        arc.get(&action_failed_error_info.label).unwrap();
+                                    let actions_completed = super::process_missing_dependency_errors::process_missing_dependency_errors(
                                             &prev_data,
-                                            self_d.buildozer,
+                                            self_d.buildozer.clone(),
                                             &action_failed_error_info,
                                             &self_d.index_table,
                                         ).await;
 
-                                        if actions_completed > 0 {
-                                            tx.send(Some(actions_completed)).await.unwrap();
-                                        }
+                                    if actions_completed > 0 {
+                                        tx.send(Some(actions_completed)).await.unwrap();
                                     }
+                                }
 
-                                    hydrated_stream::HydratedInfo::BazelAbort(
-                                        bazel_abort_error_info,
-                                    ) => {
-                                        let actions_completed = super::process_build_abort_errors::process_build_abort_errors(
-                                            self_d.buildozer,
+                                hydrated_stream::HydratedInfo::BazelAbort(
+                                    bazel_abort_error_info,
+                                ) => {
+                                    let actions_completed = super::process_build_abort_errors::process_build_abort_errors(
+                                            self_d.buildozer.clone(),
                                             &bazel_abort_error_info
                                         ).await;
 
-                                        if actions_completed > 0 {
-                                            tx.send(Some(actions_completed)).await.unwrap();
-                                        }
+                                    if actions_completed > 0 {
+                                        tx.send(Some(actions_completed)).await.unwrap();
                                     }
-                                    hydrated_stream::HydratedInfo::TargetComplete(tce) => {
-                                        let label = tce.label.clone();
-                                        let mut files = Vec::default();
+                                }
+                                hydrated_stream::HydratedInfo::TargetComplete(tce) => {
+                                    let label = tce.label.clone();
+                                    let mut files = Vec::default();
 
-                                        let external_match = if label.starts_with("@") {
-                                            let idx = label.find('/').unwrap();
-                                            let repo = &label[1..idx];
-                                            let path_segment = format!("external/{}", repo);
-                                            Some(path_segment)
-                                        } else {
-                                            None
-                                        };
+                                    let external_match = if label.starts_with("@") {
+                                        let idx = label.find('/').unwrap();
+                                        let repo = &label[1..idx];
+                                        let path_segment = format!("external/{}", repo);
+                                        Some(path_segment)
+                                    } else {
+                                        None
+                                    };
 
-                                        for of in tce.output_files.iter() {
-                                            if let build_event_stream::file::File::Uri(e) = of {
-                                                if e.ends_with(".jar") && e.starts_with("file://") {
-                                                    let a = e.strip_prefix("file://").unwrap();
-                                                    let allowed = if let Some(ref external_repo) =
-                                                        external_match
-                                                    {
-                                                        a.contains(external_repo)
-                                                    } else {
-                                                        !a.contains("/external/")
-                                                    };
-                                                    if allowed {
-                                                        let u: PathBuf = a.into();
-                                                        files.push(u);
-                                                    }
+                                    for of in tce.output_files.iter() {
+                                        if let build_event_stream::file::File::Uri(e) = of {
+                                            if e.ends_with(".jar") && e.starts_with("file://") {
+                                                let a = e.strip_prefix("file://").unwrap();
+                                                let allowed = if let Some(ref external_repo) =
+                                                    external_match
+                                                {
+                                                    a.contains(external_repo)
+                                                } else {
+                                                    !a.contains("/external/")
+                                                };
+                                                if allowed {
+                                                    let u: PathBuf = a.into();
+                                                    files.push(u);
                                                 }
                                             }
                                         }
-
-                                        self_d
-                                            .index_table
-                                            .index_jar(&tce.target_kind, label, files)
-                                            .await;
                                     }
-                                    hydrated_stream::HydratedInfo::ActionSuccess(_) => (),
-                                    hydrated_stream::HydratedInfo::Progress(progress_info) => {
-                                        let tbl = Arc::clone(&self_d.previous_global_seen);
 
-                                        let actions_completed =
-                                            super::process_build_abort_errors::process_progress(
-                                                self_d.buildozer,
-                                                &progress_info,
-                                                tbl,
-                                            )
-                                            .await;
+                                    self_d
+                                        .index_table
+                                        .index_jar(&tce.target_kind, label, files)
+                                        .await;
+                                }
+                                hydrated_stream::HydratedInfo::ActionSuccess(_) => (),
+                                hydrated_stream::HydratedInfo::Progress(progress_info) => {
+                                    let tbl = Arc::clone(&self_d.previous_global_seen);
 
-                                        if actions_completed > 0 {
-                                            tx.send(Some(actions_completed)).await.unwrap();
-                                        }
+                                    let actions_completed =
+                                        super::process_build_abort_errors::process_progress(
+                                            self_d.buildozer.clone(),
+                                            &progress_info,
+                                            tbl,
+                                        )
+                                        .await;
+
+                                    if actions_completed > 0 {
+                                        tx.send(Some(actions_completed)).await.unwrap();
                                     }
                                 }
-                            });
+                            }
                         }
                     }
                 }

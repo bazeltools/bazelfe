@@ -36,7 +36,11 @@ pub fn extract_suffix_errors(target_kind: &Option<String>, input: &str) -> Vec<C
             "scala_test" => scala::extract_suffix_errors(input),
             "java_library" => java::extract_suffix_errors(input),
             "java_test" => java::extract_suffix_errors(input),
-            _ => Vec::default(),
+            _ => {
+                let mut v = scala::extract_suffix_errors(input);
+                v.extend(java::extract_suffix_errors(input).into_iter());
+                v
+            }
         },
     }
 }

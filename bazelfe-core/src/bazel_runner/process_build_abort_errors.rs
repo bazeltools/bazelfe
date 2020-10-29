@@ -160,7 +160,8 @@ fn extract_added_cycle_in_dependency_graph(
                 vec.push(captures.get(1).unwrap().as_str().to_string());
 
                 for wind in vec.windows(2) {
-                    let target_to_operate_on = wind[0].to_string();
+                    let target_to_operate_on =
+                        super::sanitization_tools::sanitize_label(wind[0].to_string());
                     let dependency_to_remove = wind[1].to_string();
 
                     if let Some(ref hashset) = previous_global_seen.get(&target_to_operate_on) {

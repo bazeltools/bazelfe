@@ -201,6 +201,7 @@ async fn inner_process_missing_dependency_errors<T: Buildozer>(
 ) -> (u32, HashSet<String>) {
     let mut local_previous_seen: HashSet<String> = HashSet::new();
     let mut actions_completed: u32 = 0;
+    let label = super::sanitization_tools::sanitize_label(String::from(label));
 
     for req in all_requests.into_iter() {
         'class_entry_loop: for req in req.into_iter() {
@@ -229,7 +230,7 @@ async fn inner_process_missing_dependency_errors<T: Buildozer>(
                         "Buildozer action: add dependency {:?} to {:?}",
                         target, &label
                     );
-                    buildozer.add_dependency(label, &target).await.unwrap();
+                    buildozer.add_dependency(&label, &target).await.unwrap();
                     actions_completed += 1;
 
                     local_previous_seen.insert(target.clone());

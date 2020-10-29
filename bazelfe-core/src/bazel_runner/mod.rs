@@ -167,4 +167,4 @@ pub async fn execute_bazel_output_control<S: Into<String> + Clone>(
 pub mod action_event_stream;
 pub mod process_build_abort_errors;
 pub mod process_missing_dependency_errors;
-mod sanitization_tools;
+pub mod sanitization_tools;

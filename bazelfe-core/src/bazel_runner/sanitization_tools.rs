@@ -63,7 +63,7 @@ pub(in crate::bazel_runner) fn prepare_class_import_requests(
     class_import_requests
 }
 
-fn split_clazz_to_lst(class_name: &str) -> Vec<String> {
+pub fn split_clazz_to_lst(class_name: &str) -> Vec<String> {
     let mut long_running_string = String::new();
     let mut result = Vec::new();
     let mut loop_cnt = 0;
