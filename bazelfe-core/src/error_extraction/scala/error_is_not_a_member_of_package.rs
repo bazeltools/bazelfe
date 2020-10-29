@@ -102,6 +102,13 @@ mod tests {
     use super::*;
     #[test]
     fn test_not_a_member_of_package_error() {
+        let mut file_cache = super::super::FileParseCache::init_from_par(
+            String::from("src/main/java/com/example/Example.java"),
+            crate::source_dependencies::ParsedFile {
+                package_name: None,
+                imports: vec![],
+            },
+        );
         let sample_output =
             "src/main/scala/com/example/Example.scala:2: error: object foo is not a member of package com.example
 import com.example.foo.bar.Baz
@@ -113,7 +120,7 @@ one warning found
 one error found";
 
         assert_eq!(
-            extract(sample_output),
+            extract(sample_output, &mut file_cache),
             Some(vec![build_class_import_request(
                 String::from("src/main/scala/com/example/Example.scala"),
                 "com.example.foo".to_string()

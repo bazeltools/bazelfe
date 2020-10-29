@@ -4,6 +4,7 @@ use crate::source_dependencies::ParsedFile;
 
 mod error_cannot_access;
 mod error_cannot_find_symbol;
+mod error_does_not_represent_a_declared_type;
 mod error_indirect_dependency;
 mod error_package_does_not_exist;
 
@@ -73,6 +74,7 @@ pub fn extract_errors(input: &str) -> Vec<super::ClassImportRequest> {
     let combined_vec: Vec<super::ClassImportRequest> = vec![
         error_package_does_not_exist::extract(input, &mut file_parse_cache),
         error_indirect_dependency::extract(input),
+        error_does_not_represent_a_declared_type::extract(input),
         error_cannot_find_symbol::extract(input, &mut file_parse_cache),
     ]
     .into_iter()
