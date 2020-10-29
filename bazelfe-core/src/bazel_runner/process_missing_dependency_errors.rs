@@ -226,7 +226,7 @@ async fn inner_process_missing_dependency_errors<T: Buildozer>(
                     // then add it ot the local seen dependencies
                     info!(
                         "Buildozer action: add dependency {:?} to {:?}",
-                        target_entry.target, &label
+                        target, &label
                     );
                     buildozer.add_dependency(label, &target).await.unwrap();
                     actions_completed += 1;

@@ -89,9 +89,6 @@ impl IndexerActionEventStream {
                                         }
                                     }
 
-                                    if (label.contains("client_logger_service_java_proto")) {
-                                        println!("Seen {} --> files...{:#?}", label, files);
-                                    }
                                     self_d.index_table.index_jar(label, files).await;
                                 }
 

@@ -167,6 +167,7 @@ impl<'a> IndexTable {
     where
         W: Write,
     {
+        let mut file = std::io::BufWriter::with_capacity(512 * 1024, file);
         let _ = {
             let id_vec = self.id_to_target_vec.read().await;
             file.write_u64::<LittleEndian>(id_vec.len() as u64).unwrap();
@@ -222,6 +223,8 @@ impl<'a> IndexTable {
             file.write_u64::<LittleEndian>(*k as u64).unwrap();
             file.write_u64::<LittleEndian>(*v as u64).unwrap();
         }
+
+        file.flush().unwrap();
     }
 
     pub fn read<R>(rdr: &mut R) -> IndexTable
