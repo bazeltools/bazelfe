@@ -44,7 +44,6 @@ pub(in crate::error_extraction::scala) fn extract(
 
                 let class_name = captures.get(3).unwrap().as_str();
                 let package = captures.get(4).unwrap().as_str();
-
                 let mut class_import_request = None;
                 if let Some(file_data) = file_parse_cache.load_file(src_file_name) {
                     for e in file_data.imports.iter() {

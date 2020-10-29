@@ -51,7 +51,7 @@ fn is_potentially_valid_target(target_kind: &Option<String>, label: &str) -> boo
     match prepared_path {
         Some(p) => {
             let path = Path::new(p);
-            path.join("BUILD").exists()
+            path.join("BUILD").exists() || path.join("BUILD.bazel").exists()
         }
         None => true,
     }
@@ -213,6 +213,7 @@ async fn inner_process_missing_dependency_errors<T: Buildozer>(
                     .decode_string(target_entry.target)
                     .await
                     .unwrap();
+
                 if !ignore_dep_references.contains(&target)
                     && is_potentially_valid_target(&target_kind, &target)
                 {
