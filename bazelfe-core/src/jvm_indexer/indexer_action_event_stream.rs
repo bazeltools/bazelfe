@@ -1,14 +1,11 @@
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 
 use crate::build_events::hydrated_stream;
 
 use super::super::index_table;
 use bazelfe_protos::*;
-use dashmap::DashMap;
 use lazy_static::lazy_static;
 use regex::Regex;
-use std::collections::HashSet;
-use tokio::sync::RwLock;
 
 pub trait ExtractClassData<U> {
     fn paths(&self) -> Vec<PathBuf>;
@@ -20,9 +17,9 @@ pub struct IndexerActionEventStream {
 }
 
 impl IndexerActionEventStream {
-    pub fn new() -> Self {
+    pub fn new(index_table: index_table::IndexTable) -> Self {
         Self {
-            index_table: index_table::IndexTable::default(),
+            index_table: index_table,
         }
     }
 

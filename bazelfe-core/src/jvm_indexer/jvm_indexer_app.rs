@@ -19,7 +19,6 @@ use bazelfe_core::build_events::build_event_server::bazel_event;
 use bazelfe_core::build_events::build_event_server::BuildEventAction;
 use bazelfe_core::build_events::hydrated_stream::HydratedInfo;
 use bazelfe_core::jvm_indexer::bazel_query::BazelQuery;
-use dashmap::DashMap;
 use google::devtools::build::v1::publish_build_event_server::PublishBuildEventServer;
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
@@ -57,6 +56,10 @@ struct Opt {
     /// will use the bazel deps entry rather than the raw jar.
     #[clap(long)]
     bazel_deps_root: Option<String>,
+
+    /// Refresh bazel deps only
+    #[clap(long)]
+    refresh_bazel_deps_only: bool,
 }
 
 fn build_rule_queries(allowed_rule_kinds: &Vec<String>, target_roots: &Vec<String>) -> Vec<String> {
@@ -140,6 +143,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut rng = rand::thread_rng();
     let mut builder = pretty_env_logger::formatted_timed_builder();
     builder.format_timestamp_nanos();
+    let mut running_refresh_mode = false;
     builder.target(pretty_env_logger::env_logger::Target::Stderr);
     if let Ok(s) = ::std::env::var("RUST_LOG") {
         builder.parse_filters(&s);
@@ -234,61 +238,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    info!("Executing initial query to find all external repos in this bazel repository");
-
-    let res = bazel_query
-        .execute(&vec![String::from("query"), String::from("//external:*")])
-        .await;
-
-    let mut target_roots = vec![String::from("//...")];
-
-    let mut blacklist_repos = vec![
-        String::from("bazel-"),
-        String::from("WORKSPACE"),
-        String::from("bazel_tools"),
-        String::from("remote_java_tools_linux"),
-    ];
-    if let Some(r) = parse_current_repo_name() {
-        info!("Current repo name identified as {}", r);
-        blacklist_repos.push(r);
-    }
-    blacklist_repos.extend(opt.blacklist_remote_roots.into_iter());
-
-    for line in res.stdout.lines().into_iter() {
-        if let Some(ln) = line.strip_prefix("//external:") {
-            let mut ok = true;
-            for root in &blacklist_repos {
-                if ln.contains(root) {
-                    ok = false;
-                }
-            }
-
-            if ok {
-                target_roots.push(format!("@{}//...", ln));
-            }
-        }
-    }
-
-    if res.exit_code != 0 {
-        info!("The bazel query returned something other than exit code zero, this unfortunately can often happen, so we will continue with the data received. We have identified {} target roots", target_roots.len());
-    } else {
-        info!("We have identified {} target roots", target_roots.len());
-    }
-
-    let all_queries = build_rule_queries(&allowed_rule_kinds, &target_roots);
-
-    let query_rule_attr_batch_size: usize = 2000;
-    info!("Extracting targets with an allowed rule kind, gives rise to {} total queries, we will union them to bazel in batches of size: {}", all_queries.len(), query_rule_attr_batch_size);
-
     let union_with_spaces_bytes = " union ".as_bytes();
 
-    let mut all_targets_to_use: HashMap<String, Vec<String>> = HashMap::default();
-    let mut processed_count = 0;
-    for chunk in all_queries.chunks(query_rule_attr_batch_size) {
+    let all_targets_to_use = if opt.refresh_bazel_deps_only {
+        running_refresh_mode = true;
+        let mut all_targets_to_use: HashMap<String, Vec<String>> = HashMap::default();
         let merged = {
             let mut buffer = Vec::default();
 
-            for x in chunk {
+            for x in bazel_deps_replacement_map.keys() {
                 if buffer.is_empty() {
                     buffer.write_all(&x.as_bytes()).unwrap();
                 } else {
@@ -317,15 +275,101 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .or_insert(Vec::default());
                 entry.push(entries[2].to_string());
             }
-            // all_targets_to_use.push(ln.to_string());
         }
-        processed_count += chunk.len();
-        info!(
-            "After {} queries, found {} matching targets",
-            processed_count,
-            all_targets_to_use.values().fold(0, |acc, e| acc + e.len())
-        );
-    }
+        all_targets_to_use
+    } else {
+        info!("Executing initial query to find all external repos in this bazel repository");
+
+        let res = bazel_query
+            .execute(&vec![String::from("query"), String::from("//external:*")])
+            .await;
+
+        let mut target_roots = vec![String::from("//...")];
+
+        let mut blacklist_repos = vec![
+            String::from("bazel-"),
+            String::from("WORKSPACE"),
+            String::from("bazel_tools"),
+            String::from("remote_java_tools_linux"),
+        ];
+        if let Some(r) = parse_current_repo_name() {
+            info!("Current repo name identified as {}", r);
+            blacklist_repos.push(r);
+        }
+        blacklist_repos.extend(opt.blacklist_remote_roots.into_iter());
+
+        for line in res.stdout.lines().into_iter() {
+            if let Some(ln) = line.strip_prefix("//external:") {
+                let mut ok = true;
+                for root in &blacklist_repos {
+                    if ln.contains(root) {
+                        ok = false;
+                    }
+                }
+
+                if ok {
+                    target_roots.push(format!("@{}//...", ln));
+                }
+            }
+        }
+
+        if res.exit_code != 0 {
+            info!("The bazel query returned something other than exit code zero, this unfortunately can often happen, so we will continue with the data received. We have identified {} target roots", target_roots.len());
+        } else {
+            info!("We have identified {} target roots", target_roots.len());
+        }
+
+        let all_queries = build_rule_queries(&allowed_rule_kinds, &target_roots);
+
+        let query_rule_attr_batch_size: usize = 2000;
+        info!("Extracting targets with an allowed rule kind, gives rise to {} total queries, we will union them to bazel in batches of size: {}", all_queries.len(), query_rule_attr_batch_size);
+
+        let mut all_targets_to_use: HashMap<String, Vec<String>> = HashMap::default();
+        let mut processed_count = 0;
+        for chunk in all_queries.chunks(query_rule_attr_batch_size) {
+            let merged = {
+                let mut buffer = Vec::default();
+
+                for x in chunk {
+                    if buffer.is_empty() {
+                        buffer.write_all(&x.as_bytes()).unwrap();
+                    } else {
+                        buffer.write_all(&union_with_spaces_bytes).unwrap();
+                        buffer.write_all(&x.as_bytes()).unwrap();
+                    }
+                }
+                String::from_utf8(buffer).unwrap()
+            };
+            let res = bazel_query
+                .execute(&vec![
+                    String::from("query"),
+                    String::from("--keep_going"),
+                    String::from("--noimplicit_deps"),
+                    String::from("--output"),
+                    String::from("label_kind"),
+                    merged,
+                ])
+                .await;
+
+            for ln in res.stdout.lines() {
+                let entries: Vec<&str> = ln.split_whitespace().collect();
+                if entries.len() == 3 {
+                    let entry = all_targets_to_use
+                        .entry(entries[0].to_string())
+                        .or_insert(Vec::default());
+                    entry.push(entries[2].to_string());
+                }
+                // all_targets_to_use.push(ln.to_string());
+            }
+            processed_count += chunk.len();
+            info!(
+                "After {} queries, found {} matching targets",
+                processed_count,
+                all_targets_to_use.values().fold(0, |acc, e| acc + e.len())
+            );
+        }
+        all_targets_to_use
+    };
 
     info!("Found targets");
     for (k, v) in all_targets_to_use.iter() {
@@ -334,8 +378,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         info!("{}{}{}", k, space_section, v.len());
     }
 
-    let aes =
-        bazelfe_core::jvm_indexer::indexer_action_event_stream::IndexerActionEventStream::new();
+    let index_table = if running_refresh_mode && opt.index_output_location.exists() {
+        let mut src_f = std::fs::File::open(&opt.index_output_location).unwrap();
+        bazelfe_core::index_table::IndexTable::read(&mut src_f)
+    } else {
+        bazelfe_core::index_table::IndexTable::default()
+    };
+
+    let aes = bazelfe_core::jvm_indexer::indexer_action_event_stream::IndexerActionEventStream::new(
+        index_table.clone(),
+    );
 
     let ret = bazelfe_core::jvm_indexer::popularity_parser::build_popularity_map().await;
 
@@ -446,7 +498,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut file = std::fs::File::create(&opt.index_output_location).unwrap();
 
-    aes.index_table.write(&mut file).await;
+    index_table.write(&mut file).await;
 
     Ok(())
 }
