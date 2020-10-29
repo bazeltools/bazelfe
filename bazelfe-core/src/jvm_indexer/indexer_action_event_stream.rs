@@ -89,7 +89,10 @@ impl IndexerActionEventStream {
                                         }
                                     }
 
-                                    self_d.index_table.index_jar(label, files).await;
+                                    self_d
+                                        .index_table
+                                        .index_jar(&tce.target_kind, label, files)
+                                        .await;
                                 }
 
                                 hydrated_stream::HydratedInfo::Progress(_) => {}

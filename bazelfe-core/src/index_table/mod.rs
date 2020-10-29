@@ -307,7 +307,42 @@ impl<'a> IndexTable {
         }
     }
 
-    pub async fn index_jar(&self, target_name: String, paths: Vec<PathBuf>) -> () {
+    pub async fn index_jar(
+        &self,
+        target_kind: &Option<String>,
+        target_name: String,
+        paths: Vec<PathBuf>,
+    ) -> () {
+        let paths = match target_kind {
+            Some(kind) => {
+                // These are really sketchy transforms
+                // but with aspects they can expose the full transitive set of dependencies
+                // and we wind up with no way to tell what the output here should be.
+                if kind == "java_proto_library" {
+                    paths
+                        .into_iter()
+                        .filter_map(|e| {
+                            let mut parent = e.parent().unwrap().to_path_buf();
+                            let name = e.file_name().unwrap().to_str().unwrap();
+                            if name.ends_with("-src.jar") {
+                                // foo_barproto-speed-src.jar
+                                // libfoo_barproto-speed.jar
+                                let without_suffix = name.strip_suffix("-src.jar").unwrap();
+                                let nme = format!("lib{}.jar", without_suffix);
+                                parent.push(nme);
+                                Some(parent)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect()
+                } else {
+                    paths
+                }
+            }
+
+            None => paths,
+        };
         let current_time_since_epoch = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
