@@ -29,7 +29,7 @@ impl ScalaClassImportRequest {
     }
 }
 
-fn load_file(path_str: &String) -> Option<ParsedFile> {
+fn do_load_file(path_str: &str) -> Option<ParsedFile> {
     let path = Path::new(path_str);
 
     if path.exists() {
@@ -42,10 +42,41 @@ fn load_file(path_str: &String) -> Option<ParsedFile> {
         None
     }
 }
+
+pub(in crate::error_extraction) struct FileParseCache {
+    file_parse_cache: HashMap<String, ParsedFile>,
+}
+impl FileParseCache {
+    pub fn new() -> Self {
+        Self {
+            file_parse_cache: HashMap::new(),
+        }
+    }
+    // used in tests
+    #[allow(dead_code)]
+    pub fn init_from_par(key: String, v: ParsedFile) -> Self {
+        let mut map = HashMap::new();
+        map.insert(key, v);
+        Self {
+            file_parse_cache: map,
+        }
+    }
+    pub fn load_file(&mut self, file_path: &str) -> Option<&ParsedFile> {
+        if !self.file_parse_cache.contains_key(file_path) {
+            if let Some(parsed_file) = do_load_file(file_path) {
+                self.file_parse_cache
+                    .insert(file_path.to_string(), parsed_file);
+            }
+        }
+        self.file_parse_cache.get(file_path)
+    }
+}
+
 pub fn extract_errors(input: &str) -> Vec<super::ClassImportRequest> {
-    let mut file_parse_cache: HashMap<String, ParsedFile> = HashMap::new();
+    let mut file_parse_cache: FileParseCache = FileParseCache::new();
+
     let combined_vec: Vec<super::ClassImportRequest> = vec![
-        error_is_not_a_member_of_package::extract(input),
+        error_is_not_a_member_of_package::extract(input, &mut file_parse_cache),
         error_object_not_found::extract(input),
         error_symbol_is_missing_from_classpath::extract(input),
         error_symbol_type_missing_from_classpath::extract(input),
@@ -55,16 +86,7 @@ pub fn extract_errors(input: &str) -> Vec<super::ClassImportRequest> {
     .into_iter()
     .flat_map(|e| e.into_iter().flat_map(|inner| inner.into_iter()))
     .flat_map(|e| {
-        let cached_file_data = match file_parse_cache.get(&e.src_file_name) {
-            Some(content) => Some(content),
-            None => match load_file(&e.src_file_name) {
-                None => None,
-                Some(f) => {
-                    file_parse_cache.insert(e.src_file_name.clone(), f);
-                    file_parse_cache.get(&e.src_file_name)
-                }
-            },
-        };
+        let cached_file_data = file_parse_cache.load_file(&e.src_file_name);
 
         match cached_file_data {
             None => vec![e],

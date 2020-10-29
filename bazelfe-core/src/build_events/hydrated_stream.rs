@@ -58,11 +58,10 @@ pub enum HydratedInfo {
 }
 
 async fn recursive_lookup(
-    lut_arc: &Arc<RwLock<HashMap<String, build_event_stream::NamedSetOfFiles>>>,
+    lut: &HashMap<String, build_event_stream::NamedSetOfFiles>,
     results: &mut Vec<build_event_stream::file::File>,
     mut ids: Vec<String>,
 ) -> bool {
-    let lut = lut_arc.read().await;
     while !ids.is_empty() {
         if let Some(head) = ids.pop() {
             if let Some(r) = lut.get(&head) {
@@ -83,7 +82,7 @@ async fn recursive_lookup(
 async fn tce_event(
     tce: bazel_event::TargetCompletedEvt,
     rule_kind_lookup: &HashMap<String, String>,
-    named_set_of_files_lookup: &Arc<RwLock<HashMap<String, build_event_stream::NamedSetOfFiles>>>,
+    named_set_of_files_lookup: &HashMap<String, build_event_stream::NamedSetOfFiles>,
     to_revisit: &mut Vec<bazel_event::TargetCompletedEvt>,
 ) -> Option<TargetCompleteInfo> {
     let mut output_files = Vec::default();
@@ -127,65 +126,34 @@ impl HydratedInfo {
     ) -> async_channel::Receiver<Option<HydratedInfo>> {
         let (tx, next_rx) = async_channel::unbounded();
 
-        let named_set_of_files_lookup = Arc::new(RwLock::new(HashMap::new()));
-        let rule_kind_lookup = Arc::new(RwLock::new(HashMap::new()));
+        let mut named_set_of_files_lookup = HashMap::new();
+        let mut rule_kind_lookup = HashMap::new();
+        let mut buffered_tce: Vec<bazel_event::TargetCompletedEvt> = Vec::default();
 
-        for _ in 0..10 {
-            let rx = rx.clone();
-            let tx = tx.clone();
-            let named_set_of_files_lookup = Arc::clone(&named_set_of_files_lookup);
-            let rule_kind_lookup = Arc::clone(&rule_kind_lookup);
-
-            tokio::spawn(async move {
-                let mut buffered_tce: Vec<bazel_event::TargetCompletedEvt> = Vec::default();
-
-                while let Ok(action) = rx.recv().await {
-                    match action {
-                        BuildEventAction::BuildCompleted => {
-                            let mut rule_kind_lookup = rule_kind_lookup.write().await;
-                            rule_kind_lookup.clear();
-                            tx.send(None).await.unwrap();
+        tokio::spawn(async move {
+            while let Ok(action) = rx.recv().await {
+                match action {
+                    BuildEventAction::BuildCompleted => {
+                        rule_kind_lookup.clear();
+                        tx.send(None).await.unwrap();
+                    }
+                    BuildEventAction::LifecycleEvent(_) => (),
+                    BuildEventAction::BuildEvent(msg) => match msg.event {
+                        bazel_event::Evt::BazelEvent(_) => {}
+                        bazel_event::Evt::TargetConfigured(tgt_cfg) => {
+                            rule_kind_lookup.insert(tgt_cfg.label, tgt_cfg.rule_kind);
                         }
-                        BuildEventAction::LifecycleEvent(_) => (),
-                        BuildEventAction::BuildEvent(msg) => match msg.event {
-                            bazel_event::Evt::BazelEvent(_) => {}
-                            bazel_event::Evt::TargetConfigured(tgt_cfg) => {
-                                let mut guard = rule_kind_lookup.write().await;
-                                guard.insert(tgt_cfg.label, tgt_cfg.rule_kind);
-                            }
 
-                            bazel_event::Evt::NamedSetOfFiles {
-                                id,
-                                named_set_of_files,
-                            } => {
-                                let _ = {
-                                    let mut g = named_set_of_files_lookup.write().await;
-                                    g.insert(id, named_set_of_files)
-                                };
+                        bazel_event::Evt::NamedSetOfFiles {
+                            id,
+                            named_set_of_files,
+                        } => {
+                            let _ = { named_set_of_files_lookup.insert(id, named_set_of_files) };
 
-                                let tmp_v: Vec<bazel_event::TargetCompletedEvt> =
-                                    buffered_tce.drain(..).collect();
-                                let rule_kind_lookup = rule_kind_lookup.read().await;
+                            let tmp_v: Vec<bazel_event::TargetCompletedEvt> =
+                                buffered_tce.drain(..).collect();
 
-                                for tce in tmp_v.into_iter() {
-                                    if let Some(target_complete_info) = tce_event(
-                                        tce,
-                                        &rule_kind_lookup,
-                                        &named_set_of_files_lookup,
-                                        &mut buffered_tce,
-                                    )
-                                    .await
-                                    {
-                                        tx.send(Some(HydratedInfo::TargetComplete(
-                                            target_complete_info,
-                                        )))
-                                        .await
-                                        .unwrap();
-                                    }
-                                }
-                            }
-                            bazel_event::Evt::TargetCompleted(tce) => {
-                                let rule_kind_lookup = rule_kind_lookup.read().await;
+                            for tce in tmp_v.into_iter() {
                                 if let Some(target_complete_info) = tce_event(
                                     tce,
                                     &rule_kind_lookup,
@@ -201,74 +169,84 @@ impl HydratedInfo {
                                     .unwrap();
                                 }
                             }
-
-                            bazel_event::Evt::ActionCompleted(ace) => {
-                                let rule_kind_lookup = rule_kind_lookup.read().await;
-                                if !ace.success {
-                                    let err_info = ActionFailedErrorInfo {
-                                        output_files: ace
-                                            .stdout
-                                            .into_iter()
-                                            .chain(ace.stderr.into_iter())
-                                            .collect(),
-                                        target_kind: rule_kind_lookup
-                                            .get(&ace.label)
-                                            .map(|e| e.clone()),
-                                        label: ace.label,
-                                    };
-                                    tx.send(Some(HydratedInfo::ActionFailed(err_info)))
-                                        .await
-                                        .unwrap();
-                                } else {
-                                    let act_info = ActionSuccessInfo {
-                                        stdout: ace.stdout,
-                                        stderr: ace.stderr,
-
-                                        target_kind: rule_kind_lookup
-                                            .get(&ace.label)
-                                            .map(|e| e.clone()),
-                                        label: ace.label,
-                                    };
-                                    tx.send(Some(HydratedInfo::ActionSuccess(act_info)))
-                                        .await
-                                        .unwrap();
-                                }
+                        }
+                        bazel_event::Evt::TargetCompleted(tce) => {
+                            if let Some(target_complete_info) = tce_event(
+                                tce,
+                                &rule_kind_lookup,
+                                &named_set_of_files_lookup,
+                                &mut buffered_tce,
+                            )
+                            .await
+                            {
+                                tx.send(Some(HydratedInfo::TargetComplete(target_complete_info)))
+                                    .await
+                                    .unwrap();
                             }
+                        }
 
-                            bazel_event::Evt::TestFailure(tfe) => {
-                                let rule_kind_lookup = rule_kind_lookup.read().await;
+                        bazel_event::Evt::ActionCompleted(ace) => {
+                            if !ace.success {
                                 let err_info = ActionFailedErrorInfo {
-                                    output_files: tfe.failed_files,
+                                    output_files: ace
+                                        .stdout
+                                        .into_iter()
+                                        .chain(ace.stderr.into_iter())
+                                        .collect(),
                                     target_kind: rule_kind_lookup
-                                        .get(&tfe.label)
+                                        .get(&ace.label)
                                         .map(|e| e.clone()),
-                                    label: tfe.label,
+                                    label: ace.label,
                                 };
                                 tx.send(Some(HydratedInfo::ActionFailed(err_info)))
                                     .await
                                     .unwrap();
-                            }
-                            bazel_event::Evt::Progress(progress) => {
-                                tx.send(Some(HydratedInfo::Progress(progress)))
-                                    .await
-                                    .unwrap();
-                            }
-                            bazel_event::Evt::Aborted(tfe) => {
-                                let err_info = BazelAbortErrorInfo {
-                                    reason: tfe.reason,
-                                    description: tfe.description,
-                                    label: tfe.label,
+                            } else {
+                                let act_info = ActionSuccessInfo {
+                                    stdout: ace.stdout,
+                                    stderr: ace.stderr,
+
+                                    target_kind: rule_kind_lookup
+                                        .get(&ace.label)
+                                        .map(|e| e.clone()),
+                                    label: ace.label,
                                 };
-                                tx.send(Some(HydratedInfo::BazelAbort(err_info)))
+                                tx.send(Some(HydratedInfo::ActionSuccess(act_info)))
                                     .await
                                     .unwrap();
                             }
-                            bazel_event::Evt::UnknownEvent(_) => (),
-                        },
-                    }
+                        }
+
+                        bazel_event::Evt::TestFailure(tfe) => {
+                            let err_info = ActionFailedErrorInfo {
+                                output_files: tfe.failed_files,
+                                target_kind: rule_kind_lookup.get(&tfe.label).map(|e| e.clone()),
+                                label: tfe.label,
+                            };
+                            tx.send(Some(HydratedInfo::ActionFailed(err_info)))
+                                .await
+                                .unwrap();
+                        }
+                        bazel_event::Evt::Progress(progress) => {
+                            tx.send(Some(HydratedInfo::Progress(progress)))
+                                .await
+                                .unwrap();
+                        }
+                        bazel_event::Evt::Aborted(tfe) => {
+                            let err_info = BazelAbortErrorInfo {
+                                reason: tfe.reason,
+                                description: tfe.description,
+                                label: tfe.label,
+                            };
+                            tx.send(Some(HydratedInfo::BazelAbort(err_info)))
+                                .await
+                                .unwrap();
+                        }
+                        bazel_event::Evt::UnknownEvent(_) => (),
+                    },
                 }
-            });
-        }
+            }
+        });
         next_rx
     }
 }

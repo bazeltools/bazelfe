@@ -242,7 +242,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut target_roots = vec![String::from("//...")];
 
-    let mut blacklist_repos = vec![String::from("bazel-"), String::from("WORKSPACE")];
+    let mut blacklist_repos = vec![
+        String::from("bazel-"),
+        String::from("WORKSPACE"),
+        String::from("bazel_tools"),
+        String::from("remote_java_tools_linux"),
+    ];
     if let Some(r) = parse_current_repo_name() {
         info!("Current repo name identified as {}", r);
         blacklist_repos.push(r);
@@ -329,9 +334,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         info!("{}{}{}", k, space_section, v.len());
     }
 
-    let aes = bazelfe_core::jvm_indexer::indexer_action_event_stream::IndexerActionEventStream::new(
-        allowed_rule_kinds,
-    );
+    let aes =
+        bazelfe_core::jvm_indexer::indexer_action_event_stream::IndexerActionEventStream::new();
 
     let ret = bazelfe_core::jvm_indexer::popularity_parser::build_popularity_map().await;
 

@@ -15,39 +15,6 @@ pub use index_table_value::*;
 use std::io::Write;
 use std::sync::atomic::AtomicBool;
 
-use lazy_static::lazy_static;
-use regex::Regex;
-
-fn remove_from<'a>(haystack: &'a str, needle: &str) -> &'a str {
-    match haystack.find(needle) {
-        None => haystack,
-        Some(pos) => &haystack[0..pos],
-    }
-}
-fn transform_file_names_into_class_names(class_names: Vec<String>) -> Vec<String> {
-    lazy_static! {
-        static ref SUFFIX_ANON_CLAZZES: Regex = Regex::new(r"(\$\d*)?\.class$").unwrap();
-    }
-
-    let mut vec: Vec<String> = class_names
-        .into_iter()
-        .filter_map(|e| {
-            if !e.starts_with("META-INF")
-                && e.ends_with(".class")
-                && !(e.contains("/$") && e.contains("$/"))
-            {
-                Some(remove_from(&SUFFIX_ANON_CLAZZES.replace(&e, ""), "$$").to_string())
-            } else {
-                None
-            }
-        })
-        .map(|e| e.replace("/$", "/").replace("$", ".").replace("/", "."))
-        .collect();
-    vec.sort();
-    vec.dedup();
-    vec
-}
-
 pub struct GuardedGet<'a, 'b>(
     Cow<'b, str>,
     tokio::sync::RwLockReadGuard<'a, HashMap<String, IndexTableValue>>,
@@ -382,8 +349,7 @@ impl<'a> IndexTable {
 
             let mut found_classes = Vec::default();
             for p in paths.into_iter() {
-                let extracted_zip = crate::zip_parse::extract_classes_from_zip(p);
-                found_classes.extend(transform_file_names_into_class_names(extracted_zip));
+                found_classes.extend(crate::zip_parse::extract_classes_from_zip(p));
             }
 
             let key_id = self.maybe_update_id(key_id).await;
@@ -633,20 +599,10 @@ mod tests {
                 .unwrap()
                 .as_vec()
                 .await,
-            vec![
-                IndexTableValueEntry {
-                    priority: Priority(236),
-                    target: 0
-                },
-                IndexTableValueEntry {
-                    priority: Priority(0),
-                    target: 2
-                },
-                IndexTableValueEntry {
-                    priority: Priority(0),
-                    target: 1
-                }
-            ]
+            vec![IndexTableValueEntry {
+                priority: Priority(236),
+                target: 0
+            }]
         );
 
         // Update existing element
@@ -684,7 +640,7 @@ mod tests {
                 },
                 IndexTableValueEntry {
                     priority: Priority(1),
-                    target: 3
+                    target: 1
                 },
             ]
         );

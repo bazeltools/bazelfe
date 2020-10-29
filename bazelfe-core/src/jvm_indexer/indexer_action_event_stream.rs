@@ -17,18 +17,12 @@ pub trait ExtractClassData<U> {
 #[derive(Clone, Debug)]
 pub struct IndexerActionEventStream {
     pub index_table: index_table::IndexTable,
-    allowed_rule_kinds: Arc<HashSet<String>>,
 }
 
 impl IndexerActionEventStream {
-    pub fn new(allowed_rule_kinds: Vec<String>) -> Self {
-        let mut allowed = HashSet::new();
-        for e in allowed_rule_kinds.into_iter() {
-            allowed.insert(e);
-        }
+    pub fn new() -> Self {
         Self {
             index_table: index_table::IndexTable::default(),
-            allowed_rule_kinds: Arc::new(allowed),
         }
     }
 
@@ -73,18 +67,9 @@ impl IndexerActionEventStream {
                                     for of in tce.output_files.iter() {
                                         if let build_event_stream::file::File::Uri(e) = of {
                                             if e.ends_with(".jar") && e.starts_with("file://") {
-                                                let a = e.strip_prefix("file://").unwrap();
-                                                let allowed = if let Some(ref external_repo) =
-                                                    external_match
-                                                {
-                                                    a.contains(external_repo)
-                                                } else {
-                                                    !a.contains("/external/")
-                                                };
-                                                if allowed {
-                                                    let u: PathBuf = a.into();
-                                                    files.push(u);
-                                                }
+                                                let u: PathBuf =
+                                                    e.strip_prefix("file://").unwrap().into();
+                                                files.push(u);
                                             }
                                         }
                                     }
