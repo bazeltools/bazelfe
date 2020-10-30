@@ -278,6 +278,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // we should be very quiet if the build is successful/we added nothing.
     if attempts > 1 {
+        eprintln!("--------------------Bazel Runner Report--------------------");
         eprintln!("Bazel build attempts: {}", attempts);
         eprintln!("Actions taken: {}", running_total.actions_taken);
         eprintln!(
@@ -307,6 +308,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
+        eprintln!("------------------------------------------------------------\n");
     }
 
     if index_table.is_mutated() {
