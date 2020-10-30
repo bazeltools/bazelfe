@@ -40,7 +40,7 @@ struct Opt {
 // broadcast::Receiver<BuildEventAction<bazel_event::BazelBuildEvent>>,
 
 struct ProcessorActivity {
-    pub jars_indexed: u32,
+    pub jvm_segments_indexed: u32,
     pub actions_taken: u32,
     pub target_story_actions: HashMap<String, Vec<TargetStory>>
 }
@@ -65,14 +65,14 @@ impl ProcessorActivity {
             }
         }
 
-        self.jars_indexed += o.jars_indexed;
+        self.jvm_segments_indexed += o.jvm_segments_indexed;
         self.actions_taken += o.actions_taken;
     }
 }
 impl Default for ProcessorActivity {
     fn default() -> Self {
         ProcessorActivity {
-            jars_indexed: 0,
+            jvm_segments_indexed: 0,
             actions_taken: 0,
             target_story_actions: HashMap::new()
         }
@@ -102,14 +102,20 @@ async fn spawn_bazel_attempt(
 
         let mut guard = r_data.write().await;
 
-        let mut jars_indexed = 0;
-        let mut actions_taken = 0;
+        let mut jvm_segments_indexed = 0;
+        let mut actions_taken:u32 = 0;
         let mut target_story_actions = HashMap::new();
 
         while let Ok(action) = target_extracted_stream.recv().await {
             match action {
                 bazelfe_core::hydrated_stream_processors::BuildEventResponse::ProcessedBuildFailures(pbf) =>  {
-                    actions_taken += pbf.actions_completed;
+                    let current_updates: u32 = pbf.target_story_entries.iter().map (|e| {
+                        match e.action {
+                            TargetStoryAction::Success => 0,
+                            _ => 1
+                        }
+                    }).sum();
+                    actions_taken += current_updates;
                     for story_entry in pbf.target_story_entries {
                         match target_story_actions.get_mut(&story_entry.target) {
                             None => {
@@ -121,13 +127,13 @@ async fn spawn_bazel_attempt(
                         }
                     }
                 bazelfe_core::hydrated_stream_processors::BuildEventResponse::IndexedResults(ir) => {
-                    jars_indexed += ir.jars_indexed
+                    jvm_segments_indexed += ir.jvm_segments_indexed
                 }
             }
         }
 
         *guard = Some(ProcessorActivity{
-            jars_indexed: jars_indexed,
+            jvm_segments_indexed: jvm_segments_indexed,
             actions_taken: actions_taken,
             target_story_actions: target_story_actions
         });
@@ -263,13 +269,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             spawn_bazel_attempt(&sender_arc, &aes, bes_port, &passthrough_args).await;
         running_total.merge(&processor_activity);
         final_exit_code = bazel_result.exit_code;
-        if bazel_result.exit_code == 0 || processor_activity.actions_taken == 0 {
+        if bazel_result.exit_code == 0 || (processor_activity.actions_taken == 0 && processor_activity.jvm_segments_indexed == 0) {
             break;
         }
         attempts += 1;
     }
 
-    info!("Attempts/build cycles: {:?}, actions taken: {}, jars_indexed: {}", attempts, running_total.actions_taken, running_total.jars_indexed);
+    info!("Attempts/build cycles: {:?}, actions taken: {}, jvm_segments_indexed: {}", attempts, running_total.actions_taken, running_total.jvm_segments_indexed);
 
     if running_total.target_story_actions.len() > 0 {
     info!("{:#?}", running_total.target_story_actions);

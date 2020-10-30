@@ -204,7 +204,7 @@ async fn apply_candidates<T: Buildozer + Clone + Send + Sync + 'static>(
 ) -> super::Response {
     let mut target_stories = Vec::default();
     if candidate_correction_commands.len() == 0 {
-        return super::Response::new(0, Vec::default());
+        return super::Response::new(Vec::default());
     }
     for correction_command in candidate_correction_commands.into_iter() {
         match correction_command {
@@ -239,7 +239,7 @@ async fn apply_candidates<T: Buildozer + Clone + Send + Sync + 'static>(
             }
         }
     }
-super::Response::new(target_stories.len() as u32, target_stories)
+super::Response::new( target_stories)
 
 }
 pub async fn process_progress<T: Buildozer + Clone + Send + Sync + 'static>(

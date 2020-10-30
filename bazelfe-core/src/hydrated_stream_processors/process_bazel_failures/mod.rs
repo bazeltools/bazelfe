@@ -28,13 +28,11 @@ pub struct TargetStory {
 
 #[derive(Clone, Debug)]
 pub struct Response {
-    pub actions_completed: u32,
     pub target_story_entries: Vec<TargetStory>
 }
 impl Response {
-    pub fn new(actions_completed: u32, target_story_entries: Vec<TargetStory>) -> Self {
+    pub fn new(target_story_entries: Vec<TargetStory>) -> Self {
         Self {
-            actions_completed: actions_completed,
             target_story_entries: target_story_entries
         }
     }
@@ -96,7 +94,7 @@ pub async fn process(&self,
                             }
                             hydrated_stream::HydratedInfo::TargetComplete(_) => None,
                             hydrated_stream::HydratedInfo::ActionSuccess(action_success) => {
-                                Some(Response::new(0, vec![
+                                Some(Response::new(vec![
                                     TargetStory{
                                         target: action_success.label.clone(),
                                         action: TargetStoryAction::Success,
@@ -118,7 +116,7 @@ pub async fn process(&self,
                             }
                         };
                         r.and_then(|r| {
-                            if r.actions_completed > 0 || r.target_story_entries.len() > 0 {
+                            if r.target_story_entries.len() > 0 {
                                 Some(super::BuildEventResponse::ProcessedBuildFailures(r))
                             } else {
                                 None

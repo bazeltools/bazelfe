@@ -273,7 +273,7 @@ impl<'a> IndexTable {
         target_kind: &Option<String>,
         target_name: String,
         paths: Vec<PathBuf>,
-    ) -> () {
+    ) -> u32 {
         let paths = match target_kind {
             Some(kind) => {
                 // These are really sketchy transforms
@@ -346,13 +346,21 @@ impl<'a> IndexTable {
                 found_classes.extend(crate::zip_parse::extract_classes_from_zip(p));
             }
 
+            let mut jvm_segments_indexed = 0;
             let key_id = self.maybe_update_id(key_id).await;
             for clazz in found_classes
                 .into_iter()
                 .flat_map(|e| crate::label_utils::class_name_to_prefixes(&e))
             {
-                self.insert_with_id(clazz, key_id, popularity).await
+                jvm_segments_indexed += if self.insert_with_id(clazz, key_id, popularity).await {
+                    1
+                } else {
+                    0
+                };
             }
+            jvm_segments_indexed
+        } else {
+            0
         }
     }
     async fn maybe_insert_target_string(&self, str: String) -> usize {
@@ -420,7 +428,7 @@ impl<'a> IndexTable {
         }
     }
 
-    pub async fn insert_with_id<'b, S>(&self, key: S, target_id: usize, priority: u16) -> ()
+    pub async fn insert_with_id<'b, S>(&self, key: S, target_id: usize, priority: u16) -> bool
     where
         S: Into<Cow<'b, str>>,
     {
@@ -429,9 +437,12 @@ impl<'a> IndexTable {
 
         match guard.get(k.as_ref()) {
             Some(vec) => {
-                if vec.update_or_add_entry(target_id, priority, true).await {
+                let did_update =  vec.update_or_add_entry(target_id, priority, true).await;
+                
+                if did_update {
                     self.mutated.store(true, Ordering::Relaxed);
                 };
+                did_update
             }
             None => {
                 self.mutated.store(true, Ordering::Relaxed);
@@ -444,6 +455,7 @@ impl<'a> IndexTable {
                 let k = k.into_owned();
 
                 guard.insert(k, index_v);
+                true
             }
         }
     }

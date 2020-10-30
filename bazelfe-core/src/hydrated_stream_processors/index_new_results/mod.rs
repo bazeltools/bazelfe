@@ -9,19 +9,19 @@ use crate::{build_events::hydrated_stream, index_table};
 #[derive(Clone, Debug)]
 
 pub struct Response {
-    pub jars_indexed: u32,
+    pub jvm_segments_indexed: u32,
 }
 impl Default for Response {
     fn default() -> Self {
         Self {
-            jars_indexed: 0,
+            jvm_segments_indexed: 0,
         }
     }
 }
 impl Response {
-    pub fn new(jars_indexed: u32) -> Self {
+    pub fn new(jvm_segments_indexed: u32) -> Self {
         Self {
-            jars_indexed: jars_indexed
+            jvm_segments_indexed: jvm_segments_indexed
         }
     }
 }
@@ -81,10 +81,10 @@ pub async fn process(&self,
                                     }
                                 }
 
-                                self.index_table
+                                let jvm_segments_indexed = self.index_table
                                     .index_jar(&tce.target_kind, label, files)
                                     .await;
-                                    Some(Response::new(1))
+                                    Some(Response::new(jvm_segments_indexed))
                             },
                             _ => None
                         };

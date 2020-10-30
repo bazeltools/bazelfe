@@ -248,7 +248,7 @@ async fn inner_process_missing_dependency_errors<T: Buildozer>(
         }
     }
 
-    (super::Response::new(target_stories.len() as u32, target_stories), local_previous_seen)
+    (super::Response::new(target_stories), local_previous_seen)
 }
 
 #[cfg(test)]
