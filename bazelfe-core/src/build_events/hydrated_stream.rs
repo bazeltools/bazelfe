@@ -6,7 +6,7 @@
 // Unknown if we should consume this as a stream and try action failures immediately
 // or wait till the operation is done not to mutate things under bazel?
 
-use std::{collections::HashMap};
+use std::collections::HashMap;
 
 use super::build_event_server::bazel_event;
 use super::build_event_server::BuildEventAction;

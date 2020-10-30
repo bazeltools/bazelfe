@@ -10,11 +10,19 @@ use tonic::transport::Server;
 use bazelfe_protos::*;
 use std::ffi::OsString;
 
-use bazelfe_core::{bazel_runner, hydrated_stream_processors::{BazelEventHandler, event_stream_listener::EventStreamListener, index_new_results::IndexNewResults, process_bazel_failures::{ProcessBazelFailures, TargetStory, TargetStoryAction}}};
 use bazelfe_core::build_events::build_event_server::bazel_event;
 use bazelfe_core::build_events::build_event_server::BuildEventAction;
 use bazelfe_core::build_events::hydrated_stream::HydratedInfo;
 use bazelfe_core::buildozer_driver;
+use bazelfe_core::{
+    bazel_runner,
+    hydrated_stream_processors::{
+        event_stream_listener::EventStreamListener,
+        index_new_results::IndexNewResults,
+        process_bazel_failures::{ProcessBazelFailures, TargetStory, TargetStoryAction},
+        BazelEventHandler,
+    },
+};
 use google::devtools::build::v1::publish_build_event_server::PublishBuildEventServer;
 use rand::Rng;
 use std::sync::Arc;
@@ -42,26 +50,26 @@ struct Opt {
 struct ProcessorActivity {
     pub jvm_segments_indexed: u32,
     pub actions_taken: u32,
-    pub target_story_actions: HashMap<String, Vec<TargetStory>>
+    pub target_story_actions: HashMap<String, Vec<TargetStory>>,
 }
 impl ProcessorActivity {
     pub fn merge(&mut self, o: &ProcessorActivity) {
         for (_, story_entries) in o.target_story_actions.iter() {
-            for story_entry in story_entries { 
-            match story_entry.action {
-                TargetStoryAction::Success => {
-                    self.target_story_actions.remove(&story_entry.target);
-                },
-                _ => {
-                    match self.target_story_actions.get_mut(&story_entry.target) {
-                        None => {
-                            self.target_story_actions.insert(story_entry.target.clone(), vec![story_entry.clone()]);
-                        }
-                        Some(existing) =>
-                        existing.push(story_entry.clone())
-                    };
+            for story_entry in story_entries {
+                match story_entry.action {
+                    TargetStoryAction::Success => {
+                        self.target_story_actions.remove(&story_entry.target);
+                    }
+                    _ => {
+                        match self.target_story_actions.get_mut(&story_entry.target) {
+                            None => {
+                                self.target_story_actions
+                                    .insert(story_entry.target.clone(), vec![story_entry.clone()]);
+                            }
+                            Some(existing) => existing.push(story_entry.clone()),
+                        };
+                    }
                 }
-            }
             }
         }
 
@@ -74,7 +82,7 @@ impl Default for ProcessorActivity {
         ProcessorActivity {
             jvm_segments_indexed: 0,
             actions_taken: 0,
-            target_story_actions: HashMap::new()
+            target_story_actions: HashMap::new(),
         }
     }
 }
@@ -85,8 +93,7 @@ async fn spawn_bazel_attempt(
     aes: &EventStreamListener,
     bes_port: u16,
     passthrough_args: &Vec<String>,
-) -> (ProcessorActivity, bazel_runner::ExecuteResult)
-{
+) -> (ProcessorActivity, bazel_runner::ExecuteResult) {
     let (tx, rx) = async_channel::unbounded();
     let _ = {
         let mut locked = sender_arc.lock().await;
@@ -96,14 +103,13 @@ async fn spawn_bazel_attempt(
 
     let target_extracted_stream = aes.handle_stream(error_stream);
 
-        let results_data = Arc::new(RwLock::new(None));
+    let results_data = Arc::new(RwLock::new(None));
     let r_data = Arc::clone(&results_data);
     let recv_task = tokio::spawn(async move {
-
         let mut guard = r_data.write().await;
 
         let mut jvm_segments_indexed = 0;
-        let mut actions_taken:u32 = 0;
+        let mut actions_taken: u32 = 0;
         let mut target_story_actions = HashMap::new();
 
         while let Ok(action) = target_extracted_stream.recv().await {
@@ -132,24 +138,22 @@ async fn spawn_bazel_attempt(
             }
         }
 
-        *guard = Some(ProcessorActivity{
+        *guard = Some(ProcessorActivity {
             jvm_segments_indexed: jvm_segments_indexed,
             actions_taken: actions_taken,
-            target_story_actions: target_story_actions
+            target_story_actions: target_story_actions,
         });
     });
 
-    
     let res = bazel_runner::execute_bazel(passthrough_args.clone(), bes_port).await;
 
-    info!("Bazel completed with state: {:?}", res);
     let _ = {
         let mut locked = sender_arc.lock().await;
         locked.take();
     };
 
     recv_task.await.unwrap();
-let r = results_data.write().await.take().unwrap();
+    let r = results_data.write().await.take().unwrap();
     (r, res)
 }
 #[tokio::main]
@@ -203,7 +207,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     bazel_runner::register_ctrlc_handler();
 
-    info!("Loading index..");
+    debug!("Loading index..");
     let index_table = match &opt.index_input_location {
         Some(p) => {
             if p.exists() {
@@ -216,20 +220,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None => bazelfe_core::index_table::IndexTable::new(),
     };
 
-    info!("Index loading complete..");
+    debug!("Index loading complete..");
 
     let processors: Vec<Box<dyn BazelEventHandler>> = vec![
         Box::new(ProcessBazelFailures::new(
             index_table.clone(),
             buildozer_driver::from_binary_path(opt.buildozer_path),
         )),
-        Box::new(IndexNewResults::new(
-            index_table.clone(),
-        ))
+        Box::new(IndexNewResults::new(index_table.clone())),
     ];
-    let aes = EventStreamListener::new(
-        processors
-    );
+    let aes = EventStreamListener::new(processors);
 
     let default_port = {
         let rand_v: u16 = rng.gen();
@@ -245,7 +245,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("can't parse BIND_ADDRESS variable");
 
     let passthrough_args = opt.passthrough_args.clone();
-    info!("Services listening on {}", addr);
+    debug!("Services listening on {}", addr);
 
     let (bes, sender_arc, _) =
         bazelfe_core::build_events::build_event_server::build_bazel_build_events_service();
@@ -265,24 +265,52 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut running_total = ProcessorActivity::default();
     let mut final_exit_code = 0;
     while attempts < 15 {
+        attempts += 1;
+
         let (processor_activity, bazel_result) =
             spawn_bazel_attempt(&sender_arc, &aes, bes_port, &passthrough_args).await;
         running_total.merge(&processor_activity);
         final_exit_code = bazel_result.exit_code;
-        if bazel_result.exit_code == 0 || (processor_activity.actions_taken == 0 && processor_activity.jvm_segments_indexed == 0) {
+        if bazel_result.exit_code == 0 || processor_activity.actions_taken == 0 {
             break;
         }
-        attempts += 1;
     }
 
-    info!("Attempts/build cycles: {:?}, actions taken: {}, jvm_segments_indexed: {}", attempts, running_total.actions_taken, running_total.jvm_segments_indexed);
-
-    if running_total.target_story_actions.len() > 0 {
-    info!("{:#?}", running_total.target_story_actions);
+    // we should be very quiet if the build is successful/we added nothing.
+    if attempts > 1 {
+        eprintln!("Bazel build attempts: {}", attempts);
+        eprintln!("Actions taken: {}", running_total.actions_taken);
+        eprintln!(
+            "Jvm fragments (classes/packages) added to index: {}",
+            running_total.jvm_segments_indexed
+        );
+        if final_exit_code != 0 && running_total.target_story_actions.len() > 0 {
+            eprintln!(
+                "\nBuild still failed. Active stories about failed targets/what we've tried:"
+            );
+            let mut v: Vec<(String, Vec<TargetStory>)> =
+                running_total.target_story_actions.into_iter().collect();
+            v.sort_by_key(|k| k.0.clone());
+            for (label, mut story_entries) in v.into_iter() {
+                eprintln!("Target: {}", label);
+                story_entries.sort_by_key(|e| e.when.clone());
+                for entry in story_entries.into_iter() {
+                    match entry.action {
+                        TargetStoryAction::AddedDependency { added_what, why } => {
+                            eprintln!("\tAdded Dependency {}, because: {}", added_what, why);
+                        }
+                        TargetStoryAction::RemovedDependency { removed_what, why } => {
+                            eprintln!("\tRemoved Dependency {}, because: {}", removed_what, why);
+                        }
+                        TargetStoryAction::Success => panic!("Shouldn't have a success item here"),
+                    }
+                }
+            }
+        }
     }
 
     if index_table.is_mutated() {
-        info!("Writing out index file...");
+        debug!("Writing out index file...");
 
         if let Some(e) = &opt.index_input_location {
             if let Some(parent) = e.parent() {
@@ -291,7 +319,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut file = std::fs::File::create(&e).unwrap();
             index_table.write(&mut file).await
         }
-        info!("Index write complete.");
+        debug!("Index write complete.");
     }
     std::process::exit(final_exit_code);
 }

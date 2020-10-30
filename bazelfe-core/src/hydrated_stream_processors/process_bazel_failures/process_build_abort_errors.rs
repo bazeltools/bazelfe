@@ -1,4 +1,6 @@
-use crate::{build_events::build_event_server::bazel_event::ProgressEvt, label_utils::sanitize_label};
+use crate::{
+    build_events::build_event_server::bazel_event::ProgressEvt, label_utils::sanitize_label,
+};
 use bazelfe_protos::*;
 use lazy_static::lazy_static;
 
@@ -15,7 +17,7 @@ enum BazelCorrectionCommand {
 struct BuildozerRemoveDepCmd {
     pub target_to_operate_on: String,
     pub dependency_to_remove: String,
-    pub why: String
+    pub why: String,
 }
 
 fn extract_target_does_not_exist(
@@ -45,7 +47,7 @@ fn extract_target_does_not_exist(
                         BazelCorrectionCommand::BuildozerRemoveDep(BuildozerRemoveDepCmd {
                             target_to_operate_on: src_target.to_string(),
                             dependency_to_remove: offending_dependency.to_string(),
-                            why: String::from("Dependency on does not exist")
+                            why: String::from("Dependency on does not exist"),
                         });
                     command_stream.push(correction);
                 }
@@ -78,7 +80,7 @@ fn extract_target_not_declared_in_package(
                     BazelCorrectionCommand::BuildozerRemoveDep(BuildozerRemoveDepCmd {
                         target_to_operate_on: src_target.to_string(),
                         dependency_to_remove: offending_dependency.to_string(),
-                        why: String::from("Dependency on does not exist")
+                        why: String::from("Dependency on does not exist"),
                     });
                 command_stream.push(correction);
             }
@@ -113,7 +115,9 @@ fn extract_target_not_visible(
                         BazelCorrectionCommand::BuildozerRemoveDep(BuildozerRemoveDepCmd {
                             target_to_operate_on: src_target.to_string(),
                             dependency_to_remove: offending_dependency.to_string(),
-                            why: String::from("Target dependended on is not visible from the current target")
+                            why: String::from(
+                                "Target dependended on is not visible from the current target",
+                            ),
                         });
                     command_stream.push(correction);
                 }
@@ -164,8 +168,7 @@ fn extract_added_cycle_in_dependency_graph(
                 vec.push(captures.get(1).unwrap().as_str().to_string());
 
                 for wind in vec.windows(2) {
-                    let target_to_operate_on =
-                        sanitize_label(wind[0].to_string());
+                    let target_to_operate_on = sanitize_label(wind[0].to_string());
                     let dependency_to_remove = wind[1].to_string();
 
                     if let Some(ref hashset) = previous_global_seen.get(&target_to_operate_on) {
@@ -223,24 +226,21 @@ async fn apply_candidates<T: Buildozer + Clone + Send + Sync + 'static>(
                     .await;
                 match buildozer_res {
                     Ok(_) => {
-                        target_stories.push(
-                            super::TargetStory{
-                                target: target_to_operate_on.clone(),
-                                action: super::TargetStoryAction::RemovedDependency{
-                                    removed_what: dependency_to_remove.clone(),
-                                    why: buildozer_remove_dep.why.clone(),
-                                },
-                                when: Instant::now(),
-                            }
-                        );
+                        target_stories.push(super::TargetStory {
+                            target: target_to_operate_on.clone(),
+                            action: super::TargetStoryAction::RemovedDependency {
+                                removed_what: dependency_to_remove.clone(),
+                                why: buildozer_remove_dep.why.clone(),
+                            },
+                            when: Instant::now(),
+                        });
                     }
                     Err(_) => info!("Buildozer command failed"),
                 }
             }
         }
     }
-super::Response::new( target_stories)
-
+    super::Response::new(target_stories)
 }
 pub async fn process_progress<T: Buildozer + Clone + Send + Sync + 'static>(
     buildozer: T,
@@ -399,7 +399,9 @@ mod tests {
                     dependency_to_remove: String::from(
                         "//src/main/java/com/example/foo/actions:actions"
                     ),
-                    why: String::from("There is a cyclic dependency, so attempting to unwind/remove dependencies"),
+                    why: String::from(
+                        "There is a cyclic dependency, so attempting to unwind/remove dependencies"
+                    ),
                 }
             ),]
         );

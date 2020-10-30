@@ -68,4 +68,4 @@ And finally,
 ```
 
 Should now be a success!
-Note: You could do `./bazelisk build --keep_going src/main/java/com/example/...` at the start here, the system will learn that it got new things in its index and retry a failed build by itself. So it would auto-recover from this siutation. (keep going may not always be required, but its to do with concurrent jobs and ordering that are not deterministic).
+Note: You could do `./bazelisk build src/main/java/com/example/...` and depending on the order bazel runs the build/things being available this might just work too. (The index will get the entry before the failure is processed for entry c). Its a race condition, but a nice happenstance when it happens!

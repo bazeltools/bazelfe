@@ -13,11 +13,17 @@ use tonic::transport::Server;
 
 use bazelfe_protos::*;
 
-use bazelfe_core::{bazel_runner, hydrated_stream_processors::{BazelEventHandler, event_stream_listener::EventStreamListener, index_new_results::IndexNewResults}};
 use bazelfe_core::build_events::build_event_server::bazel_event;
 use bazelfe_core::build_events::build_event_server::BuildEventAction;
 use bazelfe_core::build_events::hydrated_stream::HydratedInfo;
 use bazelfe_core::jvm_indexer::bazel_query::BazelQuery;
+use bazelfe_core::{
+    bazel_runner,
+    hydrated_stream_processors::{
+        event_stream_listener::EventStreamListener, index_new_results::IndexNewResults,
+        BazelEventHandler,
+    },
+};
 use google::devtools::build::v1::publish_build_event_server::PublishBuildEventServer;
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
@@ -87,11 +93,8 @@ async fn spawn_bazel_attempt(
 
     let target_extracted_stream = aes.handle_stream(error_stream);
 
-    let recv_task = tokio::spawn(async move {
-        while let Ok(_) = target_extracted_stream.recv().await {
-            
-        }
-    });
+    let recv_task =
+        tokio::spawn(async move { while let Ok(_) = target_extracted_stream.recv().await {} });
     let res = bazel_runner::execute_bazel_output_control(bazel_args.clone(), bes_port, false).await;
 
     let _ = {
@@ -373,14 +376,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         bazelfe_core::index_table::IndexTable::default()
     };
 
-    let processors: Vec<Box<dyn BazelEventHandler>> = vec![
-        Box::new(IndexNewResults::new(
-            index_table.clone(),
-        ))
-    ];
-    let aes = EventStreamListener::new(
-        processors
-    );
+    let processors: Vec<Box<dyn BazelEventHandler>> =
+        vec![Box::new(IndexNewResults::new(index_table.clone()))];
+    let aes = EventStreamListener::new(processors);
 
     let ret = bazelfe_core::jvm_indexer::popularity_parser::build_popularity_map().await;
 
@@ -444,8 +442,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             String::from("--keep_going"),
         ];
         current_args.extend(chunk.drain(..));
-        let bazel_result =
-            spawn_bazel_attempt(&sender_arc, &aes, bes_port, &current_args).await;
+        let bazel_result = spawn_bazel_attempt(&sender_arc, &aes, bes_port, &current_args).await;
         info!(
             "Batch {} had exit code: {} after {} seconds",
             batch_idx,

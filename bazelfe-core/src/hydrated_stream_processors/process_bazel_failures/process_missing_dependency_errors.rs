@@ -1,5 +1,10 @@
 use bazelfe_protos::*;
-use std::{time::Instant, collections::{HashMap, HashSet}, path::Path, path::PathBuf};
+use std::{
+    collections::{HashMap, HashSet},
+    path::Path,
+    path::PathBuf,
+    time::Instant,
+};
 
 use lazy_static::lazy_static;
 
@@ -142,16 +147,14 @@ async fn generate_all_action_requests(
     }
 
     Box::new(
-        crate::label_utils::expand_candidate_import_requests(
-            prefix_candidate_import_requests,
-        )
-        .into_iter()
-        .map(|(_, inner)| {
-            inner
-                .into_iter()
-                .map(|e| ActionRequest::Prefix(e))
-                .collect::<Vec<ActionRequest>>()
-        }),
+        crate::label_utils::expand_candidate_import_requests(prefix_candidate_import_requests)
+            .into_iter()
+            .map(|(_, inner)| {
+                inner
+                    .into_iter()
+                    .map(|e| ActionRequest::Prefix(e))
+                    .collect::<Vec<ActionRequest>>()
+            }),
     )
     .chain(
         suffix_requests
@@ -228,16 +231,14 @@ async fn inner_process_missing_dependency_errors<T: Buildozer>(
                         target, &label
                     );
                     buildozer.add_dependency(&label, &target).await.unwrap();
-                    target_stories.push(
-                        super::TargetStory{
-                            target: unsanitized_label.to_string(),
-                            action: super::TargetStoryAction::AddedDependency{
-                                added_what: target.clone(),
-                                why: String::from("Saw a missing dependency error"),
-                            },
-                            when: Instant::now(),
-                        }
-                    );
+                    target_stories.push(super::TargetStory {
+                        target: unsanitized_label.to_string(),
+                        action: super::TargetStoryAction::AddedDependency {
+                            added_what: target.clone(),
+                            why: String::from("Saw a missing dependency error"),
+                        },
+                        when: Instant::now(),
+                    });
 
                     local_previous_seen.insert(target.clone());
 

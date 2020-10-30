@@ -1,15 +1,16 @@
-use std::{sync::Arc};
+use std::sync::Arc;
 
-use crate::{hydrated_stream_processors::BuildEventResponse, build_events::hydrated_stream};
+use crate::{build_events::hydrated_stream, hydrated_stream_processors::BuildEventResponse};
 
 #[derive(Debug)]
 pub struct EventStreamListener {
     processors: Arc<Vec<Box<dyn crate::hydrated_stream_processors::BazelEventHandler>>>,
 }
 
-impl EventStreamListener
-{
-    pub fn new(processors: Vec<Box<dyn crate::hydrated_stream_processors::BazelEventHandler>>) -> Self {
+impl EventStreamListener {
+    pub fn new(
+        processors: Vec<Box<dyn crate::hydrated_stream_processors::BazelEventHandler>>,
+    ) -> Self {
         Self {
             processors: Arc::new(processors),
         }
@@ -27,7 +28,6 @@ impl EventStreamListener
             let processors = Arc::clone(&self.processors);
             tokio::spawn(async move {
                 while let Ok(action) = rx.recv().await {
-
                     match action {
                         None => (),
                         Some(e) => {

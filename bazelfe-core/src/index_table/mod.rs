@@ -437,8 +437,8 @@ impl<'a> IndexTable {
 
         match guard.get(k.as_ref()) {
             Some(vec) => {
-                let did_update =  vec.update_or_add_entry(target_id, priority, true).await;
-                
+                let did_update = vec.update_or_add_entry(target_id, priority, true).await;
+
                 if did_update {
                     self.mutated.store(true, Ordering::Relaxed);
                 };
