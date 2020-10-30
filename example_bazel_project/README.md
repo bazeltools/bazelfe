@@ -45,6 +45,7 @@ Then rerunning the build should just work.
 Reset the state of our working tree to our broken targets
 ```
 git checkout src
+rm -f /tmp/bazelfe_current_index
 ```
 
 The bazel runner where possble will update/learn its index as it goes. Its good to not let this probably get too stale since we don't _delete_ entries which needs to be improved upon to better handle refactoring. (Replacing daily with the index as mentioned above likely suffices for most use cases).
@@ -69,3 +70,48 @@ And finally,
 
 Should now be a success!
 Note: You could do `./bazelisk build src/main/java/com/example/...` and depending on the order bazel runs the build/things being available this might just work too. (The index will get the entry before the failure is processed for entry c). Its a race condition, but a nice happenstance when it happens!
+
+
+## Refactoring
+
+Lets first reset the state:
+```
+git checkout src
+rm -f /tmp/bazelfe_current_index
+```
+
+Then seed/build the targets:
+
+```
+./bazelisk build src/main/java/com/example/foo/...
+./bazelisk build src/main/java/com/example/c
+```
+
+Now the bazel runner has 'learned' where the foo target is. But now lets correct our poor labeling of the target name:
+
+Edit `src/main/java/com/example/foo/BUILD` and change `bar` to `foo` as the target's name.
+
+
+Lets now try build c again, which should be depending on a non existant target...
+```
+./bazelisk build src/main/java/com/example/c/...
+```
+
+Our build will now fail, and we should get a story about the failure like:
+
+```
+Build still failed. Active stories about failed targets/what we've tried:
+Target: //src/main/java/com/example/c:c
+  Removed Dependency //src/main/java/com/example/foo:bar, because: Dependency on does not exist
+  Added Dependency //src/main/java/com/example/foo:bar, because: Saw a missing dependency error
+  Removed Dependency //src/main/java/com/example/foo:bar, because: Dependency on does not exist
+```
+
+But lets build our new foo again:
+
+```
+./bazelisk build src/main/java/com/example/foo/...
+./bazelisk build src/main/java/com/example/c
+```
+
+And it should all succeed!  Today we don't purge the index of the outputs of the previous label/target building, but we do learn concrete class locations (vs packages which are more heuristic) from the rebuild/refactor.
