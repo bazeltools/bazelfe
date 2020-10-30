@@ -129,10 +129,13 @@ impl<'a> IndexTable {
         W: Write,
     {
         let mut file = std::io::BufWriter::with_capacity(512 * 1024, file);
+
+        file.write_u64::<LittleEndian>(7654323579 as u64).unwrap();
+        file.write_u16::<LittleEndian>(0 as u16).unwrap();
+
         let _ = {
             let id_vec = self.id_to_target_vec.read().await;
             file.write_u64::<LittleEndian>(id_vec.len() as u64).unwrap();
-
             for ele in id_vec.iter() {
                 file.write_u16::<LittleEndian>(ele.len() as u16).unwrap();
                 file.write_all(&ele).unwrap();
@@ -196,6 +199,13 @@ impl<'a> IndexTable {
         use std::io::BufReader;
 
         let mut rdr = BufReader::with_capacity(512 * 1024, rdr);
+
+        let signature = rdr.read_u64::<LittleEndian>().unwrap();
+        if signature != 7654323579 {
+            panic!("Invalid signature, {} not a bazel runner file?", signature);
+        }
+        let _ = rdr.read_u16::<LittleEndian>().unwrap();
+
         let num_vec_entries = rdr.read_u64::<LittleEndian>().unwrap();
         let mut index_buf = Vec::default();
         let mut reverse_hashmap = HashMap::default();
