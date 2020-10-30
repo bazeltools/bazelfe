@@ -279,6 +279,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // we should be very quiet if the build is successful/we added nothing.
     if attempts > 1 {
         eprintln!("--------------------Bazel Runner Report--------------------");
+        eprintln!("Bazel exit code: {}", final_exit_code);
         eprintln!("Bazel build attempts: {}", attempts);
         eprintln!("Actions taken: {}", running_total.actions_taken);
         eprintln!(
