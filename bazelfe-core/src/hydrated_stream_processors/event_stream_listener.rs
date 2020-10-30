@@ -1,14 +1,13 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{sync::Arc};
 
 use crate::{hydrated_stream_processors::BuildEventResponse, build_events::hydrated_stream};
 
-
 #[derive(Debug)]
-pub struct ActionEventStream {
+pub struct EventStreamListener {
     processors: Arc<Vec<Box<dyn crate::hydrated_stream_processors::BazelEventHandler>>>,
 }
 
-impl ActionEventStream
+impl EventStreamListener
 {
     pub fn new(processors: Vec<Box<dyn crate::hydrated_stream_processors::BazelEventHandler>>) -> Self {
         Self {
@@ -16,7 +15,7 @@ impl ActionEventStream
         }
     }
 
-    pub fn build_action_pipeline(
+    pub fn handle_stream(
         &self,
         rx: async_channel::Receiver<Option<hydrated_stream::HydratedInfo>>,
     ) -> async_channel::Receiver<BuildEventResponse> {

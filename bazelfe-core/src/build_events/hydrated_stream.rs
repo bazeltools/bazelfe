@@ -6,12 +6,11 @@
 // Unknown if we should consume this as a stream and try action failures immediately
 // or wait till the operation is done not to mutate things under bazel?
 
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap};
 
 use super::build_event_server::bazel_event;
 use super::build_event_server::BuildEventAction;
 use bazelfe_protos::*;
-use tokio::sync::RwLock;
 
 // This is keeping some state as we go through a stream to hydrate values with things like rule kinds
 // not on the indvidual events.

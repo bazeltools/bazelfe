@@ -5,13 +5,12 @@ use clap::{AppSettings, Clap};
 use std::{collections::HashMap, path::PathBuf};
 
 use std::env;
-use std::sync::atomic::Ordering;
 use tonic::transport::Server;
 
 use bazelfe_protos::*;
 use std::ffi::OsString;
 
-use bazelfe_core::{bazel_runner, hydrated_stream_processors::{BazelEventHandler, index_new_results::IndexNewResults, process_bazel_failures::{ProcessBazelFailures, TargetStory, TargetStoryAction}}};
+use bazelfe_core::{bazel_runner, hydrated_stream_processors::{BazelEventHandler, event_stream_listener::EventStreamListener, index_new_results::IndexNewResults, process_bazel_failures::{ProcessBazelFailures, TargetStory, TargetStoryAction}}};
 use bazelfe_core::build_events::build_event_server::bazel_event;
 use bazelfe_core::build_events::build_event_server::BuildEventAction;
 use bazelfe_core::build_events::hydrated_stream::HydratedInfo;
@@ -47,7 +46,7 @@ struct ProcessorActivity {
 }
 impl ProcessorActivity {
     pub fn merge(&mut self, o: &ProcessorActivity) {
-        for (label, story_entries) in o.target_story_actions.iter() {
+        for (_, story_entries) in o.target_story_actions.iter() {
             for story_entry in story_entries { 
             match story_entry.action {
                 TargetStoryAction::Success => {
@@ -83,7 +82,7 @@ async fn spawn_bazel_attempt(
     sender_arc: &Arc<
         Mutex<Option<async_channel::Sender<BuildEventAction<bazel_event::BazelBuildEvent>>>>,
     >,
-    aes: &bazel_runner::action_event_stream::ActionEventStream,
+    aes: &EventStreamListener,
     bes_port: u16,
     passthrough_args: &Vec<String>,
 ) -> (ProcessorActivity, bazel_runner::ExecuteResult)
@@ -95,7 +94,7 @@ async fn spawn_bazel_attempt(
     };
     let error_stream = HydratedInfo::build_transformer(rx);
 
-    let target_extracted_stream = aes.build_action_pipeline(error_stream);
+    let target_extracted_stream = aes.handle_stream(error_stream);
 
         let results_data = Arc::new(RwLock::new(None));
     let r_data = Arc::clone(&results_data);
@@ -222,7 +221,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             index_table.clone(),
         ))
     ];
-    let aes = bazel_runner::action_event_stream::ActionEventStream::new(
+    let aes = EventStreamListener::new(
         processors
     );
 

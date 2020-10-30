@@ -2,6 +2,7 @@ use crate::build_events::hydrated_stream;
 
 pub mod process_bazel_failures;
 pub mod index_new_results;
+pub mod event_stream_listener;
 
 #[derive(Clone, Debug)]
 pub enum BuildEventResponse {

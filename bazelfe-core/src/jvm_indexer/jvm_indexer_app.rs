@@ -9,12 +9,11 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use std::env;
-use std::sync::atomic::Ordering;
 use tonic::transport::Server;
 
 use bazelfe_protos::*;
 
-use bazelfe_core::bazel_runner;
+use bazelfe_core::{bazel_runner, hydrated_stream_processors::{BazelEventHandler, event_stream_listener::EventStreamListener, index_new_results::IndexNewResults}};
 use bazelfe_core::build_events::build_event_server::bazel_event;
 use bazelfe_core::build_events::build_event_server::BuildEventAction;
 use bazelfe_core::build_events::hydrated_stream::HydratedInfo;
@@ -75,10 +74,10 @@ async fn spawn_bazel_attempt(
     sender_arc: &Arc<
         Mutex<Option<async_channel::Sender<BuildEventAction<bazel_event::BazelBuildEvent>>>>,
     >,
-    aes: &bazelfe_core::jvm_indexer::indexer_action_event_stream::IndexerActionEventStream,
+    aes: &EventStreamListener,
     bes_port: u16,
     bazel_args: &Vec<String>,
-) -> (usize, bazel_runner::ExecuteResult) {
+) -> bazel_runner::ExecuteResult {
     let (tx, rx) = async_channel::unbounded();
     let _ = {
         let mut locked = sender_arc.lock().await;
@@ -86,33 +85,22 @@ async fn spawn_bazel_attempt(
     };
     let error_stream = HydratedInfo::build_transformer(rx);
 
-    let target_extracted_stream = aes.build_action_pipeline(error_stream);
+    let target_extracted_stream = aes.handle_stream(error_stream);
 
-    let actions_completed: Arc<std::sync::atomic::AtomicUsize> =
-        Arc::new(std::sync::atomic::AtomicUsize::new(0));
-
-    let recv_ver = Arc::clone(&actions_completed);
     let recv_task = tokio::spawn(async move {
-        while let Ok(action) = target_extracted_stream.recv().await {
-            match action {
-                None => (),
-                Some(err_info) => {
-                    recv_ver.fetch_add(err_info, Ordering::Relaxed);
-                }
-            }
+        while let Ok(_) = target_extracted_stream.recv().await {
+            
         }
     });
     let res = bazel_runner::execute_bazel_output_control(bazel_args.clone(), bes_port, false).await;
 
-    info!("Bazel completed with state: {:?}", res);
     let _ = {
         let mut locked = sender_arc.lock().await;
         locked.take();
     };
 
     recv_task.await.unwrap();
-    info!("Receive task done");
-    (actions_completed.fetch_add(0, Ordering::Relaxed), res)
+    res
 }
 
 fn parse_current_repo_name() -> Option<String> {
@@ -385,18 +373,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         bazelfe_core::index_table::IndexTable::default()
     };
 
-    let aes = bazelfe_core::jvm_indexer::indexer_action_event_stream::IndexerActionEventStream::new(
-        index_table.clone(),
+    let processors: Vec<Box<dyn BazelEventHandler>> = vec![
+        Box::new(IndexNewResults::new(
+            index_table.clone(),
+        ))
+    ];
+    let aes = EventStreamListener::new(
+        processors
     );
 
     let ret = bazelfe_core::jvm_indexer::popularity_parser::build_popularity_map().await;
 
     for (k, v) in ret {
-        aes.index_table.set_popularity_str(k, v as u16).await
+        index_table.set_popularity_str(k, v as u16).await
     }
 
     for (k, v) in bazel_deps_replacement_map {
-        aes.index_table.add_transformation_mapping(k, v).await;
+        index_table.add_transformation_mapping(k, v).await;
     }
 
     let default_port = {
@@ -439,7 +432,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Mutex<Option<async_channel::Sender<BuildEventAction<bazel_event::BazelBuildEvent>>>>,
         >,
         bazel_binary_path: String,
-        aes: &bazelfe_core::jvm_indexer::indexer_action_event_stream::IndexerActionEventStream,
+        aes: &EventStreamListener,
         batch_idx: usize,
         chunk: &mut Vec<String>,
     ) {
@@ -451,7 +444,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             String::from("--keep_going"),
         ];
         current_args.extend(chunk.drain(..));
-        let (_num_classes_found, bazel_result) =
+        let bazel_result =
             spawn_bazel_attempt(&sender_arc, &aes, bes_port, &current_args).await;
         info!(
             "Batch {} had exit code: {} after {} seconds",

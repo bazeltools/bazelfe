@@ -514,7 +514,7 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
         std::fs::write("src/main/scala/com/example/foo/BUILD", "java_librar(...)")
             .expect("Should be able to write file");
 
-        let actions = process_missing_dependency_errors(
+        let response = process_missing_dependency_errors(
             &global_previous_seen,
             buildozer.clone(),
             &action_failed_error_info,
@@ -524,7 +524,7 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
 
         std::env::set_current_dir(&current_dir).expect("Can set the cwd");
 
-        assert_eq!(actions, 1);
+        assert_eq!(response.target_story_entries.len(), 1);
 
         let event_log: Vec<ActionLogEntry> = buildozer.to_vec().await;
 
@@ -544,7 +544,7 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
             ignore_dep_references: HashSet<String>,
             buildozer: FakeBuildozer,
             all_requests: Vec<Vec<ActionRequest>>,
-        ) -> (Vec<ActionLogEntry>, u32) {
+        ) -> (Vec<ActionLogEntry>, super::super::Response) {
             // this is a simple scenario, nothing is in the index table, and we have our buildozer set to allow ~everything to pass through
 
             let current_dir = std::env::current_dir().unwrap().to_owned();
@@ -563,7 +563,7 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
                     .expect("Should be able to write file");
             }
 
-            let (actions, _) = inner_process_missing_dependency_errors(
+            let (response, _) = inner_process_missing_dependency_errors(
                 buildozer.clone(),
                 "//src/main/com/example/foo:Bar",
                 &Some(String::from("scala_library")),
@@ -578,11 +578,11 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
 
             let event_log: Vec<ActionLogEntry> = buildozer.to_vec().await;
 
-            (event_log, actions)
+            (event_log, response)
         }
 
         // No requests
-        let (action_log_entry, actions) = run_scenario(
+        let (action_log_entry, response) = run_scenario(
             vec!["src/main/scala/com/example/foo"],
             index_table::IndexTable::default(),
             HashSet::new(),
@@ -590,12 +590,12 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
             vec![],
         )
         .await;
-        assert_eq!(actions, 0);
+        assert_eq!(response.target_story_entries.len(), 0);
         assert_eq!(action_log_entry.len(), 0);
 
         // Action request, and nothing in the index table.
         // have the path on disk
-        let (action_log_entry, actions) = run_scenario(
+        let (action_log_entry, response) = run_scenario(
             vec![
                 "src/main/scala/com/example/foo",
                 "src/main/scala/com/example/foo/bar/baz",
@@ -608,7 +608,7 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
             ))]],
         )
         .await;
-        assert_eq!(actions, 1);
+        assert_eq!(response.target_story_entries.len(), 1);
         assert_eq!(
             action_log_entry,
             vec![ActionLogEntry::AddDependency {
@@ -619,7 +619,7 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
 
         // two independent classes needed.
         // should add both
-        let (action_log_entry, actions) = run_scenario(
+        let (action_log_entry, response) = run_scenario(
             vec![
                 "src/main/scala/com/example/foo",
                 "src/main/scala/com/example/foo/bar/baz",
@@ -638,7 +638,7 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
             ],
         )
         .await;
-        assert_eq!(actions, 2);
+        assert_eq!(response.target_story_entries.len(), 2);
         assert_eq!(
             action_log_entry,
             vec![
@@ -656,7 +656,7 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
         // Two not quite independent requests, via generation
         // we expect that we will add baz:baz for the first request
         // and such we should skip the operation on the second request, doing nothing.
-        let (action_log_entry, actions) = run_scenario(
+        let (action_log_entry, response) = run_scenario(
             vec![
                 "src/main/scala/com/example/foo",
                 "src/main/scala/com/example/foo/bar/baz",
@@ -676,7 +676,7 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
             ],
         )
         .await;
-        assert_eq!(actions, 1);
+        assert_eq!(response.target_story_entries.len(), 1);
         assert_eq!(
             action_log_entry,
             vec![ActionLogEntry::AddDependency {
@@ -689,7 +689,7 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
         // it should be ignored.
         let mut ignore_dep_references = HashSet::new();
         ignore_dep_references.insert(String::from("//src/main/scala/com/example/foo/bar/baz:baz"));
-        let (action_log_entry, actions) = run_scenario(
+        let (action_log_entry, response) = run_scenario(
             vec![
                 "src/main/scala/com/example/foo",
                 "src/main/scala/com/example/foo/bar/baz",
@@ -709,7 +709,7 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
             ],
         )
         .await;
-        assert_eq!(actions, 1);
+        assert_eq!(response.target_story_entries.len(), 1);
         assert_eq!(
             action_log_entry,
             vec![ActionLogEntry::AddDependency {

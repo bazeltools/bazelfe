@@ -80,8 +80,4 @@ required-features = ["dev-binaries"]
 name = "jvm-indexer"
 path = "src/jvm_indexer/jvm_indexer_app.rs"
 
-[[bin]]
-name = "popularity-parser-app"
-path = "src/jvm_indexer/popularity_parser_app.rs"
-required-features = ["dev-binaries"]
 

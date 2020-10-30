@@ -1,4 +1,4 @@
-use std::{borrow::Cow, io::Read, io::Write, sync::Arc};
+use std::{io::Read, io::Write, sync::Arc};
 
 use tokio::sync::RwLock;
 

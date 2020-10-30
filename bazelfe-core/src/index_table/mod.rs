@@ -1,11 +1,5 @@
-use nom::bytes::complete::take_while1;
-use nom::character::complete::digit1;
-use nom::character::complete::line_ending;
-use nom::error::ParseError;
-use nom::multi::{many0, many1};
-use nom::{bytes::complete::tag, combinator::map, combinator::opt, sequence::tuple, IResult};
 use std::{
-    borrow::Cow, collections::HashMap, collections::HashSet, io::Read, path::Path, path::PathBuf,
+    borrow::Cow, collections::HashMap, collections::HashSet, io::Read, path::PathBuf,
     sync::atomic::Ordering, sync::Arc, time::SystemTime,
 };
 use tokio::sync::RwLock;
@@ -355,7 +349,7 @@ impl<'a> IndexTable {
             let key_id = self.maybe_update_id(key_id).await;
             for clazz in found_classes
                 .into_iter()
-                .flat_map(|e| crate::bazel_runner::sanitization_tools::split_clazz_to_lst(&e))
+                .flat_map(|e| crate::label_utils::class_name_to_prefixes(&e))
             {
                 self.insert_with_id(clazz, key_id, popularity).await
             }

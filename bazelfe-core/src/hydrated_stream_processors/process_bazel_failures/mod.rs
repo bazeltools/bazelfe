@@ -94,7 +94,7 @@ pub async fn process(&self,
                                     ).await)
 
                             }
-                            hydrated_stream::HydratedInfo::TargetComplete(tce) => None,
+                            hydrated_stream::HydratedInfo::TargetComplete(_) => None,
                             hydrated_stream::HydratedInfo::ActionSuccess(action_success) => {
                                 Some(Response::new(0, vec![
                                     TargetStory{

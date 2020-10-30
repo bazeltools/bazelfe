@@ -295,6 +295,7 @@ mod tests {
                 BuildozerRemoveDepCmd {
                     target_to_operate_on: String::from("//src/main/java/com/example:Example"),
                     dependency_to_remove: String::from("//src/main/java/com/example:asdfasdf"),
+                    why: String::from("Dependency on does not exist"),
                 }
             )]
         );
@@ -316,6 +317,7 @@ mod tests {
                 BuildozerRemoveDepCmd {
                     target_to_operate_on: String::from("//src/main/java/com/example/c:c"),
                     dependency_to_remove: String::from("//src/main/java/com/example/foo:foo"),
+                    why: String::from("Dependency on does not exist"),
                 }
             )]
         );
@@ -338,6 +340,7 @@ mod tests {
                 BuildozerRemoveDepCmd {
                     target_to_operate_on: String::from("//src/main/java/com/com/example:Example"),
                     dependency_to_remove: String::from("@third_party_jvm//3rdparty/jvm/com/google/api/grpc:proto_google_common_protos"),
+                    why: String::from("Target dependended on is not visible from the current target"),
                 }
             )]
         );
@@ -396,6 +399,7 @@ mod tests {
                     dependency_to_remove: String::from(
                         "//src/main/java/com/example/foo/actions:actions"
                     ),
+                    why: String::from("There is a cyclic dependency, so attempting to unwind/remove dependencies"),
                 }
             ),]
         );
