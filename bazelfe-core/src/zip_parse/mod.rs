@@ -8,21 +8,12 @@ fn extract_paths_from_zip(path: PathBuf) -> Vec<String> {
 
     let file = std::fs::File::open(&path).unwrap();
 
-    let mut archive = zip::ZipArchive::new(file).unwrap();
+    let archive = zip::ZipArchive::new(file).unwrap();
 
-    for i in 0..archive.len() {
-        let file = archive.by_index(i).unwrap();
-        results.push(file.name().to_string());
+    for i in archive.file_names() {
+        results.push(i.to_string());
     }
 
-    // // let f = Arc::new(f);
-    // let ar = f.read_zip();
-    // let ar = ar.await.unwrap();
-    // println!("Got {} entries", ar.entries().len());
-
-    // for entry in ar.entries() {
-    //     results.push(entry.name().to_string());
-    // }
     results
 }
 
@@ -81,12 +72,15 @@ mod tests {
         let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         d.push("resources/tests/zip_parse/sample.zip");
 
-        let expected: Vec<String> = vec![
+        let mut expected: Vec<String> = vec![
             String::from("a.txt"),
             String::from("b.jar"),
             String::from("e.foo"),
         ];
-        assert_eq!(extract_paths_from_zip(d), expected);
+        let mut res = extract_paths_from_zip(d);
+        expected.sort();
+        res.sort();
+        assert_eq!(res, expected);
     }
 
     #[test]
