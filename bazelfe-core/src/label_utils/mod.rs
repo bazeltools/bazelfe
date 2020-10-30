@@ -76,16 +76,12 @@ pub fn class_name_to_prefixes(class_name: &str) -> Vec<String> {
         }
         // we only allow things more specific than `com.example.foo`
         // otherwise its just too generic and a dice roll.
-        if loop_cnt > 2 {
+        // and don't allow the original class
+        if loop_cnt > 2 && long_running_string != class_name {
             result.push(long_running_string.to_string())
         }
         loop_cnt += 1;
     });
-    // ensure we at least pass back out the original class name.
-    if result.len() == 0 {
-        result.push(class_name.to_string());
-    }
-    result.reverse();
     result
 }
 
@@ -102,7 +98,10 @@ pub fn expand_candidate_import_requests(
             let sub_attempts = if e.exact_only {
                 vec![e.class_name.clone()]
             } else {
-                class_name_to_prefixes(&e.class_name)
+                let mut r = class_name_to_prefixes(&e.class_name);
+                r.push(e.class_name.clone());
+                r.reverse();
+                r
             };
             (e, sub_attempts)
         })
@@ -117,10 +116,11 @@ mod tests {
     fn test_class_name_to_prefixes() {
         assert_eq!(
             class_name_to_prefixes("a.b.c.d.e"),
-            vec![String::from("a.b.c.d.e"), String::from("a.b.c.d"),]
+            vec![String::from("a.b.c.d"),]
         );
 
-        assert_eq!(class_name_to_prefixes("abcd"), vec![String::from("abcd"),]);
+        let expected: Vec<String> = vec![];
+        assert_eq!(class_name_to_prefixes("abcd"), expected);
     }
 
     #[test]

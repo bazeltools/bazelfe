@@ -348,15 +348,21 @@ impl<'a> IndexTable {
 
             let mut jvm_segments_indexed = 0;
             let key_id = self.maybe_update_id(key_id).await;
-            for clazz in found_classes
-                .into_iter()
-                .flat_map(|e| crate::label_utils::class_name_to_prefixes(&e))
-            {
-                jvm_segments_indexed += if self.insert_with_id(clazz, key_id, popularity).await {
+
+            for e in found_classes.into_iter() {
+                jvm_segments_indexed += if self.replace_with_id(&e, key_id, popularity).await {
                     1
                 } else {
                     0
                 };
+                for clazz in crate::label_utils::class_name_to_prefixes(e.as_str()) {
+                    jvm_segments_indexed += if self.insert_with_id(clazz, key_id, popularity).await
+                    {
+                        1
+                    } else {
+                        0
+                    };
+                }
             }
             jvm_segments_indexed
         } else {
@@ -425,6 +431,38 @@ impl<'a> IndexTable {
         match read_lock.get(key) {
             Some(e) => unsafe { Some(std::str::from_utf8_unchecked(&e).to_string()) },
             None => None,
+        }
+    }
+
+    pub async fn replace_with_id<'b, S>(&self, key: S, target_id: usize, priority: u16) -> bool
+    where
+        S: Into<Cow<'b, str>>,
+    {
+        let mut guard = self.tbl_map.write().await;
+        let k: Cow<'b, str> = key.into();
+
+        match guard.get(k.as_ref()) {
+            Some(vec) => {
+                let did_update = vec.replace_with_entry(target_id, priority, true).await;
+
+                if did_update {
+                    self.mutated.store(true, Ordering::Relaxed);
+                };
+                did_update
+            }
+            None => {
+                self.mutated.store(true, Ordering::Relaxed);
+                let updated_v = IndexTableValueEntry {
+                    target: target_id,
+                    priority: Priority(priority),
+                };
+
+                let index_v = IndexTableValue::with_value(updated_v);
+                let k = k.into_owned();
+
+                guard.insert(k, index_v);
+                true
+            }
         }
     }
 

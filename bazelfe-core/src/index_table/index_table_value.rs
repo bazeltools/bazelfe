@@ -136,6 +136,35 @@ impl IndexTableValue {
         None
     }
 
+    pub async fn replace_with_entry(&self, target_v: usize, priority: u16, use_max: bool) -> bool {
+        match self.lookup_by_value(target_v).await {
+            Some((_, old_priority)) => {
+                let mut write_vec = self.0.write().await;
+                if use_max && old_priority >= priority && write_vec.len() == 1 {
+                    return false;
+                }
+                if old_priority == priority && write_vec.len() == 1 {
+                    return false;
+                }
+
+                write_vec.clear();
+                write_vec.push(IndexTableValueEntry {
+                    target: target_v,
+                    priority: Priority(priority),
+                });
+            }
+            None => {
+                let mut write_vec = self.0.write().await;
+                write_vec.clear();
+                write_vec.push(IndexTableValueEntry {
+                    target: target_v,
+                    priority: Priority(priority),
+                });
+            }
+        }
+        true
+    }
+
     pub async fn update_or_add_entry(&self, target_v: usize, priority: u16, use_max: bool) -> bool {
         match self.lookup_by_value(target_v).await {
             Some((position, old_priority)) => {
