@@ -29,9 +29,9 @@ Building the `com.example.c.ExampleC`:
 ```
 
 This depends upon `com.example.foo.BarExample` , however this is not in a target called `foo` in the `com/example/foo` folder, its in a target called bar. So the heuristic approach we use will fail. We need to improve some of the heuristics here but this looks close enough to possible today that it will :
--> Add the dependency
--> Catch the error that the dependency is invalid and remove it when it re-runs the build
--> Effectively return to the original error having given up
+- Add the dependency
+- Catch the error that the dependency is invalid and remove it when it re-runs the build
+- Effectively return to the original error having given up
 
 We can trigger however the index building, in the real world you would likely want to run this in CI/distribute this to your developers lazily rebuilt.
 
