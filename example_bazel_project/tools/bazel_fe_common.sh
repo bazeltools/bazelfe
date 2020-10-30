@@ -1,6 +1,6 @@
 #!/bin/bash
 
-BAZEL_FE_VERSION=v0.1-2
+BAZEL_FE_VERSION=v0.1-16
 BUILDOZER_VERSION=3.5.0
 export INDEX_INPUT_LOCATION=/tmp/bazelfe_current_index
 
