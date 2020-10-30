@@ -7,10 +7,6 @@ use bazelfe_protos::*;
 use lazy_static::lazy_static;
 use regex::Regex;
 
-pub trait ExtractClassData<U> {
-    fn paths(&self) -> Vec<PathBuf>;
-    fn id_info(&self) -> U;
-}
 #[derive(Clone, Debug)]
 pub struct IndexerActionEventStream {
     pub index_table: index_table::IndexTable,

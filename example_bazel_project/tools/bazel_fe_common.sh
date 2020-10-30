@@ -27,7 +27,6 @@ BAZEL_RUNNER_URL=https://github.com/bazeltools/bazelfe/releases/download/${BAZEL
 BAZEL_RUNNER_SHA_URL=https://github.com/bazeltools/bazelfe/releases/download/${BAZEL_FE_VERSION}/bazel-runner-${BAZEL_FE_PLATFORM_NAME}.sha256
 BAZEL_RUNNER_LOCAL_PATH="${BAZEL_FE_TOOLS}/bazel-runner-${BAZEL_FE_VERSION}"
 
-
 JVM_INDEXER_URL=https://github.com/bazeltools/bazelfe/releases/download/${BAZEL_FE_VERSION}/jvm-indexer-${BAZEL_FE_PLATFORM_NAME}
 JVM_INDEXER_SHA_URL=https://github.com/bazeltools/bazelfe/releases/download/${BAZEL_FE_VERSION}/jvm-indexer-${BAZEL_FE_PLATFORM_NAME}.sha256
 JVM_INDEXER_LOCAL_PATH="${BAZEL_FE_TOOLS}/jvm-indexer-${BAZEL_FE_VERSION}"

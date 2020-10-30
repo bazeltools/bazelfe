@@ -2,7 +2,7 @@
 extern crate log;
 
 use clap::{AppSettings, Clap};
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 use std::env;
 use std::sync::atomic::Ordering;
@@ -11,7 +11,7 @@ use tonic::transport::Server;
 use bazelfe_protos::*;
 use std::ffi::OsString;
 
-use bazelfe_core::bazel_runner;
+use bazelfe_core::{bazel_runner, hydrated_stream_processors::{BazelEventHandler, index_new_results::IndexNewResults, process_bazel_failures::{ProcessBazelFailures, TargetStory, TargetStoryAction}}};
 use bazelfe_core::build_events::build_event_server::bazel_event;
 use bazelfe_core::build_events::build_event_server::BuildEventAction;
 use bazelfe_core::build_events::hydrated_stream::HydratedInfo;
@@ -19,7 +19,7 @@ use bazelfe_core::buildozer_driver;
 use google::devtools::build::v1::publish_build_event_server::PublishBuildEventServer;
 use rand::Rng;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 
 #[derive(Clap, Debug)]
 #[clap(name = "basic", setting = AppSettings::TrailingVarArg)]
@@ -40,16 +40,53 @@ struct Opt {
 // Arc<Mutex<Option<broadcast::Sender<BuildEventAction<bazel_event::BazelBuildEvent>>>>>,
 // broadcast::Receiver<BuildEventAction<bazel_event::BazelBuildEvent>>,
 
-async fn spawn_bazel_attempt<T>(
+struct ProcessorActivity {
+    pub jars_indexed: u32,
+    pub actions_taken: u32,
+    pub target_story_actions: HashMap<String, Vec<TargetStory>>
+}
+impl ProcessorActivity {
+    pub fn merge(&mut self, o: &ProcessorActivity) {
+        for (label, story_entries) in o.target_story_actions.iter() {
+            for story_entry in story_entries { 
+            match story_entry.action {
+                TargetStoryAction::Success => {
+                    self.target_story_actions.remove(&story_entry.target);
+                },
+                _ => {
+                    match self.target_story_actions.get_mut(&story_entry.target) {
+                        None => {
+                            self.target_story_actions.insert(story_entry.target.clone(), vec![story_entry.clone()]);
+                        }
+                        Some(existing) =>
+                        existing.push(story_entry.clone())
+                    };
+                }
+            }
+            }
+        }
+
+        self.jars_indexed += o.jars_indexed;
+        self.actions_taken += o.actions_taken;
+    }
+}
+impl Default for ProcessorActivity {
+    fn default() -> Self {
+        ProcessorActivity {
+            jars_indexed: 0,
+            actions_taken: 0,
+            target_story_actions: HashMap::new()
+        }
+    }
+}
+async fn spawn_bazel_attempt(
     sender_arc: &Arc<
         Mutex<Option<async_channel::Sender<BuildEventAction<bazel_event::BazelBuildEvent>>>>,
     >,
-    aes: &bazel_runner::action_event_stream::ActionEventStream<T>,
+    aes: &bazel_runner::action_event_stream::ActionEventStream,
     bes_port: u16,
     passthrough_args: &Vec<String>,
-) -> (u32, bazel_runner::ExecuteResult)
-where
-    T: bazelfe_core::buildozer_driver::Buildozer + Send + Clone + Sync + 'static,
+) -> (ProcessorActivity, bazel_runner::ExecuteResult)
 {
     let (tx, rx) = async_channel::unbounded();
     let _ = {
@@ -60,20 +97,44 @@ where
 
     let target_extracted_stream = aes.build_action_pipeline(error_stream);
 
-    let actions_completed: Arc<std::sync::atomic::AtomicU32> =
-        Arc::new(std::sync::atomic::AtomicU32::new(0));
-
-    let recv_ver = Arc::clone(&actions_completed);
+        let results_data = Arc::new(RwLock::new(None));
+    let r_data = Arc::clone(&results_data);
     let recv_task = tokio::spawn(async move {
+
+        let mut guard = r_data.write().await;
+
+        let mut jars_indexed = 0;
+        let mut actions_taken = 0;
+        let mut target_story_actions = HashMap::new();
+
         while let Ok(action) = target_extracted_stream.recv().await {
             match action {
-                None => (),
-                Some(err_info) => {
-                    recv_ver.fetch_add(err_info, Ordering::Relaxed);
+                bazelfe_core::hydrated_stream_processors::BuildEventResponse::ProcessedBuildFailures(pbf) =>  {
+                    actions_taken += pbf.actions_completed;
+                    for story_entry in pbf.target_story_entries {
+                        match target_story_actions.get_mut(&story_entry.target) {
+                            None => {
+                                target_story_actions.insert(story_entry.target.clone(), vec![story_entry]);
+                            }
+                            Some(existing) =>
+                            existing.push(story_entry)
+                        };
+                        }
+                    }
+                bazelfe_core::hydrated_stream_processors::BuildEventResponse::IndexedResults(ir) => {
+                    jars_indexed += ir.jars_indexed
                 }
             }
         }
+
+        *guard = Some(ProcessorActivity{
+            jars_indexed: jars_indexed,
+            actions_taken: actions_taken,
+            target_story_actions: target_story_actions
+        });
     });
+
+    
     let res = bazel_runner::execute_bazel(passthrough_args.clone(), bes_port).await;
 
     info!("Bazel completed with state: {:?}", res);
@@ -83,8 +144,8 @@ where
     };
 
     recv_task.await.unwrap();
-    info!("Receive task done");
-    (actions_completed.fetch_add(0, Ordering::Relaxed), res)
+let r = results_data.write().await.take().unwrap();
+    (r, res)
 }
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -130,8 +191,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     builder.target(pretty_env_logger::env_logger::Target::Stderr);
     if let Ok(s) = ::std::env::var("RUST_LOG") {
         builder.parse_filters(&s);
+    } else {
+        builder.parse_filters("warn,bazelfe_core=info,bazel_runner=info");
     }
-
     builder.init();
 
     bazel_runner::register_ctrlc_handler();
@@ -151,9 +213,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Index loading complete..");
 
+    let processors: Vec<Box<dyn BazelEventHandler>> = vec![
+        Box::new(ProcessBazelFailures::new(
+            index_table.clone(),
+            buildozer_driver::from_binary_path(opt.buildozer_path),
+        )),
+        Box::new(IndexNewResults::new(
+            index_table.clone(),
+        ))
+    ];
     let aes = bazel_runner::action_event_stream::ActionEventStream::new(
-        index_table.clone(),
-        buildozer_driver::from_binary_path(opt.buildozer_path),
+        processors
     );
 
     let default_port = {
@@ -187,18 +257,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut attempts: u16 = 0;
 
+    let mut running_total = ProcessorActivity::default();
     let mut final_exit_code = 0;
     while attempts < 15 {
-        let (actions_corrected, bazel_result) =
+        let (processor_activity, bazel_result) =
             spawn_bazel_attempt(&sender_arc, &aes, bes_port, &passthrough_args).await;
+        running_total.merge(&processor_activity);
         final_exit_code = bazel_result.exit_code;
-        if bazel_result.exit_code == 0 || actions_corrected == 0 {
+        if bazel_result.exit_code == 0 || processor_activity.actions_taken == 0 {
             break;
         }
         attempts += 1;
     }
 
-    info!("Attempts/build cycles: {:?}", attempts);
+    info!("Attempts/build cycles: {:?}, actions taken: {}, jars_indexed: {}", attempts, running_total.actions_taken, running_total.jars_indexed);
+
+    if running_total.target_story_actions.len() > 0 {
+    info!("{:#?}", running_total.target_story_actions);
+    }
 
     if index_table.is_mutated() {
         info!("Writing out index file...");

@@ -30,7 +30,7 @@ pub type Result<T> = std::result::Result<T, ExecuteResultError>;
 // }
 
 #[async_trait]
-pub trait Buildozer: Clone + Send + Sync + 'static {
+pub trait Buildozer: Clone + Send + Sync + std::fmt::Debug + 'static {
     async fn print_deps(&self, label: &String) -> Result<Vec<String>>;
     async fn add_dependency(&self, target_to_operate_on: &str, label_to_add: &String)
         -> Result<()>;

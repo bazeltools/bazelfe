@@ -12,3 +12,5 @@ pub mod jvm_indexer;
 pub mod source_dependencies;
 pub mod tokioext;
 pub mod zip_parse;
+pub mod hydrated_stream_processors;
+pub mod label_utils;

@@ -144,7 +144,6 @@ dependencies = [
  "dashmap",
  "exec",
  "futures",
- "futures-executor",
  "lazy_static",
  "log",
  "nom",
@@ -484,17 +483,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "18eaa56102984bed2c88ea39026cff3ce3b4c7f508ca970cedf2450ea10d4e46"
 
 [[package]]
-name = "futures-executor"
-version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5f8e0c9258abaea85e78ebdda17ef9666d390e987f006be6080dfe354b708cb"
-dependencies = [
- "futures-core",
- "futures-task",
- "futures-util",
-]
-
-[[package]]
 name = "futures-io"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -511,9 +499,6 @@ name = "futures-task"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96d502af37186c4fef99453df03e374683f8a1eec9dcc1e66b3b82dc8278ce3c"
-dependencies = [
- "once_cell",
-]
 
 [[package]]
 name = "futures-util"
@@ -526,7 +511,6 @@ dependencies = [
  "futures-task",
  "pin-project 1.0.1",
  "pin-utils",
- "slab",
 ]
 
 [[package]]
