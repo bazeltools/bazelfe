@@ -1,8 +1,9 @@
 use std::collections::HashSet;
 
-use super::super::error_extraction;
+use crate::error_extraction;
 use error_extraction::ClassImportRequest;
-pub(in crate::bazel_runner) fn sanitize_label(label: String) -> String {
+
+pub fn sanitize_label(label: String) -> String {
     // If you use macros, say the scala_library suite or similar
     // to generate many rule invocations from one call site, you need to collapse these back
     // for us to be able to add deps/action things.
@@ -27,7 +28,7 @@ pub(in crate::bazel_runner) fn sanitize_label(label: String) -> String {
     label
 }
 
-pub(in crate::bazel_runner) fn prepare_class_import_requests(
+pub fn prepare_class_import_requests(
     mut class_import_requests: Vec<ClassImportRequest>,
 ) -> Vec<ClassImportRequest> {
     // if a more specific reference to a class/package exists which covers the same package space
@@ -63,7 +64,7 @@ pub(in crate::bazel_runner) fn prepare_class_import_requests(
     class_import_requests
 }
 
-fn split_clazz_to_lst(class_name: &str) -> Vec<String> {
+pub fn class_name_to_prefixes(class_name: &str) -> Vec<String> {
     let mut long_running_string = String::new();
     let mut result = Vec::new();
     let mut loop_cnt = 0;
@@ -88,7 +89,7 @@ fn split_clazz_to_lst(class_name: &str) -> Vec<String> {
     result
 }
 
-pub(in crate::bazel_runner) fn expand_candidate_import_requests(
+pub fn expand_candidate_import_requests(
     candidate_import_requests: Vec<ClassImportRequest>,
 ) -> Vec<(ClassImportRequest, Vec<String>)> {
     let mut candidate_import_requests = prepare_class_import_requests(candidate_import_requests);
@@ -101,7 +102,7 @@ pub(in crate::bazel_runner) fn expand_candidate_import_requests(
             let sub_attempts = if e.exact_only {
                 vec![e.class_name.clone()]
             } else {
-                split_clazz_to_lst(&e.class_name)
+                class_name_to_prefixes(&e.class_name)
             };
             (e, sub_attempts)
         })
@@ -113,13 +114,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_split_clazz_to_lst() {
+    fn test_class_name_to_prefixes() {
         assert_eq!(
-            split_clazz_to_lst("a.b.c.d.e"),
+            class_name_to_prefixes("a.b.c.d.e"),
             vec![String::from("a.b.c.d.e"), String::from("a.b.c.d"),]
         );
 
-        assert_eq!(split_clazz_to_lst("abcd"), vec![String::from("abcd"),]);
+        assert_eq!(class_name_to_prefixes("abcd"), vec![String::from("abcd"),]);
     }
 
     #[test]

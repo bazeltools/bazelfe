@@ -1,4 +1,4 @@
-use std::{borrow::Cow, sync::Arc};
+use std::{io::Read, io::Write, sync::Arc};
 
 use tokio::sync::RwLock;
 
@@ -21,7 +21,7 @@ impl Ord for Priority {
 pub struct IndexTableValueEntry {
     ///Todo impl the ordering's manually so the order of fields here doesn't matter
     pub priority: Priority,
-    pub target: String,
+    pub target: usize,
 }
 
 pub struct IterGuard<'a> {
@@ -53,10 +53,46 @@ impl Default for IndexTableValue {
 
 impl IndexTableValue {
     /// Used in testing to convert into a simple vec for comparing.
-    #[cfg(test)]
     pub(in crate) async fn as_vec(self) -> Vec<IndexTableValueEntry> {
         let w = self.0.read().await;
-        w.clone()
+        let r = w.clone();
+        drop(w);
+        r
+    }
+
+    pub fn read<T>(rdr: &mut T) -> Self
+    where
+        T: Read,
+    {
+        use byteorder::{LittleEndian, ReadBytesExt};
+        let len = rdr.read_u16::<LittleEndian>().unwrap();
+
+        let mut v = Vec::default();
+
+        for _ in 0..len {
+            let priority = rdr.read_u16::<LittleEndian>().unwrap();
+            let target = rdr.read_u64::<LittleEndian>().unwrap();
+            v.push(IndexTableValueEntry {
+                priority: Priority(priority),
+                target: target as usize,
+            });
+        }
+
+        Self(Arc::new(RwLock::new(v)))
+    }
+
+    pub async fn write<T>(&self, t: &mut T) -> ()
+    where
+        T: Write,
+    {
+        let guard = self.0.read().await;
+        use byteorder::{LittleEndian, WriteBytesExt};
+        t.write_u16::<LittleEndian>(guard.len() as u16).unwrap();
+
+        for ele in guard.iter() {
+            t.write_u16::<LittleEndian>(ele.priority.0).unwrap();
+            t.write_u64::<LittleEndian>(ele.target as u64).unwrap();
+        }
     }
 
     pub async fn read_iter<'a>(&'a self) -> IterGuard<'a> {
@@ -64,7 +100,7 @@ impl IndexTableValue {
         return IterGuard { guard };
     }
 
-    pub fn from_vec(data: Vec<(u16, String)>) -> Self {
+    pub fn from_vec(data: Vec<(u16, usize)>) -> Self {
         let transformed: Vec<IndexTableValueEntry> = data
             .into_iter()
             .map(|e| IndexTableValueEntry {
@@ -88,12 +124,7 @@ impl IndexTableValue {
         Self::new(vec![entry])
     }
 
-    pub async fn lookup_by_value<'b, S>(&self, target_v: S) -> Option<(usize, u16)>
-    where
-        S: Into<Cow<'b, str>>,
-    {
-        let k = target_v.into();
-
+    pub async fn lookup_by_value(&self, k: usize) -> Option<(usize, u16)> {
         let mut idx = 0;
 
         for element in &self.read_iter().await {
@@ -105,21 +136,17 @@ impl IndexTableValue {
         None
     }
 
-    pub async fn update_or_add_entry<'b, S>(&self, target_v: S, priority: u16) -> ()
-    where
-        S: Into<Cow<'b, str>>,
-    {
-        let cow: Cow<'b, str> = target_v.into();
-        let as_borrow = match &cow {
-            Cow::Borrowed(b) => Cow::Borrowed(*b),
-            Cow::Owned(own) => Cow::Borrowed(*&own.as_str()),
-        };
-        match self.lookup_by_value(as_borrow).await {
+    pub async fn update_or_add_entry(&self, target_v: usize, priority: u16, use_max: bool) -> bool {
+        match self.lookup_by_value(target_v).await {
             Some((position, old_priority)) => {
                 let mut write_vec = self.0.write().await;
-                if old_priority == priority {
-                    return;
+                if use_max && old_priority >= priority {
+                    return false;
                 }
+                if old_priority == priority {
+                    return false;
+                }
+
                 let insert_position =
                     match write_vec.binary_search_by_key(&Priority(priority), |e| e.priority) {
                         Ok(current_position) => current_position,
@@ -127,7 +154,7 @@ impl IndexTableValue {
                     };
                 if insert_position == position {
                     write_vec[position].priority = Priority(priority);
-                    return;
+                    return true;
                 }
                 write_vec.remove(position);
                 let insert_position = if insert_position < position {
@@ -138,10 +165,13 @@ impl IndexTableValue {
                 write_vec.insert(
                     insert_position,
                     IndexTableValueEntry {
-                        target: cow.into_owned(),
+                        target: target_v,
                         priority: Priority(priority),
                     },
                 );
+                if write_vec.len() > 10 {
+                    write_vec.truncate(10);
+                }
             }
             None => {
                 let mut write_vec = self.0.write().await;
@@ -154,12 +184,16 @@ impl IndexTableValue {
                 write_vec.insert(
                     insert_position,
                     IndexTableValueEntry {
-                        target: cow.into_owned(),
+                        target: target_v,
                         priority: Priority(priority),
                     },
                 );
+                if write_vec.len() > 10 {
+                    write_vec.truncate(10);
+                }
             }
         }
+        true
     }
 }
 
@@ -176,22 +210,18 @@ mod tests {
 
     #[tokio::test]
     async fn test_build_from_unsorted_list() {
-        let index = IndexTableValue::from_vec(vec![
-            (55, String::from("foo")),
-            (22, String::from("foo2")),
-            (99, String::from("foo3")),
-        ]);
+        let index = IndexTableValue::from_vec(vec![(55, 1003), (22, 1002), (99, 1001)]);
         let expected: Vec<IndexTableValueEntry> = vec![
             IndexTableValueEntry {
-                target: String::from("foo3"),
+                target: 1001,
                 priority: Priority(99),
             },
             IndexTableValueEntry {
-                target: String::from("foo"),
+                target: 1003,
                 priority: Priority(55),
             },
             IndexTableValueEntry {
-                target: String::from("foo2"),
+                target: 1002,
                 priority: Priority(22),
             },
         ];
@@ -200,41 +230,33 @@ mod tests {
 
     #[tokio::test]
     async fn test_lookup_by_value() {
-        let index = IndexTableValue::from_vec(vec![
-            (55, String::from("foo")),
-            (22, String::from("foo2")),
-            (99, String::from("foo3")),
-        ]);
+        let index = IndexTableValue::from_vec(vec![(55, 1003), (22, 1002), (99, 1001)]);
 
-        assert_eq!(index.lookup_by_value("foo2").await, Some((2, 22)));
+        assert_eq!(index.lookup_by_value(1002).await, Some((2, 22)));
 
-        assert_eq!(index.lookup_by_value("foo3").await, Some((0, 99)));
+        assert_eq!(index.lookup_by_value(1001).await, Some((0, 99)));
     }
 
     #[tokio::test]
     async fn test_update_or_add_entry() {
-        let index = IndexTableValue::from_vec(vec![
-            (55, String::from("foo")),
-            (22, String::from("foo2")),
-            (99, String::from("foo3")),
-        ]);
+        let index = IndexTableValue::from_vec(vec![(55, 1003), (22, 1002), (99, 1001)]);
 
-        assert_eq!(index.lookup_by_value("foo2").await, Some((2, 22)));
+        assert_eq!(index.lookup_by_value(1002).await, Some((2, 22)));
 
-        index.update_or_add_entry("foo2", 1200).await;
-        assert_eq!(index.lookup_by_value("foo2").await, Some((0, 1200)));
+        index.update_or_add_entry(1002, 1200, false).await;
+        assert_eq!(index.lookup_by_value(1002).await, Some((0, 1200)));
 
         let expected: Vec<IndexTableValueEntry> = vec![
             IndexTableValueEntry {
-                target: String::from("foo2"),
+                target: 1002,
                 priority: Priority(1200),
             },
             IndexTableValueEntry {
-                target: String::from("foo3"),
+                target: 1001,
                 priority: Priority(99),
             },
             IndexTableValueEntry {
-                target: String::from("foo"),
+                target: 1003,
                 priority: Priority(55),
             },
         ];

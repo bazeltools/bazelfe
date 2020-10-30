@@ -10,7 +10,7 @@ use google::devtools::build::v1::{
 };
 use std::pin::Pin;
 use std::sync::Arc;
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::Mutex;
 
 pub mod bazel_event {
     use super::*;
@@ -317,7 +317,7 @@ pub struct BuildEventService<T>
 where
     T: Send + Sync + 'static,
 {
-    pub write_channel: Arc<Mutex<Option<broadcast::Sender<BuildEventAction<T>>>>>,
+    pub write_channel: Arc<Mutex<Option<async_channel::Sender<BuildEventAction<T>>>>>,
     pub transform_fn:
         Arc<dyn Fn(&mut PublishBuildToolEventStreamRequest) -> Option<T> + Send + Sync>,
 }
@@ -328,10 +328,10 @@ fn transform_queue_error_to_status() -> Status {
 
 pub fn build_bazel_build_events_service() -> (
     BuildEventService<bazel_event::BazelBuildEvent>,
-    Arc<Mutex<Option<broadcast::Sender<BuildEventAction<bazel_event::BazelBuildEvent>>>>>,
-    broadcast::Receiver<BuildEventAction<bazel_event::BazelBuildEvent>>,
+    Arc<Mutex<Option<async_channel::Sender<BuildEventAction<bazel_event::BazelBuildEvent>>>>>,
+    async_channel::Receiver<BuildEventAction<bazel_event::BazelBuildEvent>>,
 ) {
-    let (tx, rx) = broadcast::channel(256);
+    let (tx, rx) = async_channel::unbounded();
     let write_channel_arc = Arc::new(Mutex::new(Some(tx)));
     let server_instance = BuildEventService {
         write_channel: Arc::clone(&write_channel_arc),
@@ -383,17 +383,18 @@ where
             }
                     None => ()
                 };
+
                 let transformed_data = (transform_fn)(&mut inbound_evt);
 
                 if let Some(r) = transformed_data {
                     if let Some(tx) = cloned_v.as_ref() {
                         let tx2 = tx.clone();
                         tokio::spawn(async move {
-                            let err = tx2.send(BuildEventAction::BuildEvent(r)).map_err(|_| transform_queue_error_to_status());
+                            let err = tx2.send(BuildEventAction::BuildEvent(r)).await.map_err(|_| transform_queue_error_to_status());
                             match err {
                                 Ok(_) => (),
                                 Err(e) =>
-                                    error!("Error publishing to queue {}", e)
+                                    error!("Error publishing to build event queue {}", e)
                             }
                         });
                     }
@@ -402,8 +403,9 @@ where
 
 
             if let Some(tx) = second_writer {
-                tx.send(BuildEventAction::BuildCompleted).map_err(|_| transform_queue_error_to_status())?;
+                tx.send(BuildEventAction::BuildCompleted).await.map_err(|_| transform_queue_error_to_status())?;
             }
+
             info!("Finished stream...");
         };
 
@@ -427,6 +429,7 @@ where
             info!("life cycle event: {:?}", inner);
 
             tx.send(BuildEventAction::LifecycleEvent(inner))
+                .await
                 .map_err(|_| transform_queue_error_to_status())?;
         }
         Ok(Response::new(()))
@@ -483,7 +486,7 @@ mod tests {
         _temp_dir_for_uds: tempfile::TempDir,
         completion_pinky: Pinky<()>,
         pub read_channel:
-            Option<broadcast::Receiver<BuildEventAction<bazel_event::BazelBuildEvent>>>,
+            Option<async_channel::Receiver<BuildEventAction<bazel_event::BazelBuildEvent>>>,
     }
     impl Drop for ServerStateHandler {
         fn drop(&mut self) {
@@ -570,7 +573,7 @@ mod tests {
         ret_v.for_each(|_| future::ready(())).await;
 
         let mut data_stream = vec![];
-        let mut channel = state.read_channel.take().unwrap();
+        let channel = state.read_channel.take().unwrap();
 
         tokio::spawn(async move {
             std::thread::sleep(Duration::from_millis(20));

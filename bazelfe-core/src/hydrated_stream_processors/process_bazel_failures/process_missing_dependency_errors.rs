@@ -3,6 +3,7 @@ use std::{
     collections::{HashMap, HashSet},
     path::Path,
     path::PathBuf,
+    time::Instant,
 };
 
 use lazy_static::lazy_static;
@@ -51,7 +52,7 @@ fn is_potentially_valid_target(target_kind: &Option<String>, label: &str) -> boo
     match prepared_path {
         Some(p) => {
             let path = Path::new(p);
-            path.join("BUILD").exists()
+            path.join("BUILD").exists() || path.join("BUILD.bazel").exists()
         }
         None => true,
     }
@@ -106,18 +107,18 @@ pub async fn load_up_ignore_references<T: Buildozer + Clone + Send + Sync + 'sta
         .await
         .unwrap();
     d.into_iter().for_each(|dep| {
-        to_ignore.insert(super::sanitization_tools::sanitize_label(dep));
+        to_ignore.insert(crate::label_utils::sanitize_label(dep));
     });
 
     global_previous_seen.iter().for_each(|dep| {
-        to_ignore.insert(super::sanitization_tools::sanitize_label(dep.to_string()));
+        to_ignore.insert(crate::label_utils::sanitize_label(dep.to_string()));
     });
 
-    to_ignore.insert(super::sanitization_tools::sanitize_label(
+    to_ignore.insert(crate::label_utils::sanitize_label(
         action_failed_error_info.label.clone(),
     ));
 
-    global_previous_seen.insert(super::sanitization_tools::sanitize_label(
+    global_previous_seen.insert(crate::label_utils::sanitize_label(
         action_failed_error_info.label.clone(),
     ));
 
@@ -146,16 +147,14 @@ async fn generate_all_action_requests(
     }
 
     Box::new(
-        super::sanitization_tools::expand_candidate_import_requests(
-            prefix_candidate_import_requests,
-        )
-        .into_iter()
-        .map(|(_, inner)| {
-            inner
-                .into_iter()
-                .map(|e| ActionRequest::Prefix(e))
-                .collect::<Vec<ActionRequest>>()
-        }),
+        crate::label_utils::expand_candidate_import_requests(prefix_candidate_import_requests)
+            .into_iter()
+            .map(|(_, inner)| {
+                inner
+                    .into_iter()
+                    .map(|e| ActionRequest::Prefix(e))
+                    .collect::<Vec<ActionRequest>>()
+            }),
     )
     .chain(
         suffix_requests
@@ -169,12 +168,12 @@ pub async fn process_missing_dependency_errors<T: Buildozer>(
     buildozer: T,
     action_failed_error_info: &ActionFailedErrorInfo,
     index_table: &index_table::IndexTable,
-) -> u32 {
+) -> super::Response {
     let ignore_dep_references: HashSet<String> =
         load_up_ignore_references(global_previous_seen, &buildozer, action_failed_error_info).await;
     let all_requests: Vec<Vec<ActionRequest>> =
         generate_all_action_requests(&action_failed_error_info).await;
-    let (action_count, local_previous_seen) = inner_process_missing_dependency_errors(
+    let (response, local_previous_seen) = inner_process_missing_dependency_errors(
         buildozer,
         &action_failed_error_info.label,
         &action_failed_error_info.target_kind,
@@ -189,7 +188,7 @@ pub async fn process_missing_dependency_errors<T: Buildozer>(
     for e in local_previous_seen.into_iter() {
         global_previous_seen.insert(e);
     }
-    action_count
+    response
 }
 async fn inner_process_missing_dependency_errors<T: Buildozer>(
     buildozer: T,
@@ -198,9 +197,11 @@ async fn inner_process_missing_dependency_errors<T: Buildozer>(
     index_table: &index_table::IndexTable,
     all_requests: Vec<Vec<ActionRequest>>,
     ignore_dep_references: HashSet<String>,
-) -> (u32, HashSet<String>) {
+) -> (super::Response, HashSet<String>) {
     let mut local_previous_seen: HashSet<String> = HashSet::new();
-    let mut actions_completed: u32 = 0;
+    let mut target_stories = Vec::default();
+    let unsanitized_label = label;
+    let label = crate::label_utils::sanitize_label(String::from(label));
 
     for req in all_requests.into_iter() {
         'class_entry_loop: for req in req.into_iter() {
@@ -209,12 +210,17 @@ async fn inner_process_missing_dependency_errors<T: Buildozer>(
                 ActionRequest::Suffix(suffix) => index_table.get_from_suffix(&suffix.suffix).await,
             };
             for target_entry in &candidates.read_iter().await {
-                if !ignore_dep_references.contains(&target_entry.target)
-                    && is_potentially_valid_target(&target_kind, &target_entry.target)
+                let target: String = index_table
+                    .decode_string(target_entry.target)
+                    .await
+                    .unwrap();
+
+                if !ignore_dep_references.contains(&target)
+                    && is_potentially_valid_target(&target_kind, &target)
                 {
                     // If our top candidate hits to be a local previous seen stop
                     // processing this class
-                    if local_previous_seen.contains(&target_entry.target) {
+                    if local_previous_seen.contains(&target) {
                         break 'class_entry_loop;
                     }
 
@@ -222,15 +228,19 @@ async fn inner_process_missing_dependency_errors<T: Buildozer>(
                     // then add it ot the local seen dependencies
                     info!(
                         "Buildozer action: add dependency {:?} to {:?}",
-                        target_entry.target, &label
+                        target, &label
                     );
-                    buildozer
-                        .add_dependency(label, &target_entry.target)
-                        .await
-                        .unwrap();
-                    actions_completed += 1;
+                    buildozer.add_dependency(&label, &target).await.unwrap();
+                    target_stories.push(super::TargetStory {
+                        target: unsanitized_label.to_string(),
+                        action: super::TargetStoryAction::AddedDependency {
+                            added_what: target.clone(),
+                            why: String::from("Saw a missing dependency error"),
+                        },
+                        when: Instant::now(),
+                    });
 
-                    local_previous_seen.insert(target_entry.target.clone());
+                    local_previous_seen.insert(target.clone());
 
                     // Now that we have a version with a match we can jump right out to the outside
                     break 'class_entry_loop;
@@ -239,7 +249,7 @@ async fn inner_process_missing_dependency_errors<T: Buildozer>(
         }
     }
 
-    (actions_completed, local_previous_seen)
+    (super::Response::new(target_stories), local_previous_seen)
 }
 
 #[cfg(test)]
@@ -505,7 +515,7 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
         std::fs::write("src/main/scala/com/example/foo/BUILD", "java_librar(...)")
             .expect("Should be able to write file");
 
-        let actions = process_missing_dependency_errors(
+        let response = process_missing_dependency_errors(
             &global_previous_seen,
             buildozer.clone(),
             &action_failed_error_info,
@@ -515,7 +525,7 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
 
         std::env::set_current_dir(&current_dir).expect("Can set the cwd");
 
-        assert_eq!(actions, 1);
+        assert_eq!(response.target_story_entries.len(), 1);
 
         let event_log: Vec<ActionLogEntry> = buildozer.to_vec().await;
 
@@ -535,7 +545,7 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
             ignore_dep_references: HashSet<String>,
             buildozer: FakeBuildozer,
             all_requests: Vec<Vec<ActionRequest>>,
-        ) -> (Vec<ActionLogEntry>, u32) {
+        ) -> (Vec<ActionLogEntry>, super::super::Response) {
             // this is a simple scenario, nothing is in the index table, and we have our buildozer set to allow ~everything to pass through
 
             let current_dir = std::env::current_dir().unwrap().to_owned();
@@ -554,7 +564,7 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
                     .expect("Should be able to write file");
             }
 
-            let (actions, _) = inner_process_missing_dependency_errors(
+            let (response, _) = inner_process_missing_dependency_errors(
                 buildozer.clone(),
                 "//src/main/com/example/foo:Bar",
                 &Some(String::from("scala_library")),
@@ -569,11 +579,11 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
 
             let event_log: Vec<ActionLogEntry> = buildozer.to_vec().await;
 
-            (event_log, actions)
+            (event_log, response)
         }
 
         // No requests
-        let (action_log_entry, actions) = run_scenario(
+        let (action_log_entry, response) = run_scenario(
             vec!["src/main/scala/com/example/foo"],
             index_table::IndexTable::default(),
             HashSet::new(),
@@ -581,12 +591,12 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
             vec![],
         )
         .await;
-        assert_eq!(actions, 0);
+        assert_eq!(response.target_story_entries.len(), 0);
         assert_eq!(action_log_entry.len(), 0);
 
         // Action request, and nothing in the index table.
         // have the path on disk
-        let (action_log_entry, actions) = run_scenario(
+        let (action_log_entry, response) = run_scenario(
             vec![
                 "src/main/scala/com/example/foo",
                 "src/main/scala/com/example/foo/bar/baz",
@@ -599,7 +609,7 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
             ))]],
         )
         .await;
-        assert_eq!(actions, 1);
+        assert_eq!(response.target_story_entries.len(), 1);
         assert_eq!(
             action_log_entry,
             vec![ActionLogEntry::AddDependency {
@@ -610,7 +620,7 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
 
         // two independent classes needed.
         // should add both
-        let (action_log_entry, actions) = run_scenario(
+        let (action_log_entry, response) = run_scenario(
             vec![
                 "src/main/scala/com/example/foo",
                 "src/main/scala/com/example/foo/bar/baz",
@@ -629,7 +639,7 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
             ],
         )
         .await;
-        assert_eq!(actions, 2);
+        assert_eq!(response.target_story_entries.len(), 2);
         assert_eq!(
             action_log_entry,
             vec![
@@ -647,7 +657,7 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
         // Two not quite independent requests, via generation
         // we expect that we will add baz:baz for the first request
         // and such we should skip the operation on the second request, doing nothing.
-        let (action_log_entry, actions) = run_scenario(
+        let (action_log_entry, response) = run_scenario(
             vec![
                 "src/main/scala/com/example/foo",
                 "src/main/scala/com/example/foo/bar/baz",
@@ -667,7 +677,7 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
             ],
         )
         .await;
-        assert_eq!(actions, 1);
+        assert_eq!(response.target_story_entries.len(), 1);
         assert_eq!(
             action_log_entry,
             vec![ActionLogEntry::AddDependency {
@@ -680,7 +690,7 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
         // it should be ignored.
         let mut ignore_dep_references = HashSet::new();
         ignore_dep_references.insert(String::from("//src/main/scala/com/example/foo/bar/baz:baz"));
-        let (action_log_entry, actions) = run_scenario(
+        let (action_log_entry, response) = run_scenario(
             vec![
                 "src/main/scala/com/example/foo",
                 "src/main/scala/com/example/foo/bar/baz",
@@ -700,7 +710,7 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
             ],
         )
         .await;
-        assert_eq!(actions, 1);
+        assert_eq!(response.target_story_entries.len(), 1);
         assert_eq!(
             action_log_entry,
             vec![ActionLogEntry::AddDependency {

@@ -27,7 +27,8 @@ We also include/have a small script to measure how well it can do for you/potent
 - [x] Bazel runner that can wrap bazel
 - x ] JVM Indexer to find/index all jvm producing targets
   - [ ] Investigate TUI/tabbed interface when running tooling so that the bazel stdout/stderr can be preserved/viewed but not swamp things like indexing
-  - [ ] Investigate using an aspect to gather the index information
+  - [x] Investigate using an aspect to gather the index information
+   --- skipping this one for now, since current system seems to work well.
 - [x] Example project
 - [x] All scripts in the right place
 - [ ] Integration for auto formatting handling for java/scala

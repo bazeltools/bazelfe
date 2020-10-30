@@ -11,7 +11,7 @@ nom = "5.1.2"
 clap = "3.0.0-beta.2"
 regex = "1.4.1"
 lazy_static = "1.4.0"
-futures = { version = "0.3", default-features = false, features = ["alloc"] }
+futures = { version = "0.3.7", default-features = false, features = ["alloc"] }
 tonic = { version = "0.3.1", features = ["tls"] }
 prost = "0.6"
 tokio = { version = "0.2", features = ["rt-threaded", "time", "stream", "fs", "macros", "uds", "io-util", "process", "io-std"] }
@@ -27,6 +27,9 @@ dashmap = "3.11.10"
 exec = "0.3.1"
 zip = "0.5.8"
 bazelfe-protos = { path = "../bazelfe-protos" }
+walkdir = "2.3.1"
+async-channel = "1.5.1"
+byteorder = "1.3.4"
 
 [dev-dependencies]
 tempfile = "3.1.0"
@@ -77,8 +80,4 @@ required-features = ["dev-binaries"]
 name = "jvm-indexer"
 path = "src/jvm_indexer/jvm_indexer_app.rs"
 
-[[bin]]
-name = "popularity-parser-app"
-path = "src/jvm_indexer/popularity_parser_app.rs"
-required-features = ["dev-binaries"]
 

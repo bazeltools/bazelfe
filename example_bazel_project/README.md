@@ -38,3 +38,34 @@ We can trigger however the index building, in the real world you would likely wa
 `./tools/run_bazel_fe_jvm_indexer.sh`
 
 Then rerunning the build should just work.
+
+
+## Test B, learning mode
+
+Reset the state of our working tree to our broken targets
+```
+git checkout src
+```
+
+The bazel runner where possble will update/learn its index as it goes. Its good to not let this probably get too stale since we don't _delete_ entries which needs to be improved upon to better handle refactoring. (Replacing daily with the index as mentioned above likely suffices for most use cases).
+
+```
+./bazelisk build src/main/java/com/example/c
+```
+
+This should fail like before.
+
+Now do:
+
+```
+./bazelisk build src/main/java/com/example/foo/...
+```
+
+And finally,
+
+```
+./bazelisk build src/main/java/com/example/c
+```
+
+Should now be a success!
+Note: You could do `./bazelisk build src/main/java/com/example/...` and depending on the order bazel runs the build/things being available this might just work too. (The index will get the entry before the failure is processed for entry c). Its a race condition, but a nice happenstance when it happens!

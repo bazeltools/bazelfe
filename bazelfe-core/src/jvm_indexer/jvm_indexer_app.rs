@@ -9,23 +9,27 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use std::env;
-use std::sync::atomic::Ordering;
 use tonic::transport::Server;
 
 use bazelfe_protos::*;
 
-use bazelfe_core::bazel_runner;
 use bazelfe_core::build_events::build_event_server::bazel_event;
 use bazelfe_core::build_events::build_event_server::BuildEventAction;
 use bazelfe_core::build_events::hydrated_stream::HydratedInfo;
 use bazelfe_core::jvm_indexer::bazel_query::BazelQuery;
-use dashmap::DashMap;
+use bazelfe_core::{
+    bazel_runner,
+    hydrated_stream_processors::{
+        event_stream_listener::EventStreamListener, index_new_results::IndexNewResults,
+        BazelEventHandler,
+    },
+};
 use google::devtools::build::v1::publish_build_event_server::PublishBuildEventServer;
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::sync::Arc;
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::Mutex;
 
 #[derive(Clap, Debug)]
 #[clap(name = "basic")]
@@ -57,6 +61,10 @@ struct Opt {
     /// will use the bazel deps entry rather than the raw jar.
     #[clap(long)]
     bazel_deps_root: Option<String>,
+
+    /// Refresh bazel deps only
+    #[clap(long)]
+    refresh_bazel_deps_only: bool,
 }
 
 fn build_rule_queries(allowed_rule_kinds: &Vec<String>, target_roots: &Vec<String>) -> Vec<String> {
@@ -70,47 +78,32 @@ fn build_rule_queries(allowed_rule_kinds: &Vec<String>, target_roots: &Vec<Strin
 }
 async fn spawn_bazel_attempt(
     sender_arc: &Arc<
-        Mutex<Option<broadcast::Sender<BuildEventAction<bazel_event::BazelBuildEvent>>>>,
+        Mutex<Option<async_channel::Sender<BuildEventAction<bazel_event::BazelBuildEvent>>>>,
     >,
-    aes: &bazelfe_core::jvm_indexer::indexer_action_event_stream::IndexerActionEventStream,
+    aes: &EventStreamListener,
     bes_port: u16,
     bazel_args: &Vec<String>,
-    index_map: Arc<DashMap<String, Vec<String>>>,
-) -> (usize, bazel_runner::ExecuteResult) {
-    let (tx, rx) = broadcast::channel(8192);
+) -> bazel_runner::ExecuteResult {
+    let (tx, rx) = async_channel::unbounded();
     let _ = {
         let mut locked = sender_arc.lock().await;
         *locked = Some(tx);
     };
     let error_stream = HydratedInfo::build_transformer(rx);
 
-    let mut target_extracted_stream = aes.build_action_pipeline(error_stream, index_map);
+    let target_extracted_stream = aes.handle_stream(error_stream);
 
-    let actions_completed: Arc<std::sync::atomic::AtomicUsize> =
-        Arc::new(std::sync::atomic::AtomicUsize::new(0));
-
-    let recv_ver = Arc::clone(&actions_completed);
-    let recv_task = tokio::spawn(async move {
-        while let Some(action) = target_extracted_stream.recv().await {
-            match action {
-                None => (),
-                Some(err_info) => {
-                    recv_ver.fetch_add(err_info, Ordering::Relaxed);
-                }
-            }
-        }
-    });
+    let recv_task =
+        tokio::spawn(async move { while let Ok(_) = target_extracted_stream.recv().await {} });
     let res = bazel_runner::execute_bazel_output_control(bazel_args.clone(), bes_port, false).await;
 
-    info!("Bazel completed with state: {:?}", res);
     let _ = {
         let mut locked = sender_arc.lock().await;
         locked.take();
     };
 
     recv_task.await.unwrap();
-    info!("Receive task done");
-    (actions_completed.fetch_add(0, Ordering::Relaxed), res)
+    res
 }
 
 fn parse_current_repo_name() -> Option<String> {
@@ -141,14 +134,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut rng = rand::thread_rng();
     let mut builder = pretty_env_logger::formatted_timed_builder();
     builder.format_timestamp_nanos();
+    let mut running_refresh_mode = false;
     builder.target(pretty_env_logger::env_logger::Target::Stderr);
     if let Ok(s) = ::std::env::var("RUST_LOG") {
         builder.parse_filters(&s);
     } else {
         builder.parse_filters("warn,bazelfe_core::jvm_indexer=info,jvm_indexer=info");
-        // builder.parse_filters("info");
     }
     builder.init();
+
     let bazel_binary_path: String = (&opt.bazel_binary_path.to_str().unwrap()).to_string();
 
     let allowed_rule_kinds: Vec<String> = vec![
@@ -172,6 +166,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bazel_deps_replacement_map: HashMap<String, String> = match &opt.bazel_deps_root {
         None => HashMap::default(),
         Some(bazel_deps_root) => {
+            info!("Asked to find out information about a bazel_deps root for replacement, issuing queries");
             let targets_in_bazel_deps_root = bazel_query
                 .execute(&vec![
                     String::from("query"),
@@ -180,6 +175,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ])
                 .await;
 
+            info!("Graph query now starting");
             let bazel_deps_deps = bazel_query
                 .execute(&vec![
                     String::from("query"),
@@ -233,56 +229,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    info!("Executing initial query to find all external repos in this bazel repository");
-
-    let res = bazel_query
-        .execute(&vec![String::from("query"), String::from("//external:*")])
-        .await;
-
-    let mut target_roots = vec![String::from("//...")];
-
-    let mut blacklist_repos = vec![String::from("bazel-"), String::from("WORKSPACE")];
-    if let Some(r) = parse_current_repo_name() {
-        info!("Current repo name identified as {}", r);
-        blacklist_repos.push(r);
-    }
-    blacklist_repos.extend(opt.blacklist_remote_roots.into_iter());
-
-    for line in res.stdout.lines().into_iter() {
-        if let Some(ln) = line.strip_prefix("//external:") {
-            let mut ok = true;
-            for root in &blacklist_repos {
-                if ln.contains(root) {
-                    ok = false;
-                }
-            }
-
-            if ok {
-                target_roots.push(format!("@{}//...", ln));
-            }
-        }
-    }
-
-    if res.exit_code != 0 {
-        info!("The bazel query returned something other than exit code zero, this unfortunately can often happen, so we will continue with the data received. We have identified {} target roots", target_roots.len());
-    } else {
-        info!("We have identified {} target roots", target_roots.len());
-    }
-
-    let all_queries = build_rule_queries(&allowed_rule_kinds, &target_roots);
-
-    let query_rule_attr_batch_size: usize = 2000;
-    info!("Extracting targets with an allowed rule kind, gives rise to {} total queries, we will union them to bazel in batches of size: {}", all_queries.len(), query_rule_attr_batch_size);
-
     let union_with_spaces_bytes = " union ".as_bytes();
 
-    let mut all_targets_to_use: HashMap<String, Vec<String>> = HashMap::default();
-    let mut processed_count = 0;
-    for chunk in all_queries.chunks(query_rule_attr_batch_size) {
+    let all_targets_to_use = if opt.refresh_bazel_deps_only {
+        running_refresh_mode = true;
+        let mut all_targets_to_use: HashMap<String, Vec<String>> = HashMap::default();
         let merged = {
             let mut buffer = Vec::default();
 
-            for x in chunk {
+            for x in bazel_deps_replacement_map.keys() {
                 if buffer.is_empty() {
                     buffer.write_all(&x.as_bytes()).unwrap();
                 } else {
@@ -311,15 +266,101 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .or_insert(Vec::default());
                 entry.push(entries[2].to_string());
             }
-            // all_targets_to_use.push(ln.to_string());
         }
-        processed_count += chunk.len();
-        info!(
-            "After {} queries, found {} matching targets",
-            processed_count,
-            all_targets_to_use.values().fold(0, |acc, e| acc + e.len())
-        );
-    }
+        all_targets_to_use
+    } else {
+        info!("Executing initial query to find all external repos in this bazel repository");
+
+        let res = bazel_query
+            .execute(&vec![String::from("query"), String::from("//external:*")])
+            .await;
+
+        let mut target_roots = vec![String::from("//...")];
+
+        let mut blacklist_repos = vec![
+            String::from("bazel-"),
+            String::from("WORKSPACE"),
+            String::from("bazel_tools"),
+            String::from("remote_java_tools_linux"),
+        ];
+        if let Some(r) = parse_current_repo_name() {
+            info!("Current repo name identified as {}", r);
+            blacklist_repos.push(r);
+        }
+        blacklist_repos.extend(opt.blacklist_remote_roots.into_iter());
+
+        for line in res.stdout.lines().into_iter() {
+            if let Some(ln) = line.strip_prefix("//external:") {
+                let mut ok = true;
+                for root in &blacklist_repos {
+                    if ln.contains(root) {
+                        ok = false;
+                    }
+                }
+
+                if ok {
+                    target_roots.push(format!("@{}//...", ln));
+                }
+            }
+        }
+
+        if res.exit_code != 0 {
+            info!("The bazel query returned something other than exit code zero, this unfortunately can often happen, so we will continue with the data received. We have identified {} target roots", target_roots.len());
+        } else {
+            info!("We have identified {} target roots", target_roots.len());
+        }
+
+        let all_queries = build_rule_queries(&allowed_rule_kinds, &target_roots);
+
+        let query_rule_attr_batch_size: usize = 2000;
+        info!("Extracting targets with an allowed rule kind, gives rise to {} total queries, we will union them to bazel in batches of size: {}", all_queries.len(), query_rule_attr_batch_size);
+
+        let mut all_targets_to_use: HashMap<String, Vec<String>> = HashMap::default();
+        let mut processed_count = 0;
+        for chunk in all_queries.chunks(query_rule_attr_batch_size) {
+            let merged = {
+                let mut buffer = Vec::default();
+
+                for x in chunk {
+                    if buffer.is_empty() {
+                        buffer.write_all(&x.as_bytes()).unwrap();
+                    } else {
+                        buffer.write_all(&union_with_spaces_bytes).unwrap();
+                        buffer.write_all(&x.as_bytes()).unwrap();
+                    }
+                }
+                String::from_utf8(buffer).unwrap()
+            };
+            let res = bazel_query
+                .execute(&vec![
+                    String::from("query"),
+                    String::from("--keep_going"),
+                    String::from("--noimplicit_deps"),
+                    String::from("--output"),
+                    String::from("label_kind"),
+                    merged,
+                ])
+                .await;
+
+            for ln in res.stdout.lines() {
+                let entries: Vec<&str> = ln.split_whitespace().collect();
+                if entries.len() == 3 {
+                    let entry = all_targets_to_use
+                        .entry(entries[0].to_string())
+                        .or_insert(Vec::default());
+                    entry.push(entries[2].to_string());
+                }
+                // all_targets_to_use.push(ln.to_string());
+            }
+            processed_count += chunk.len();
+            info!(
+                "After {} queries, found {} matching targets",
+                processed_count,
+                all_targets_to_use.values().fold(0, |acc, e| acc + e.len())
+            );
+        }
+        all_targets_to_use
+    };
 
     info!("Found targets");
     for (k, v) in all_targets_to_use.iter() {
@@ -328,9 +369,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         info!("{}{}{}", k, space_section, v.len());
     }
 
-    let aes = bazelfe_core::jvm_indexer::indexer_action_event_stream::IndexerActionEventStream::new(
-        allowed_rule_kinds,
-    );
+    let index_table = if running_refresh_mode && opt.index_output_location.exists() {
+        let mut src_f = std::fs::File::open(&opt.index_output_location).unwrap();
+        bazelfe_core::index_table::IndexTable::read(&mut src_f)
+    } else {
+        bazelfe_core::index_table::IndexTable::default()
+    };
+
+    let processors: Vec<Box<dyn BazelEventHandler>> =
+        vec![Box::new(IndexNewResults::new(index_table.clone()))];
+    let aes = EventStreamListener::new(processors);
+
+    let ret = bazelfe_core::jvm_indexer::popularity_parser::build_popularity_map().await;
+
+    for (k, v) in ret {
+        index_table.set_popularity_str(k, v as u16).await
+    }
+
+    for (k, v) in bazel_deps_replacement_map {
+        index_table.add_transformation_mapping(k, v).await;
+    }
 
     let default_port = {
         let rand_v: u16 = rng.gen();
@@ -366,17 +424,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         compile_batch_size
     );
 
-    let results_map: Arc<DashMap<String, Vec<String>>> = Arc::new(DashMap::new());
     async fn run_bazel(
         bes_port: u16,
         sender_arc: Arc<
-            Mutex<Option<broadcast::Sender<BuildEventAction<bazel_event::BazelBuildEvent>>>>,
+            Mutex<Option<async_channel::Sender<BuildEventAction<bazel_event::BazelBuildEvent>>>>,
         >,
         bazel_binary_path: String,
-        aes: &bazelfe_core::jvm_indexer::indexer_action_event_stream::IndexerActionEventStream,
+        aes: &EventStreamListener,
         batch_idx: usize,
         chunk: &mut Vec<String>,
-        results_map: Arc<DashMap<String, Vec<String>>>,
     ) {
         let batch_idx = batch_idx;
         let batch_start_time = Instant::now();
@@ -386,8 +442,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             String::from("--keep_going"),
         ];
         current_args.extend(chunk.drain(..));
-        let (_num_classes_found, bazel_result) =
-            spawn_bazel_attempt(&sender_arc, &aes, bes_port, &current_args, results_map).await;
+        let bazel_result = spawn_bazel_attempt(&sender_arc, &aes, bes_port, &current_args).await;
         info!(
             "Batch {} had exit code: {} after {} seconds",
             batch_idx,
@@ -411,7 +466,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &aes,
                 batch_idx,
                 &mut batch_elements,
-                Arc::clone(&results_map),
             )
             .await;
             batch_idx += 1;
@@ -425,52 +479,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &aes,
         batch_idx,
         &mut batch_elements,
-        Arc::clone(&results_map),
     )
     .await;
 
     info!("Building a target popularity map");
-    let ret = bazelfe_core::jvm_indexer::popularity_parser::build_popularity_map();
-
-    let mut reverse_hashmap = HashMap::new();
-
-    info!("Building results map, and injecting popularity data");
-    for kv in results_map.iter() {
-        let key = kv.key();
-        let value = kv.value();
-        let re = bazel_deps_replacement_map.get(key).unwrap_or(key).clone();
-        let freq: usize = ret.get(&re).unwrap_or(&0).clone();
-        for inner_v in value {
-            let v = reverse_hashmap.entry(inner_v.clone()).or_insert(vec![]);
-            v.push((freq, re.clone()))
-        }
-    }
-
-    let res_vec = {
-        let mut v1: Vec<(String, Vec<(usize, String)>)> = reverse_hashmap.into_iter().collect();
-
-        v1.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-        v1
-    };
 
     info!("Writing out index data");
+
     let mut file = std::fs::File::create(&opt.index_output_location).unwrap();
 
-    for (k, mut innerv) in res_vec.into_iter() {
-        file.write_all(k.as_bytes())?;
-        file.write_all("\t".as_bytes())?;
-        // reverse sort
-        innerv.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
-        let mut idx = 0;
-        for (cnt, v) in innerv.into_iter() {
-            if idx > 0 {
-                file.write_all(",".as_bytes()).unwrap();
-            }
-            file.write_all(format!("{}:{}", cnt, v).as_bytes()).unwrap();
-            idx += 1;
-        }
-        file.write_all("\n".as_bytes()).unwrap();
-    }
+    index_table.write(&mut file).await;
 
     Ok(())
 }

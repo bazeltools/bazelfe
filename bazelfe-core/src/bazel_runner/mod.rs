@@ -59,6 +59,8 @@ fn update_command<S: Into<String> + Clone>(
     let bes_section = vec![
         cmd[0].clone(),
         String::from("--build_event_publish_all_actions"),
+        String::from("--bes_timeout=30000ms"),
+        String::from("--nolegacy_important_outputs"),
         String::from("--experimental_build_event_upload_strategy=local"),
         String::from("--build_event_text_file_path_conversion"),
         String::from("--color"),
@@ -162,7 +164,3 @@ pub async fn execute_bazel_output_control<S: Into<String> + Clone>(
         errors_corrected: 0,
     }
 }
-pub mod action_event_stream;
-pub mod process_build_abort_errors;
-pub mod process_missing_dependency_errors;
-mod sanitization_tools;

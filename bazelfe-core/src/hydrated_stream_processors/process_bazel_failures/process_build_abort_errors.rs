@@ -1,11 +1,13 @@
-use crate::build_events::build_event_server::bazel_event::ProgressEvt;
+use crate::{
+    build_events::build_event_server::bazel_event::ProgressEvt, label_utils::sanitize_label,
+};
 use bazelfe_protos::*;
 use lazy_static::lazy_static;
 
 use crate::{build_events::hydrated_stream, buildozer_driver::Buildozer};
 use dashmap::{DashMap, DashSet};
 use regex::Regex;
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 #[derive(Clone, PartialEq, Debug)]
 
 enum BazelCorrectionCommand {
@@ -15,6 +17,7 @@ enum BazelCorrectionCommand {
 struct BuildozerRemoveDepCmd {
     pub target_to_operate_on: String,
     pub dependency_to_remove: String,
+    pub why: String,
 }
 
 fn extract_target_does_not_exist(
@@ -44,6 +47,7 @@ fn extract_target_does_not_exist(
                         BazelCorrectionCommand::BuildozerRemoveDep(BuildozerRemoveDepCmd {
                             target_to_operate_on: src_target.to_string(),
                             dependency_to_remove: offending_dependency.to_string(),
+                            why: String::from("Dependency on does not exist"),
                         });
                     command_stream.push(correction);
                 }
@@ -76,6 +80,7 @@ fn extract_target_not_declared_in_package(
                     BazelCorrectionCommand::BuildozerRemoveDep(BuildozerRemoveDepCmd {
                         target_to_operate_on: src_target.to_string(),
                         dependency_to_remove: offending_dependency.to_string(),
+                        why: String::from("Dependency on does not exist"),
                     });
                 command_stream.push(correction);
             }
@@ -110,6 +115,9 @@ fn extract_target_not_visible(
                         BazelCorrectionCommand::BuildozerRemoveDep(BuildozerRemoveDepCmd {
                             target_to_operate_on: src_target.to_string(),
                             dependency_to_remove: offending_dependency.to_string(),
+                            why: String::from(
+                                "Target dependended on is not visible from the current target",
+                            ),
                         });
                     command_stream.push(correction);
                 }
@@ -160,7 +168,7 @@ fn extract_added_cycle_in_dependency_graph(
                 vec.push(captures.get(1).unwrap().as_str().to_string());
 
                 for wind in vec.windows(2) {
-                    let target_to_operate_on = wind[0].to_string();
+                    let target_to_operate_on = sanitize_label(wind[0].to_string());
                     let dependency_to_remove = wind[1].to_string();
 
                     if let Some(ref hashset) = previous_global_seen.get(&target_to_operate_on) {
@@ -169,6 +177,7 @@ fn extract_added_cycle_in_dependency_graph(
                                 BazelCorrectionCommand::BuildozerRemoveDep(BuildozerRemoveDepCmd {
                                     target_to_operate_on: target_to_operate_on,
                                     dependency_to_remove: dependency_to_remove,
+                                    why: String::from("There is a cyclic dependency, so attempting to unwind/remove dependencies")
                                 });
                             command_stream.push(correction);
                         }
@@ -195,11 +204,11 @@ fn extract_added_cycle_in_dependency_graph(
 async fn apply_candidates<T: Buildozer + Clone + Send + Sync + 'static>(
     candidate_correction_commands: Vec<BazelCorrectionCommand>,
     buildozer: T,
-) -> u32 {
+) -> super::Response {
+    let mut target_stories = Vec::default();
     if candidate_correction_commands.len() == 0 {
-        return 0;
+        return super::Response::new(Vec::default());
     }
-    let mut actions_completed: u32 = 0;
     for correction_command in candidate_correction_commands.into_iter() {
         match correction_command {
             BazelCorrectionCommand::BuildozerRemoveDep(buildozer_remove_dep) => {
@@ -217,21 +226,27 @@ async fn apply_candidates<T: Buildozer + Clone + Send + Sync + 'static>(
                     .await;
                 match buildozer_res {
                     Ok(_) => {
-                        actions_completed += 1;
+                        target_stories.push(super::TargetStory {
+                            target: target_to_operate_on.clone(),
+                            action: super::TargetStoryAction::RemovedDependency {
+                                removed_what: dependency_to_remove.clone(),
+                                why: buildozer_remove_dep.why.clone(),
+                            },
+                            when: Instant::now(),
+                        });
                     }
                     Err(_) => info!("Buildozer command failed"),
                 }
             }
         }
     }
-
-    actions_completed
+    super::Response::new(target_stories)
 }
 pub async fn process_progress<T: Buildozer + Clone + Send + Sync + 'static>(
     buildozer: T,
     bazel_progress_error_info: &ProgressEvt,
     previous_global_seen: Arc<DashMap<String, DashSet<String>>>,
-) -> u32 {
+) -> super::Response {
     let mut candidate_correction_commands: Vec<BazelCorrectionCommand> = vec![];
 
     extract_added_cycle_in_dependency_graph(
@@ -251,7 +266,7 @@ pub async fn process_progress<T: Buildozer + Clone + Send + Sync + 'static>(
 pub async fn process_build_abort_errors<T: Buildozer + Clone + Send + Sync + 'static>(
     buildozer: T,
     bazel_abort_error_info: &hydrated_stream::BazelAbortErrorInfo,
-) -> u32 {
+) -> super::Response {
     let mut candidate_correction_commands: Vec<BazelCorrectionCommand> = vec![];
 
     extract_target_does_not_exist(&bazel_abort_error_info, &mut candidate_correction_commands);
@@ -280,6 +295,7 @@ mod tests {
                 BuildozerRemoveDepCmd {
                     target_to_operate_on: String::from("//src/main/java/com/example:Example"),
                     dependency_to_remove: String::from("//src/main/java/com/example:asdfasdf"),
+                    why: String::from("Dependency on does not exist"),
                 }
             )]
         );
@@ -301,6 +317,7 @@ mod tests {
                 BuildozerRemoveDepCmd {
                     target_to_operate_on: String::from("//src/main/java/com/example/c:c"),
                     dependency_to_remove: String::from("//src/main/java/com/example/foo:foo"),
+                    why: String::from("Dependency on does not exist"),
                 }
             )]
         );
@@ -323,6 +340,7 @@ mod tests {
                 BuildozerRemoveDepCmd {
                     target_to_operate_on: String::from("//src/main/java/com/com/example:Example"),
                     dependency_to_remove: String::from("@third_party_jvm//3rdparty/jvm/com/google/api/grpc:proto_google_common_protos"),
+                    why: String::from("Target dependended on is not visible from the current target"),
                 }
             )]
         );
@@ -380,6 +398,9 @@ mod tests {
                     target_to_operate_on: String::from("//src/main/java/com/example/foo:bar"),
                     dependency_to_remove: String::from(
                         "//src/main/java/com/example/foo/actions:actions"
+                    ),
+                    why: String::from(
+                        "There is a cyclic dependency, so attempting to unwind/remove dependencies"
                     ),
                 }
             ),]

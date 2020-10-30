@@ -13,7 +13,6 @@ use tokio::{prelude::*, sync::Mutex};
 
 use google::devtools::build::v1::publish_build_event_server::PublishBuildEventServer;
 use google::devtools::build::v1::PublishBuildToolEventStreamRequest;
-use tokio::sync::broadcast;
 
 #[derive(Clap, Debug)]
 #[clap(name = "basic")]
@@ -42,7 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Services listening on {}", addr);
 
-    let (tx, mut rx) = broadcast::channel(32);
+    let (tx, rx) = async_channel::unbounded();
 
     let greeter = BuildEventService {
         write_channel: Arc::new(Mutex::new(Some(tx))),

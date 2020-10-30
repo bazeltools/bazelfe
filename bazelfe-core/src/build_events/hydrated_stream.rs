@@ -12,9 +12,6 @@ use super::build_event_server::bazel_event;
 use super::build_event_server::BuildEventAction;
 use bazelfe_protos::*;
 
-use tokio::sync::broadcast;
-use tokio::sync::mpsc;
-
 // This is keeping some state as we go through a stream to hydrate values with things like rule kinds
 // not on the indvidual events.
 
@@ -59,7 +56,7 @@ pub enum HydratedInfo {
     TargetComplete(TargetCompleteInfo),
 }
 
-fn recursive_lookup(
+async fn recursive_lookup(
     lut: &HashMap<String, build_event_stream::NamedSetOfFiles>,
     results: &mut Vec<build_event_stream::file::File>,
     mut ids: Vec<String>,
@@ -81,7 +78,7 @@ fn recursive_lookup(
     true
 }
 
-fn tce_event(
+async fn tce_event(
     tce: bazel_event::TargetCompletedEvt,
     rule_kind_lookup: &HashMap<String, String>,
     named_set_of_files_lookup: &HashMap<String, build_event_stream::NamedSetOfFiles>,
@@ -103,6 +100,7 @@ fn tce_event(
                 .map(|fs| fs.id.clone())
                 .collect(),
         )
+        .await
     } else {
         true
     };
@@ -123,15 +121,15 @@ fn tce_event(
 
 impl HydratedInfo {
     pub fn build_transformer(
-        mut rx: broadcast::Receiver<BuildEventAction<bazel_event::BazelBuildEvent>>,
-    ) -> mpsc::Receiver<Option<HydratedInfo>> {
-        let (mut tx, next_rx) = mpsc::channel(256);
+        rx: async_channel::Receiver<BuildEventAction<bazel_event::BazelBuildEvent>>,
+    ) -> async_channel::Receiver<Option<HydratedInfo>> {
+        let (tx, next_rx) = async_channel::unbounded();
+
+        let mut named_set_of_files_lookup = HashMap::new();
+        let mut rule_kind_lookup = HashMap::new();
+        let mut buffered_tce: Vec<bazel_event::TargetCompletedEvt> = Vec::default();
 
         tokio::spawn(async move {
-            let mut rule_kind_lookup = HashMap::new();
-            let mut named_set_of_files_lookup = HashMap::new();
-            let mut buffered_tce: Vec<bazel_event::TargetCompletedEvt> = Vec::default();
-
             while let Ok(action) = rx.recv().await {
                 match action {
                     BuildEventAction::BuildCompleted => {
@@ -140,7 +138,7 @@ impl HydratedInfo {
                     }
                     BuildEventAction::LifecycleEvent(_) => (),
                     BuildEventAction::BuildEvent(msg) => match msg.event {
-                        bazel_event::Evt::BazelEvent(_) => (),
+                        bazel_event::Evt::BazelEvent(_) => {}
                         bazel_event::Evt::TargetConfigured(tgt_cfg) => {
                             rule_kind_lookup.insert(tgt_cfg.label, tgt_cfg.rule_kind);
                         }
@@ -149,17 +147,20 @@ impl HydratedInfo {
                             id,
                             named_set_of_files,
                         } => {
-                            named_set_of_files_lookup.insert(id, named_set_of_files);
+                            let _ = { named_set_of_files_lookup.insert(id, named_set_of_files) };
 
                             let tmp_v: Vec<bazel_event::TargetCompletedEvt> =
                                 buffered_tce.drain(..).collect();
+
                             for tce in tmp_v.into_iter() {
                                 if let Some(target_complete_info) = tce_event(
                                     tce,
                                     &rule_kind_lookup,
                                     &named_set_of_files_lookup,
                                     &mut buffered_tce,
-                                ) {
+                                )
+                                .await
+                                {
                                     tx.send(Some(HydratedInfo::TargetComplete(
                                         target_complete_info,
                                     )))
@@ -174,7 +175,9 @@ impl HydratedInfo {
                                 &rule_kind_lookup,
                                 &named_set_of_files_lookup,
                                 &mut buffered_tce,
-                            ) {
+                            )
+                            .await
+                            {
                                 tx.send(Some(HydratedInfo::TargetComplete(target_complete_info)))
                                     .await
                                     .unwrap();
@@ -254,7 +257,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_no_history() {
-        let (tx, rx) = broadcast::channel(128);
+        let (tx, rx) = async_channel::unbounded();
         let mut child_rx = HydratedInfo::build_transformer(rx);
 
         tx.send(BuildEventAction::BuildEvent(bazel_event::BazelBuildEvent {
@@ -265,6 +268,7 @@ mod tests {
                 success: false,
             }),
         }))
+        .await
         .unwrap();
 
         let received_res = child_rx.next().await.unwrap();
@@ -281,7 +285,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_with_files() {
-        let (tx, rx) = broadcast::channel(128);
+        let (tx, rx) = async_channel::unbounded();
         let mut child_rx = HydratedInfo::build_transformer(rx);
 
         tx.send(BuildEventAction::BuildEvent(bazel_event::BazelBuildEvent {
@@ -296,6 +300,7 @@ mod tests {
                 success: false,
             }),
         }))
+        .await
         .unwrap();
 
         let received_res = child_rx.next().await.unwrap();
@@ -315,7 +320,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_with_history() {
-        let (tx, rx) = broadcast::channel(128);
+        let (tx, rx) = async_channel::unbounded();
         let mut child_rx = HydratedInfo::build_transformer(rx);
 
         tx.send(BuildEventAction::BuildEvent(bazel_event::BazelBuildEvent {
@@ -324,6 +329,7 @@ mod tests {
                 rule_kind: String::from("my_madeup_rule"),
             }),
         }))
+        .await
         .unwrap();
 
         tx.send(BuildEventAction::BuildEvent(bazel_event::BazelBuildEvent {
@@ -338,6 +344,7 @@ mod tests {
                 success: false,
             }),
         }))
+        .await
         .unwrap();
 
         let received_res = child_rx.next().await.unwrap();
@@ -357,7 +364,7 @@ mod tests {
 
     #[tokio::test]
     async fn state_resets_on_new_build() {
-        let (tx, rx) = broadcast::channel(128);
+        let (tx, rx) = async_channel::unbounded();
         let mut child_rx = HydratedInfo::build_transformer(rx);
 
         tx.send(BuildEventAction::BuildEvent(bazel_event::BazelBuildEvent {
@@ -366,9 +373,10 @@ mod tests {
                 rule_kind: String::from("my_madeup_rule"),
             }),
         }))
+        .await
         .unwrap();
 
-        tx.send(BuildEventAction::BuildCompleted).unwrap();
+        tx.send(BuildEventAction::BuildCompleted).await.unwrap();
 
         tx.send(BuildEventAction::BuildEvent(bazel_event::BazelBuildEvent {
             event: bazel_event::Evt::ActionCompleted(bazel_event::ActionCompletedEvt {
@@ -382,6 +390,7 @@ mod tests {
                 success: false,
             }),
         }))
+        .await
         .unwrap();
 
         let received_res = child_rx.next().await.unwrap();
