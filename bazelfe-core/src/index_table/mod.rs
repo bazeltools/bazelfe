@@ -350,10 +350,17 @@ impl<'a> IndexTable {
             let key_id = self.maybe_update_id(key_id).await;
 
             for e in found_classes.into_iter() {
-                jvm_segments_indexed += if self.replace_with_id(&e, key_id, popularity).await {
-                    1
-                } else {
-                    0
+                jvm_segments_indexed += {
+                    let ret = if e.starts_with("//") {
+                        self.replace_with_id(&e, key_id, popularity).await
+                    } else {
+                        self.insert_with_id(&e, key_id, popularity).await
+                    };
+                    if ret {
+                        1
+                    } else {
+                        0
+                    }
                 };
                 for clazz in crate::label_utils::class_name_to_prefixes(e.as_str()) {
                     jvm_segments_indexed += if self.insert_with_id(clazz, key_id, popularity).await
