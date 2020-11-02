@@ -7,7 +7,7 @@ pub struct Priority(pub u16);
 
 impl PartialOrd for Priority {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        other.0.partial_cmp(&self.0)
+        Some(self.cmp(&other))
     }
 }
 
@@ -17,11 +17,27 @@ impl Ord for Priority {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct IndexTableValueEntry {
     ///Todo impl the ordering's manually so the order of fields here doesn't matter
     pub priority: Priority,
     pub target: usize,
+}
+
+impl PartialOrd for IndexTableValueEntry {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for IndexTableValueEntry {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match self.priority.cmp(&other.priority) {
+            std::cmp::Ordering::Less => std::cmp::Ordering::Less,
+            std::cmp::Ordering::Equal => self.target.cmp(&other.target),
+            std::cmp::Ordering::Greater => std::cmp::Ordering::Greater,
+        }
+    }
 }
 
 pub struct IterGuard<'a> {
@@ -77,6 +93,7 @@ impl IndexTableValue {
                 target: target as usize,
             });
         }
+        v.sort();
 
         Self(Arc::new(RwLock::new(v)))
     }

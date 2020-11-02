@@ -38,7 +38,7 @@ pub struct IndexTable {
 }
 #[derive(Clone, Debug)]
 pub struct DebugIndexTable {
-    pub data_map: HashMap<String, String>,
+    pub data_map: Vec<(String, Vec<(u16, String)>)>,
 }
 
 impl<'a> Default for IndexTable {
@@ -69,19 +69,23 @@ impl<'a> IndexTable {
             id_to_str.push(String::from_utf8_lossy(&*e).into_owned());
         }
 
-        let mut res_map = HashMap::new();
+        let mut res_lst: Vec<(String, Vec<(u16, String)>)> = Vec::default();
 
         let tbl = tbl.read().await;
         for (k, v) in tbl.iter() {
             let data = v.clone().as_vec().await;
-            let mut res_str = String::from("");
+            let mut v = Vec::default();
             for d in data.iter() {
-                res_str = format!("{},{}:{}", res_str, d.priority.0, id_to_str[d.target]);
+                v.push((d.priority.0, id_to_str[d.target].clone()));
             }
-            res_map.insert(k.clone(), res_str);
+            // this should be reverse sorted by the priorities.
+            v.sort();
+            v.reverse();
+            res_lst.push((k.clone(), v));
         }
+        res_lst.sort();
 
-        DebugIndexTable { data_map: res_map }
+        DebugIndexTable { data_map: res_lst }
     }
 
     pub async fn add_transformation_mapping(&self, src_str: String, dest_str: String) {
@@ -343,13 +347,11 @@ impl<'a> IndexTable {
         if should_update {
             let _ = {
                 let mut w = self.id_to_ctime.write().await;
-                if key_id > w.len() {
+                if key_id >= w.len() {
                     w.resize_with((key_id + 100) as usize, Default::default);
                 }
-                w.insert(key_id, newest_ctime);
+                w[key_id] = newest_ctime;
             };
-
-            let popularity = self.get_popularity(key_id).await;
 
             let mut found_classes = Vec::default();
             for p in paths.into_iter() {
@@ -358,6 +360,8 @@ impl<'a> IndexTable {
 
             let mut jvm_segments_indexed = 0;
             let key_id = self.maybe_update_id(key_id).await;
+
+            let popularity = self.get_popularity(key_id).await;
 
             for e in found_classes.into_iter() {
                 jvm_segments_indexed += {

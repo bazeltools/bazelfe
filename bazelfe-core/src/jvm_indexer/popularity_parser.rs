@@ -32,6 +32,8 @@ fn consume_quoted_strings(ln: &str) -> IResult<&str, Vec<String>> {
 }
 use walkdir::{DirEntry, WalkDir};
 
+use crate::label_utils::sanitize_label;
+
 fn is_not_hidden(entry: &DirEntry) -> bool {
     entry
         .file_name()
@@ -77,51 +79,13 @@ pub async fn build_popularity_map() -> HashMap<String, usize> {
                             None
                         };
                         if let Some(r) = value {
-                            local_result.push(r);
+                            local_result.push(sanitize_label(r));
                         }
                     }
                 }
                 local_result
             }));
         });
-
-    // let mut directory_join_handles = Vec::default();
-    // directory_join_handles.push(tokio::fs::read_dir(root_dir.clone()));
-    // while !directory_join_handles.is_empty() {
-    //     let mut current_dir = directory_join_handles.pop().unwrap().await.unwrap();
-    //     while let Some(entry) = current_dir.next_entry().await.unwrap() {
-    //         let path = entry.path();
-    //         let filename_str: String = path
-    //             .file_name()
-    //             .as_ref()
-    //             .map(|e| e.clone())
-    //             .unwrap()
-    //             .to_str()
-    //             .unwrap()
-    //             .to_string();
-
-    //         let file_type = std::fs::symlink_metadata(&path).unwrap();
-
-    //         if file_type.is_dir() {
-    //             directory_join_handles.push(tokio::fs::read_dir(path.clone()));
-    //         } else {
-    //             let parent_path_str: String = path
-    //                 .parent()
-    //                 .unwrap()
-    //                 .strip_prefix(&root_dir)
-    //                 .unwrap()
-    //                 .to_str()
-    //                 .as_ref()
-    //                 .map(|e| e.clone())
-    //                 .unwrap()
-    //                 .to_string();
-
-    //             if file_type.is_file() && filename_str == "BUILD" {
-    //
-    //             }
-    //         }
-    //     }
-    // }
 
     for join_handle in join_handles {
         for r in join_handle.await.unwrap().into_iter() {
