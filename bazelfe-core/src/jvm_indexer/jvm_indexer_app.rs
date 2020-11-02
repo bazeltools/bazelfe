@@ -13,8 +13,6 @@ use tonic::transport::Server;
 
 use bazelfe_protos::*;
 
-use bazelfe_core::build_events::build_event_server::bazel_event;
-use bazelfe_core::build_events::build_event_server::BuildEventAction;
 use bazelfe_core::build_events::hydrated_stream::HydratedInfo;
 use bazelfe_core::jvm_indexer::bazel_query::BazelQuery;
 use bazelfe_core::{
@@ -23,6 +21,13 @@ use bazelfe_core::{
         event_stream_listener::EventStreamListener, index_new_results::IndexNewResults,
         BazelEventHandler,
     },
+};
+use bazelfe_core::{
+    build_events::build_event_server::bazel_event,
+    hydrated_stream_processors::target_completed_tracker::TargetCompletedTracker,
+};
+use bazelfe_core::{
+    build_events::build_event_server::BuildEventAction, jvm_indexer::bazel_query::ExecuteResult,
 };
 use google::devtools::build::v1::publish_build_event_server::PublishBuildEventServer;
 use rand::Rng;
@@ -67,12 +72,21 @@ struct Opt {
     refresh_bazel_deps_only: bool,
 }
 
-fn build_rule_queries(allowed_rule_kinds: &Vec<String>, target_roots: &Vec<String>) -> Vec<String> {
+#[derive(Clone, Debug)]
+struct RuleQuery {
+    pub kinds: Vec<String>,
+    pub root: String,
+}
+fn build_rule_queries(
+    allowed_rule_kinds: &Vec<String>,
+    target_roots: &Vec<String>,
+) -> Vec<RuleQuery> {
     let mut result = Vec::default();
     for target_root in target_roots {
-        for allowed_kind in allowed_rule_kinds.iter() {
-            result.push(format!("kind({}, {})", allowed_kind, target_root))
-        }
+        result.push(RuleQuery {
+            kinds: allowed_rule_kinds.clone(),
+            root: target_root.clone(),
+        });
     }
     result
 }
@@ -103,6 +117,56 @@ async fn spawn_bazel_attempt(
     };
 
     recv_task.await.unwrap();
+    res
+}
+
+async fn run_query_chunk<B: BazelQuery>(
+    chunk: &[RuleQuery],
+    bazel_query: &B,
+    all_targets_to_use: &mut HashMap<String, HashSet<String>>,
+    banned_roots: &HashSet<String>,
+) -> ExecuteResult {
+    let union_with_spaces_bytes = " union ".as_bytes();
+
+    let merged = {
+        let mut buffer = Vec::default();
+
+        for rq in chunk {
+            if !banned_roots.contains(&rq.root) {
+                for kind in rq.kinds.iter() {
+                    let x = format!("kind({}, {})", kind, rq.root);
+                    if buffer.is_empty() {
+                        buffer.write_all(&x.as_bytes()).unwrap();
+                    } else {
+                        buffer.write_all(&union_with_spaces_bytes).unwrap();
+                        buffer.write_all(&x.as_bytes()).unwrap();
+                    }
+                }
+            }
+        }
+        String::from_utf8(buffer).unwrap()
+    };
+    let res = bazel_query
+        .execute(&vec![
+            String::from("query"),
+            String::from("--keep_going"),
+            String::from("--noimplicit_deps"),
+            String::from("--output"),
+            String::from("label_kind"),
+            merged,
+        ])
+        .await;
+
+    for ln in res.stdout.lines() {
+        let entries: Vec<&str> = ln.split_whitespace().collect();
+        if entries.len() == 3 {
+            let entry = all_targets_to_use
+                .entry(entries[0].to_string())
+                .or_insert(HashSet::default());
+            entry.insert(entries[2].to_string());
+        }
+    }
+
     res
 }
 
@@ -148,7 +212,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let allowed_rule_kinds: Vec<String> = vec![
         "java_library",
         "java_import",
+        "java_test",
         "scala_import",
+        "scala_test",
         "scala_library",
         "scala_proto_library",
         "scala_macro_library",
@@ -233,7 +299,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let all_targets_to_use = if opt.refresh_bazel_deps_only {
         running_refresh_mode = true;
-        let mut all_targets_to_use: HashMap<String, Vec<String>> = HashMap::default();
+        let mut all_targets_to_use: HashMap<String, HashSet<String>> = HashMap::default();
         let merged = {
             let mut buffer = Vec::default();
 
@@ -263,8 +329,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if entries.len() == 3 {
                 let entry = all_targets_to_use
                     .entry(entries[0].to_string())
-                    .or_insert(Vec::default());
-                entry.push(entries[2].to_string());
+                    .or_insert(HashSet::default());
+                entry.insert(entries[2].to_string());
             }
         }
         all_targets_to_use
@@ -282,7 +348,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             String::from("WORKSPACE"),
             String::from("bazel_tools"),
             String::from("remote_java_tools_linux"),
+            String::from("jdk-default"),
+            String::from("remote_java_tools_linux"),
         ];
+
         if let Some(r) = parse_current_repo_name() {
             info!("Current repo name identified as {}", r);
             blacklist_repos.push(r);
@@ -293,9 +362,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(ln) = line.strip_prefix("//external:") {
                 let mut ok = true;
                 for root in &blacklist_repos {
-                    if ln.contains(root) {
+                    if ln.starts_with(root) {
                         ok = false;
                     }
+                }
+                // Some externals are bind mounts
+                if ln.contains("/") {
+                    ok = false;
                 }
 
                 if ok {
@@ -312,61 +385,141 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let all_queries = build_rule_queries(&allowed_rule_kinds, &target_roots);
 
-        let query_rule_attr_batch_size: usize = 2000;
+        let query_rule_attr_batch_size: usize = 10;
         info!("Extracting targets with an allowed rule kind, gives rise to {} total queries, we will union them to bazel in batches of size: {}", all_queries.len(), query_rule_attr_batch_size);
 
-        let mut all_targets_to_use: HashMap<String, Vec<String>> = HashMap::default();
+        let mut all_targets_to_use: HashMap<String, HashSet<String>> = HashMap::default();
         let mut processed_count = 0;
-        for chunk in all_queries.chunks(query_rule_attr_batch_size) {
-            let merged = {
-                let mut buffer = Vec::default();
+        let mut remaining_chunks: Vec<Vec<RuleQuery>> = all_queries
+            .chunks(query_rule_attr_batch_size)
+            .into_iter()
+            .map(|e| e.to_vec())
+            .collect();
+        lazy_static! {
+            static ref NO_REPO_REGEX: Regex =
+                Regex::new(r#".*repository '(.*)' could not be resolved.$"#).unwrap();
+                static ref OTHER_NO_REPO_REGEX: Regex =
+                Regex::new(r#".*No such repository '(@.*)'"#).unwrap();
 
-                for x in chunk {
-                    if buffer.is_empty() {
-                        buffer.write_all(&x.as_bytes()).unwrap();
-                    } else {
-                        buffer.write_all(&union_with_spaces_bytes).unwrap();
-                        buffer.write_all(&x.as_bytes()).unwrap();
-                    }
-                }
-                String::from_utf8(buffer).unwrap()
-            };
-            let res = bazel_query
-                .execute(&vec![
-                    String::from("query"),
-                    String::from("--keep_going"),
-                    String::from("--noimplicit_deps"),
-                    String::from("--output"),
-                    String::from("label_kind"),
-                    merged,
-                ])
+                static ref NOT_RESOLVABLE: Regex =
+                Regex::new(r#".*error loading package '(@.*)//.*': Unable to find package for .*could not be resolved.$"#).unwrap();
+
+                static ref NO_SUCH_FILE: Regex =
+                    Regex::new(r#".*error loading package '(@.*)//.*': cannot load '.*': no such file$"#).unwrap();
+
+                static ref NO_TARGETS_FOUND: Regex =
+                    Regex::new(r#".*Skipping '(@.*)//...': no targets found beneath.*$"#).unwrap();
+
+        }
+
+        let mut global_banned_roots = HashSet::new();
+        while let Some(current_chunk) = remaining_chunks.pop() {
+            if current_chunk.len() > 0 {
+                let res = run_query_chunk(
+                    &current_chunk,
+                    &bazel_query,
+                    &mut all_targets_to_use,
+                    &global_banned_roots,
+                )
                 .await;
+                processed_count += 1;
 
-            for ln in res.stdout.lines() {
-                let entries: Vec<&str> = ln.split_whitespace().collect();
-                if entries.len() == 3 {
-                    let entry = all_targets_to_use
-                        .entry(entries[0].to_string())
-                        .or_insert(Vec::default());
-                    entry.push(entries[2].to_string());
+                if res.exit_code != 0 {
+                    if current_chunk.len() == 1 {
+                        warn!(
+                            "Unable to query into {}, may not have full target coverage.{}",
+                            current_chunk[0].root, res.stderr
+                        );
+                    } else {
+                        info!("Ran into some failures in query, will sub-divide to ensure we don't miss things. (was using chunk size ~ {}, will 1/4 that)", current_chunk.len());
+                        let mut must_go_solo = HashSet::new();
+                        let mut have_unmatched_line = false;
+                        for ln in res.stderr.lines() {
+                            let mut matched: bool = false;
+                            if let Some(captures) = NO_REPO_REGEX.captures(&ln) {
+                                let repo = captures.get(1).unwrap().as_str().to_string();
+                                info!("Ignoring non existant repo: {}", repo);
+                                global_banned_roots.insert(repo);
+                                matched = true;
+                            }
+
+                            if let Some(captures) = OTHER_NO_REPO_REGEX.captures(&ln) {
+                                let repo = captures.get(1).unwrap().as_str().to_string();
+                                info!("Ignoring non existant repo: {}", repo);
+                                global_banned_roots.insert(repo);
+                                matched = true;
+                            }
+
+                            if let Some(captures) = NO_SUCH_FILE.captures(&ln) {
+                                must_go_solo.insert(captures.get(1).unwrap().as_str().to_string());
+                                matched = true;
+                            }
+                            if let Some(captures) = NOT_RESOLVABLE.captures(&ln) {
+                                must_go_solo.insert(captures.get(1).unwrap().as_str().to_string());
+                                matched = true;
+                            }
+
+                            if let Some(captures) = NO_TARGETS_FOUND.captures(&ln) {
+                                must_go_solo.insert(captures.get(1).unwrap().as_str().to_string());
+                                matched = true;
+                            }
+
+                            if !matched {
+                                if ln.starts_with("ERROR:") {
+                                    have_unmatched_line = true;
+                                }
+                            }
+                        }
+
+                        if have_unmatched_line {
+                            let mut next_chunk_len = current_chunk.len() / 4;
+                            if next_chunk_len == 0 {
+                                next_chunk_len = 1;
+                            };
+                            let mut next_v: Vec<Vec<RuleQuery>> = Vec::default();
+
+                            for e in current_chunk.iter() {
+                                if must_go_solo.contains(&e.root) {
+                                    next_v.push(vec![e.clone()]);
+                                }
+                            }
+                            let next_v: Vec<Vec<RuleQuery>> = current_chunk
+                                .chunks(next_chunk_len)
+                                .into_iter()
+                                .map(|e| {
+                                    e.to_vec()
+                                        .into_iter()
+                                        .filter(|e| {
+                                            !must_go_solo.contains(&e.root)
+                                                && !global_banned_roots.contains(&e.root)
+                                        })
+                                        .collect()
+                                })
+                                .collect();
+                            remaining_chunks.extend(next_v.into_iter());
+                        }
+                    }
+                } else {
+                    info!(
+                        "After {} bazel query calls, found {} matching targets",
+                        processed_count,
+                        all_targets_to_use.values().fold(0, |acc, e| acc + e.len())
+                    );
                 }
-                // all_targets_to_use.push(ln.to_string());
             }
-            processed_count += chunk.len();
-            info!(
-                "After {} queries, found {} matching targets",
-                processed_count,
-                all_targets_to_use.values().fold(0, |acc, e| acc + e.len())
-            );
         }
         all_targets_to_use
     };
 
     info!("Found targets");
+    let mut all_found_targets = HashSet::new();
     for (k, v) in all_targets_to_use.iter() {
         let spaces = 70 - k.len();
         let space_section = std::iter::repeat(" ").take(spaces).collect::<String>();
         info!("{}{}{}", k, space_section, v.len());
+        for e in v.iter() {
+            all_found_targets.insert(e.clone());
+        }
     }
 
     let index_table = if running_refresh_mode && opt.index_output_location.exists() {
@@ -376,13 +529,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         bazelfe_core::index_table::IndexTable::default()
     };
 
-    let processors: Vec<Box<dyn BazelEventHandler>> =
-        vec![Box::new(IndexNewResults::new(index_table.clone()))];
+    let target_completed_tracker = TargetCompletedTracker::new(all_found_targets);
+
+    let processors: Vec<Box<dyn BazelEventHandler>> = vec![
+        Box::new(IndexNewResults::new(index_table.clone())),
+        Box::new(target_completed_tracker.clone()),
+    ];
     let aes = EventStreamListener::new(processors);
 
-    let ret = bazelfe_core::jvm_indexer::popularity_parser::build_popularity_map().await;
+    let popularity_data =
+        bazelfe_core::jvm_indexer::popularity_parser::build_popularity_map().await;
 
-    for (k, v) in ret {
+    for (k, v) in popularity_data {
         index_table.set_popularity_str(k, v as u16).await
     }
 
@@ -489,6 +647,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut file = std::fs::File::create(&opt.index_output_location).unwrap();
 
     index_table.write(&mut file).await;
+
+    // When operating on bazel deps the number of targets we feed into build isn't filtered to the particular types
+    // this means we wind up not building everything since some don't show up in the BEP.
+    if !opt.refresh_bazel_deps_only {
+        let tt_map = target_completed_tracker.expected_targets.lock().await;
+        for e in tt_map.iter() {
+            if e.starts_with("//") {
+                println!("Didn't build target: {}", e);
+            }
+        }
+    }
 
     Ok(())
 }

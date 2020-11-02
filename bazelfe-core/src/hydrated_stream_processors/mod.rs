@@ -3,6 +3,7 @@ use crate::build_events::hydrated_stream;
 pub mod event_stream_listener;
 pub mod index_new_results;
 pub mod process_bazel_failures;
+pub mod target_completed_tracker;
 
 #[derive(Clone, Debug)]
 pub enum BuildEventResponse {
