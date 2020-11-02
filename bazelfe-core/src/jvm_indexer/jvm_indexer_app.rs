@@ -349,7 +349,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             String::from("bazel_tools"),
             String::from("remote_java_tools_linux"),
             String::from("jdk-default"),
-            String::from("remote_java_tools_linux"),
+            String::from("remote_java_tools_darwin"),
+            String::from("remote_java_tools_windows"),
+            String::from("remote_coverage_tools"),
+            String::from("io_bazel_stardoc"),
+            String::from("io_bazel"),
         ];
 
         if let Some(r) = parse_current_repo_name() {

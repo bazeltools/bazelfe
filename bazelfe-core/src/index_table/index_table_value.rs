@@ -193,28 +193,13 @@ impl IndexTableValue {
                     return false;
                 }
 
-                let insert_position =
-                    match write_vec.binary_search_by_key(&Priority(priority), |e| e.priority) {
-                        Ok(current_position) => current_position,
-                        Err(should_be_at_position) => should_be_at_position,
-                    };
-                if insert_position == position {
-                    write_vec[position].priority = Priority(priority);
-                    return true;
-                }
                 write_vec.remove(position);
-                let insert_position = if insert_position < position {
-                    insert_position
-                } else {
-                    insert_position - 1
-                };
-                write_vec.insert(
-                    insert_position,
-                    IndexTableValueEntry {
-                        target: target_v,
-                        priority: Priority(priority),
-                    },
-                );
+
+                write_vec.push(IndexTableValueEntry {
+                    target: target_v,
+                    priority: Priority(priority),
+                });
+                write_vec.sort();
                 if write_vec.len() > 10 {
                     write_vec.truncate(10);
                 }
@@ -222,18 +207,11 @@ impl IndexTableValue {
             None => {
                 let mut write_vec = self.0.write().await;
 
-                let insert_position =
-                    match write_vec.binary_search_by_key(&Priority(priority), |e| e.priority) {
-                        Ok(current_position) => current_position,
-                        Err(should_be_at_position) => should_be_at_position,
-                    };
-                write_vec.insert(
-                    insert_position,
-                    IndexTableValueEntry {
-                        target: target_v,
-                        priority: Priority(priority),
-                    },
-                );
+                write_vec.push(IndexTableValueEntry {
+                    target: target_v,
+                    priority: Priority(priority),
+                });
+                write_vec.sort();
                 if write_vec.len() > 10 {
                     write_vec.truncate(10);
                 }
