@@ -172,17 +172,22 @@ pub mod bazel_event {
                                     .and_then(|e| match e {
                                         build_event_stream::build_event_id::Id::TargetCompleted(
                                             target_completed_id,
-                                        ) => Some(target_completed_id.label.clone()),
+                                        ) => Some((
+                                            target_completed_id.label.clone(),
+                                            Some(target_completed_id.aspect.clone())
+                                                .filter(|e| !e.is_empty()),
+                                        )),
                                         _ => None,
                                     });
 
-                            target_label_opt.and_then(|label| {
+                            target_label_opt.and_then(|(label, aspect)| {
                                 v.payload.as_ref().and_then(|e| match e {
                                     build_event_stream::build_event::Payload::Completed(
                                         target_completed,
                                     ) => Some(Evt::TargetCompleted(TargetCompletedEvt {
                                         success: target_completed.success,
                                         label: label,
+                                        aspect: aspect,
                                         output_groups: target_completed.output_group.clone(),
                                     })),
                                     _ => None,
@@ -286,6 +291,7 @@ pub mod bazel_event {
     #[derive(Clone, PartialEq, Debug)]
     pub struct TargetCompletedEvt {
         pub label: String,
+        pub aspect: Option<String>,
         pub success: bool,
         pub output_groups: Vec<build_event_stream::OutputGroup>,
     }
@@ -605,6 +611,7 @@ mod tests {
                 bazel_event::BazelBuildEvent {
                     event: bazel_event::Evt::TargetCompleted(bazel_event::TargetCompletedEvt {
                         label: label_name,
+                        aspect: None,
                         success: true,
                         output_groups: vec![OutputGroup {
                             name: String::from("default"),

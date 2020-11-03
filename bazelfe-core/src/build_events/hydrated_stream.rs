@@ -40,6 +40,7 @@ pub struct ActionSuccessInfo {
 #[derive(Clone, PartialEq, Debug)]
 pub struct TargetCompleteInfo {
     pub label: String,
+    pub aspect: Option<String>,
     pub success: bool,
     pub target_kind: Option<String>,
     pub output_files: Vec<build_event_stream::file::File>,
@@ -109,6 +110,7 @@ async fn tce_event(
         let target_complete_info = TargetCompleteInfo {
             output_files: output_files,
             target_kind: rule_kind_lookup.get(&tce.label).map(|e| e.clone()),
+            aspect: tce.aspect,
             label: tce.label,
             success: tce.success,
         };

@@ -315,12 +315,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if index_table.is_mutated() {
         debug!("Writing out index file...");
 
-        if let Some(e) = &opt.index_input_location {
-            if let Some(parent) = e.parent() {
+        if let Some(target_path) = &opt.index_input_location {
+            if let Some(parent) = target_path.parent() {
                 std::fs::create_dir_all(parent).unwrap();
             }
-            let mut file = std::fs::File::create(&e).unwrap();
-            index_table.write(&mut file).await
+            let mut temp_path = target_path.clone();
+            temp_path.set_extension("tmp");
+
+            let mut file = std::fs::File::create(&temp_path).unwrap();
+            index_table.write(&mut file).await;
+            drop(file);
+            std::fs::rename(temp_path, target_path)
+                .expect("Expected to be able to rename our temp path into the final location.");
         }
         debug!("Index write complete.");
     }
