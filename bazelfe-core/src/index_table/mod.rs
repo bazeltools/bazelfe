@@ -225,7 +225,8 @@ impl<'a> IndexTable {
 
         let signature = rdr.read_u64::<LittleEndian>().unwrap();
         if signature != 7654323579 {
-            panic!("Invalid signature, {} not a bazel runner file?", signature);
+            error!("Invalid signature: {}, expected: 7654323579. Indicates corruption/bad file. Will continue without.", signature);
+            return IndexTable::default();
         }
         let file_version_number = rdr.read_u16::<LittleEndian>().unwrap();
 
