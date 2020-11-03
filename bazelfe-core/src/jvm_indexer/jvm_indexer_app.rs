@@ -70,6 +70,11 @@ struct Opt {
     /// Refresh bazel deps only
     #[clap(long)]
     refresh_bazel_deps_only: bool,
+
+    /// Blacklist out these targets. Usually this matters when 3rdparty targets are poorly behaved and are not fully shaded
+    /// and may include classes from other targets.
+    #[clap(long)]
+    blacklist_targets_from_index: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug)]
@@ -209,6 +214,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let bazel_binary_path: String = (&opt.bazel_binary_path.to_str().unwrap()).to_string();
 
+    let target_blacklist = (&opt.blacklist_targets_from_index)
+        .clone()
+        .unwrap_or_default();
+
     let allowed_rule_kinds: Vec<String> = vec![
         "java_library",
         "java_import",
@@ -281,7 +290,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let mut values = values.clone();
                     while !values.is_empty() {
                         let e = values.pop().unwrap();
-                        if e.starts_with("@") {
+                        if e.starts_with("@")
+                            && (e.ends_with("//jar:jar") || e.ends_with("//jar:file"))
+                        {
                             results_mapping.insert(e, bazel_dep.to_string());
                         } else if e.starts_with("//external") {
                             if let Some(r) = mapping.get(&e) {
@@ -532,6 +543,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         bazelfe_core::index_table::IndexTable::default()
     };
+
+    for e in target_blacklist {
+        index_table.add_target_to_blacklist(e).await
+    }
 
     let target_completed_tracker = TargetCompletedTracker::new(all_found_targets);
 

@@ -35,6 +35,7 @@ pub struct IndexTable {
     id_to_target_vec: Arc<RwLock<Vec<Arc<Vec<u8>>>>>,
     id_to_target_reverse_map: Arc<RwLock<HashMap<Arc<Vec<u8>>, usize>>>,
     mutated: Arc<AtomicBool>,
+    target_blacklist: Arc<RwLock<HashSet<usize>>>,
 }
 #[derive(Clone, Debug)]
 pub struct DebugIndexTable {
@@ -56,6 +57,7 @@ impl<'a> IndexTable {
             id_to_target_vec: Arc::new(RwLock::new(Vec::new())),
             id_to_target_reverse_map: Arc::new(RwLock::new(HashMap::new())),
             mutated: Arc::new(AtomicBool::new(false)),
+            target_blacklist: Arc::new(RwLock::new(HashSet::default())),
         }
     }
 
@@ -88,13 +90,23 @@ impl<'a> IndexTable {
         DebugIndexTable { data_map: res_lst }
     }
 
+    pub async fn add_target_to_blacklist(&self, target: String) {
+        let id = self.maybe_insert_target_string(target).await;
+        let mut lock = self.target_blacklist.write().await;
+        lock.insert(id);
+    }
+
     pub async fn add_transformation_mapping(&self, src_str: String, dest_str: String) {
         let src_id = self.maybe_insert_target_string(src_str).await;
         let dest_id = self.maybe_insert_target_string(dest_str).await;
-        let mut lock = self.id_to_replacement_id.write().await;
-        lock.insert(src_id, dest_id);
+        let blacklist = self.target_blacklist.read().await;
+        if !blacklist.contains(&dest_id) {
+            let mut lock = self.id_to_replacement_id.write().await;
+            lock.insert(src_id, dest_id);
+        }
     }
 
+    /// use the replacement map to maybe change the target key into a replacement one via a transform mapping.
     pub async fn maybe_update_id(&self, src_id: usize) -> usize {
         let lock = self.id_to_replacement_id.read().await;
         match lock.get(&src_id) {
@@ -135,7 +147,7 @@ impl<'a> IndexTable {
         let mut file = std::io::BufWriter::with_capacity(512 * 1024, file);
 
         file.write_u64::<LittleEndian>(7654323579 as u64).unwrap();
-        file.write_u16::<LittleEndian>(0 as u16).unwrap();
+        file.write_u16::<LittleEndian>(1 as u16).unwrap();
 
         let _ = {
             let id_vec = self.id_to_target_vec.read().await;
@@ -192,6 +204,13 @@ impl<'a> IndexTable {
             file.write_u64::<LittleEndian>(*v as u64).unwrap();
         }
 
+        let target_blacklist = self.target_blacklist.read().await;
+        file.write_u64::<LittleEndian>(target_blacklist.len() as u64)
+            .unwrap();
+        for e in target_blacklist.iter() {
+            file.write_u64::<LittleEndian>(*e as u64).unwrap();
+        }
+
         file.flush().unwrap();
     }
 
@@ -208,7 +227,7 @@ impl<'a> IndexTable {
         if signature != 7654323579 {
             panic!("Invalid signature, {} not a bazel runner file?", signature);
         }
-        let _ = rdr.read_u16::<LittleEndian>().unwrap();
+        let file_version_number = rdr.read_u16::<LittleEndian>().unwrap();
 
         let num_vec_entries = rdr.read_u64::<LittleEndian>().unwrap();
         let mut index_buf = Vec::default();
@@ -269,6 +288,19 @@ impl<'a> IndexTable {
         }
         debug!("Complete id_to_replacement_id");
 
+        let target_blacklist = if file_version_number >= 1 {
+            let target_blacklist_size = rdr.read_u64::<LittleEndian>().unwrap();
+            let mut target_blacklist = HashSet::default();
+            for _ in 0..target_blacklist_size {
+                let k = rdr.read_u64::<LittleEndian>().unwrap();
+                target_blacklist.insert(k as usize);
+            }
+            target_blacklist
+        } else {
+            HashSet::default()
+        };
+        debug!("Complete target blacklist");
+
         debug!("Finished parsing..");
 
         Self {
@@ -279,6 +311,7 @@ impl<'a> IndexTable {
             id_to_target_vec: Arc::new(RwLock::new(index_buf)),
             id_to_target_reverse_map: Arc::new(RwLock::new(reverse_hashmap)),
             mutated: Arc::new(AtomicBool::new(false)),
+            target_blacklist: Arc::new(RwLock::new(target_blacklist)),
         }
     }
 
@@ -338,6 +371,7 @@ impl<'a> IndexTable {
 
         let should_update = {
             let read_guard = self.id_to_ctime.read().await;
+
             match read_guard.get(key_id) {
                 None => true,
                 Some(prev) => *prev < newest_ctime,
@@ -441,6 +475,7 @@ impl<'a> IndexTable {
             id_to_target_vec: Arc::new(RwLock::new(id_to_target_vec)),
             id_to_target_reverse_map: Arc::new(RwLock::new(id_to_target_reverse_map)),
             mutated: Arc::new(AtomicBool::new(false)),
+            target_blacklist: Arc::new(RwLock::new(HashSet::default())),
         }
     }
     pub fn from_hashmap(m: HashMap<String, Vec<(u16, String)>>) -> Self {
@@ -459,6 +494,9 @@ impl<'a> IndexTable {
     where
         S: Into<Cow<'b, str>>,
     {
+        if self.target_blacklist.read().await.contains(&target_id) {
+            return false;
+        }
         let mut guard = self.tbl_map.write().await;
         let k: Cow<'b, str> = key.into();
 
@@ -491,6 +529,9 @@ impl<'a> IndexTable {
     where
         S: Into<Cow<'b, str>>,
     {
+        if self.target_blacklist.read().await.contains(&target_id) {
+            return false;
+        }
         let mut guard = self.tbl_map.write().await;
         let k: Cow<'b, str> = key.into();
 
@@ -711,6 +752,59 @@ mod tests {
                     target: 1
                 },
             ]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_adding_entries_to_blacklist() {
+        let index = IndexTable::default();
+
+        index
+            .add_target_to_blacklist(String::from(
+                "@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305",
+            ))
+            .await;
+
+        assert_eq!(
+            index
+                .get("org.apache.parquet.thrift.test.TestPerson.TestPersonTupleScheme")
+                .await
+                .is_none(),
+            true
+        );
+
+        // Insert new elements, one in blacklist, one not.
+        index
+            .insert(
+                "javax.annotation.foo.boof.Nullable",
+                (
+                    236,
+                    String::from("@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr305"),
+                ),
+            )
+            .await;
+
+        index
+            .insert(
+                "javax.annotation.foo.boof.Nullable",
+                (
+                    232,
+                    String::from("@third_party_jvm//3rdparty/jvm/com/google/code/findbugs:jsr306"),
+                ),
+            )
+            .await;
+
+        assert_eq!(
+            index
+                .get("javax.annotation.foo.boof.Nullable")
+                .await
+                .unwrap()
+                .as_vec()
+                .await,
+            vec![IndexTableValueEntry {
+                priority: Priority(232),
+                target: 1
+            }]
         );
     }
 
