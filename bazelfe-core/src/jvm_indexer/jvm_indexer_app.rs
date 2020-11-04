@@ -291,7 +291,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     while !values.is_empty() {
                         let e = values.pop().unwrap();
                         if e.starts_with("@")
-                            && (e.ends_with("//jar:jar") || e.ends_with("//jar:file"))
+                            && (e.ends_with("//jar:jar")
+                                || e.ends_with("//jar:file")
+                                || e.ends_with("//jar"))
                         {
                             results_mapping.insert(e, bazel_dep.to_string());
                         } else if e.starts_with("//external") {
