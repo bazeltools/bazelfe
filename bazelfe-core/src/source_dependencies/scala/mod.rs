@@ -19,7 +19,7 @@ fn is_valid_import_segment_item(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
 }
 
-fn tuple_extractor<'a, E>() -> impl Fn(&'a str) -> IResult<&str, (&str, Option<&str>), E>
+fn tuple_extractor<'a, E>() -> impl FnMut(&'a str) -> IResult<&str, (&str, Option<&str>), E>
 where
     E: ParseError<&'a str>,
 {
@@ -50,7 +50,7 @@ where
         |e| (e.1, e.3.map(|r| r.2)),
     )
 }
-fn consume_selector<'a, E>() -> impl Fn(&'a str) -> IResult<&str, SelectorType, E>
+fn consume_selector<'a, E>() -> impl FnMut(&'a str) -> IResult<&str, SelectorType, E>
 where
     E: ParseError<&'a str>,
 {

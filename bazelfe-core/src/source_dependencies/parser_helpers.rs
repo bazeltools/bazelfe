@@ -4,9 +4,9 @@ use nom::{combinator::map, sequence::tuple, IResult};
 
 pub(in crate::source_dependencies) fn parser_to_unit<'a, F: 'a, O, E: ParseError<&'a str>>(
     inner: F,
-) -> impl Fn(&'a str) -> IResult<&'a str, (), E>
+) -> impl FnMut(&'a str) -> IResult<&'a str, (), E>
 where
-    F: Fn(&'a str) -> IResult<&'a str, O, E>,
+    F: FnMut(&'a str) -> IResult<&'a str, O, E>,
 {
     map(inner, |_| ())
 }
