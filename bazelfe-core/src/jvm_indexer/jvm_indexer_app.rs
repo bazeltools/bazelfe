@@ -221,9 +221,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let allowed_rule_kinds: Vec<String> = vec![
         "java_library",
         "java_import",
-        "java_test",
         "scala_import",
-        "scala_test",
         "scala_library",
         "scala_proto_library",
         "scala_macro_library",
@@ -254,6 +252,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let bazel_deps_deps = bazel_query
                 .execute(&vec![
                     String::from("query"),
+                    String::from("--noimplicit_deps"),
                     format!("deps({}//3rdparty/jvm/...)", bazel_deps_root),
                     String::from("--output"),
                     String::from("graph"),
@@ -295,7 +294,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 || e.ends_with("//jar:file")
                                 || e.ends_with("//jar"))
                         {
-                            results_mapping.insert(e, bazel_dep.to_string());
+                            match e.split("//").next() {
+                                Some(prefix) => {
+                                    results_mapping.insert(
+                                        format!("{}//jar:jar", prefix),
+                                        bazel_dep.to_string(),
+                                    );
+                                    results_mapping.insert(
+                                        format!("{}//jar:file", prefix),
+                                        bazel_dep.to_string(),
+                                    );
+                                }
+                                None => (),
+                            }
                         } else if e.starts_with("//external") {
                             if let Some(r) = mapping.get(&e) {
                                 values.extend(r.clone().into_iter());
@@ -612,6 +623,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         aes: &EventStreamListener,
         batch_idx: usize,
         chunk: &mut Vec<String>,
+        target_completed_tracker: &TargetCompletedTracker,
     ) {
         let batch_idx = batch_idx;
         let batch_start_time = Instant::now();
@@ -622,11 +634,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ];
         current_args.extend(chunk.drain(..));
         let bazel_result = spawn_bazel_attempt(&sender_arc, &aes, bes_port, &current_args).await;
+
+        let remaining_targets = target_completed_tracker.expected_targets.lock().await.len();
+
         info!(
-            "Batch {} had exit code: {} after {} seconds",
+            "Batch {} had exit code: {} after {} seconds, estimated from remaining targets: {}",
             batch_idx,
             bazel_result.exit_code,
-            batch_start_time.elapsed().as_secs()
+            batch_start_time.elapsed().as_secs(),
+            remaining_targets
         );
     };
 
@@ -645,6 +661,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &aes,
                 batch_idx,
                 &mut batch_elements,
+                &target_completed_tracker,
             )
             .await;
             batch_idx += 1;
@@ -658,6 +675,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &aes,
         batch_idx,
         &mut batch_elements,
+        &target_completed_tracker,
     )
     .await;
 
