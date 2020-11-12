@@ -72,6 +72,8 @@ fn extract_symbol(
     result: &mut Vec<JavaClassImportRequest>,
 ) {
     lazy_static! {
+        // We match a slew of things like locations around methods, or otherwise, we don't mind 
+        // where these come from. We will attempt to use the symbol info to figure out the lookup
         static ref SYMBOL_RE: Regex =
             Regex::new(r"^\s*symbol:\s*(class|variable)\s*(.*)$").unwrap();
     }
@@ -101,6 +103,8 @@ fn extract_symbol(
                 crate::source_dependencies::SelectorType::SelectorList(_) => (),
                 crate::source_dependencies::SelectorType::NoSelector => {
                     if import.prefix_section.ends_with(missing_symbol) {
+                        // If we find matching imports, these are ~pretty high quality signals of what we are looking for is this.
+                        // Zero out the lower quality signals and just inject these with higher priority
                         packages.clear();
                         result.push(JavaClassImportRequest {
                             src_file_name: src_file_name.to_string(),
@@ -142,7 +146,10 @@ pub(in crate::error_extraction) fn extract(
         if let Some((ref mut vec, ref src_file_name)) = process_batch {
             if vec.len() < 3 {
                 vec.push(ln.to_string());
+                // on ~just len == 3
+                // the other branch of the outer if may never fire if there is only 3 lines.
                 if vec.len() == 3 {
+                    // we only need 3 lines of an error to try extract the symbol information
                     if let Some(file_data) = file_parse_cache.load_file(src_file_name) {
                         extract_symbol(vec, src_file_name, file_data, &mut batch_result);
                     }
@@ -151,8 +158,11 @@ pub(in crate::error_extraction) fn extract(
                 vec.push(ln.to_string());
 
                 let mut tmp = Vec::default();
+                // If given the use of the 4th line we extracted with a package too, this is higher priority
+                // so ditch the symbol info and use this instead!
                 extract_symbol_with_package(vec, src_file_name, &mut tmp);
 
+                // panic!("{:#?}", tmp);
                 if tmp.is_empty() {
                     result.extend(batch_result.drain(..));
                 } else {
@@ -179,6 +189,8 @@ pub(in crate::error_extraction) fn extract(
                                 e.prefix_section.to_string(),
                             );
                             result.push(class_import_request);
+                            // Don't bother using fallback mechanisms, we have an import matched.
+                            process_batch = None;
                         }
                     }
                 }
@@ -195,6 +207,36 @@ pub(in crate::error_extraction) fn extract(
 mod tests {
 
     use super::*;
+
+    #[test]
+    fn test_not_a_member_of_package_on_import_line() {
+        let mut file_cache = super::super::FileParseCache::init_from_par(
+            String::from("src/main/java/com/example/foo/Example.java"),
+            crate::source_dependencies::ParsedFile {
+                package_name: None,
+                imports: vec![crate::source_dependencies::Import {
+                    line_number: 16,
+                    // this should get ignorred since we are on a package item.
+                    prefix_section: String::from("javax.foo.bar.baz.annotation.Nullable"),
+                    suffix: crate::source_dependencies::SelectorType::NoSelector,
+                }],
+            },
+        );
+        let sample_output =
+            "src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
+    import javax.annotation.Nullable;
+                           ^
+      symbol:   class Nullable
+      location: package javax.annotation";
+        assert_eq!(
+            extract(sample_output, &mut file_cache),
+            Some(vec![build_class_import_request(
+                String::from("src/main/java/com/example/foo/Example.java"),
+                "javax.foo.bar.baz.annotation.Nullable".to_string()
+            )])
+        );
+    }
+
     #[test]
     fn test_not_a_member_of_package_error() {
         let mut file_cache = super::super::FileParseCache::init_from_par(
@@ -203,13 +245,14 @@ mod tests {
                 package_name: None,
                 imports: vec![crate::source_dependencies::Import {
                     line_number: 16,
-                    prefix_section: String::from("javax.annotation.Nullable"),
+                    // this should get ignorred since we are on a package item.
+                    prefix_section: String::from("javax.foo.bar.baz.annotation.Nullable"),
                     suffix: crate::source_dependencies::SelectorType::NoSelector,
                 }],
             },
         );
         let sample_output =
-            "src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
+            "src/main/java/com/example/foo/Example.java:22: error: cannot find symbol
     import javax.annotation.Nullable;
                            ^
       symbol:   class Nullable
