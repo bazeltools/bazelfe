@@ -162,7 +162,6 @@ pub(in crate::error_extraction) fn extract(
                 // so ditch the symbol info and use this instead!
                 extract_symbol_with_package(vec, src_file_name, &mut tmp);
 
-                // panic!("{:#?}", tmp);
                 if tmp.is_empty() {
                     result.extend(batch_result.drain(..));
                 } else {
@@ -408,4 +407,5 @@ mod tests {
             }])
         );
     }
+
 }

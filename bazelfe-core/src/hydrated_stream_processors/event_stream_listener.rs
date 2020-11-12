@@ -32,9 +32,9 @@ impl EventStreamListener {
                         None => (),
                         Some(e) => {
                             for p in processors.iter() {
-                                if let Some(r) = p.process_event(&e).await {
+                                for r in p.process_event(&e).await.into_iter() {
                                     tx.send(r).await.unwrap();
-                                };
+                                }
                             }
                         }
                     }

@@ -73,9 +73,9 @@ impl FileParseCache {
     }
 }
 
-pub fn extract_errors(input: &str) -> Vec<super::ClassImportRequest> {
+pub fn extract_errors(input: &str) -> Vec<super::ActionRequest> {
     let mut file_parse_cache: FileParseCache = FileParseCache::new();
-    let combined_vec: Vec<super::ClassImportRequest> = vec![
+    let combined_vec: Vec<super::ActionRequest> = vec![
         error_is_not_a_member_of_package::extract(input, &mut file_parse_cache),
         error_object_not_found::extract(input),
         error_symbol_is_missing_from_classpath::extract(input),
@@ -123,13 +123,18 @@ pub fn extract_errors(input: &str) -> Vec<super::ClassImportRequest> {
             }
         }
         .into_iter()
-        .filter_map(|o| {
+        .map(|o| {
             if o.class_name.find('.').is_none() {
-                None
+                let suffix = ClassSuffixMatch {
+                    suffix: o.class_name,
+                    src_fn: o.src_fn.to_string(),
+                };
+                debug!("Found class suffix request: {:#?}", suffix);
+                super::ActionRequest::Suffix(suffix)
             } else {
                 let r = o.to_class_import_request();
                 debug!("Found class import request: {:#?}", r);
-                Some(r)
+                super::ActionRequest::Prefix(r)
             }
         })
     })

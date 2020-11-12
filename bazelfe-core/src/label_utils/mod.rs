@@ -74,10 +74,10 @@ pub fn class_name_to_prefixes(class_name: &str) -> Vec<String> {
         } else {
             long_running_string = segment.to_string();
         }
-        // we only allow things more specific than `com.example.foo`
+        // we only allow things more specific than `com.example`
         // otherwise its just too generic and a dice roll.
         // and don't allow the original class
-        if loop_cnt > 2 && long_running_string != class_name {
+        if loop_cnt > 1 && long_running_string != class_name {
             result.push(long_running_string.to_string())
         }
         loop_cnt += 1;
@@ -116,7 +116,7 @@ mod tests {
     fn test_class_name_to_prefixes() {
         assert_eq!(
             class_name_to_prefixes("a.b.c.d.e"),
-            vec![String::from("a.b.c.d"),]
+            vec![String::from("a.b.c"), String::from("a.b.c.d")]
         );
 
         let expected: Vec<String> = vec![];
@@ -286,6 +286,7 @@ mod tests {
                         String::from("asdf.sadf.sdfwer.sdf.adsf.wer"),
                         String::from("asdf.sadf.sdfwer.sdf.adsf"),
                         String::from("asdf.sadf.sdfwer.sdf"),
+                        String::from("asdf.sadf.sdfwer"),
                     ]
                 )
             ]

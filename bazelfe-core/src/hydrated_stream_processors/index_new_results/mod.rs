@@ -34,7 +34,7 @@ impl super::BazelEventHandler for IndexNewResults {
     async fn process_event(
         &self,
         event: &hydrated_stream::HydratedInfo,
-    ) -> Option<super::BuildEventResponse> {
+    ) -> Vec<super::BuildEventResponse> {
         self.process(event).await
     }
 }
@@ -47,9 +47,14 @@ impl IndexNewResults {
     pub async fn process(
         &self,
         event: &hydrated_stream::HydratedInfo,
-    ) -> Option<super::BuildEventResponse> {
+    ) -> Vec<super::BuildEventResponse> {
         let r = match event {
             hydrated_stream::HydratedInfo::TargetComplete(tce) => {
+                if let Some(target_kind) = &tce.target_kind {
+                    if target_kind.contains("_test") {
+                        return Vec::default();
+                    }
+                }
                 let label = tce.label.clone();
                 let mut files = Vec::default();
 
@@ -88,5 +93,7 @@ impl IndexNewResults {
             _ => None,
         };
         r.map(|r| super::BuildEventResponse::IndexedResults(r))
+            .into_iter()
+            .collect()
     }
 }
