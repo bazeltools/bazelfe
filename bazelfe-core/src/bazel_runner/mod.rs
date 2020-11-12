@@ -129,7 +129,7 @@ pub async fn execute_bazel_output_control<S: Into<String> + Clone>(
 
     let mut child_stdout = child.stdout.take().expect("Child didn't have a stdout");
 
-    tokio::spawn(async move {
+    let stdout = tokio::spawn(async move {
         let mut bytes_read = 1;
         let mut buffer = [0; 1024];
         let mut stdout = tokio::io::stdout();
@@ -144,7 +144,7 @@ pub async fn execute_bazel_output_control<S: Into<String> + Clone>(
 
     let mut child_stderr = child.stderr.take().expect("Child didn't have a stderr");
 
-    tokio::spawn(async move {
+    let stderr = tokio::spawn(async move {
         let mut bytes_read = 1;
         let mut buffer = [0; 1024];
         let mut stderr = tokio::io::stderr();
@@ -156,6 +156,9 @@ pub async fn execute_bazel_output_control<S: Into<String> + Clone>(
         }
     });
     let result = child.await.expect("The command wasn't running");
+
+    stderr.await.unwrap();
+    stdout.await.unwrap();
 
     SUB_PROCESS_PID.store(0, Ordering::SeqCst);
 
