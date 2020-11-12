@@ -42,10 +42,10 @@ struct Opt {
 
     #[clap(required = true, min_values = 1)]
     passthrough_args: Vec<String>,
+
+    #[clap(long, env = "DISABLE_ACTION_STORIES_ON_SUCCESS")]
+    disable_action_stories_on_success: bool,
 }
-// BuildEventService<bazel_event::BazelBuildEvent>,
-// Arc<Mutex<Option<broadcast::Sender<BuildEventAction<bazel_event::BazelBuildEvent>>>>>,
-// broadcast::Receiver<BuildEventAction<bazel_event::BazelBuildEvent>>,
 
 struct ProcessorActivity {
     pub jvm_segments_indexed: u32,
@@ -53,23 +53,54 @@ struct ProcessorActivity {
     pub target_story_actions: HashMap<String, Vec<TargetStory>>,
 }
 impl ProcessorActivity {
-    pub fn merge(&mut self, o: &ProcessorActivity) {
-        for (_, story_entries) in o.target_story_actions.iter() {
-            for story_entry in story_entries {
-                match story_entry.action {
-                    TargetStoryAction::Success => {
-                        self.target_story_actions.remove(&story_entry.target);
-                    }
-                    _ => {
-                        match self.target_story_actions.get_mut(&story_entry.target) {
-                            None => {
-                                self.target_story_actions
-                                    .insert(story_entry.target.clone(), vec![story_entry.clone()]);
-                            }
-                            Some(existing) => existing.push(story_entry.clone()),
-                        };
+    pub fn merge(&mut self, o: ProcessorActivity, disable_action_stories_on_success: bool) {
+        'target_loop: for (target, story_entries) in o.target_story_actions.into_iter() {
+            let mut story_vec = match self.target_story_actions.remove(&target) {
+                None => vec![],
+                Some(existing) => existing,
+            };
+
+            story_vec.extend(story_entries.into_iter());
+
+            let mut last_success_when = None;
+            for e in story_vec.iter() {
+                if let TargetStoryAction::Success = e.action {
+                    if let Some(prev) = last_success_when {
+                        if prev < e.when {
+                            last_success_when = Some(e.when);
+                        }
+                    } else {
+                        last_success_when = Some(e.when);
                     }
                 }
+            }
+            let updated_vec = if let Some(last_success_when) = last_success_when {
+                if disable_action_stories_on_success {
+                    break 'target_loop;
+                }
+                let res_vec: Vec<TargetStory> = story_vec
+                    .into_iter()
+                    .filter(|e| {
+                        if let TargetStoryAction::Success = e.action {
+                            e.when >= last_success_when
+                        } else {
+                            true
+                        }
+                    })
+                    .collect();
+
+                // if all thats left is just a single Success, then nothing to ever reasonably report/noop.
+                if res_vec.len() == 1 {
+                    Vec::default()
+                } else {
+                    res_vec
+                }
+            } else {
+                story_vec
+            };
+
+            if updated_vec.len() > 0 {
+                self.target_story_actions.insert(target, updated_vec);
             }
         }
 
@@ -222,11 +253,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     debug!("Index loading complete..");
 
+    let process_build_failures = Box::new(ProcessBazelFailures::new(
+        index_table.clone(),
+        buildozer_driver::from_binary_path(opt.buildozer_path),
+    ));
     let processors: Vec<Box<dyn BazelEventHandler>> = vec![
-        Box::new(ProcessBazelFailures::new(
-            index_table.clone(),
-            buildozer_driver::from_binary_path(opt.buildozer_path),
-        )),
+        process_build_failures.clone(),
         Box::new(IndexNewResults::new(index_table.clone())),
     ];
     let aes = EventStreamListener::new(processors);
@@ -264,14 +296,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut running_total = ProcessorActivity::default();
     let mut final_exit_code = 0;
+    let disable_action_stories_on_success = opt.disable_action_stories_on_success;
     while attempts < 15 {
         attempts += 1;
+        process_build_failures.advance_epoch().await;
 
         let (processor_activity, bazel_result) =
             spawn_bazel_attempt(&sender_arc, &aes, bes_port, &passthrough_args).await;
-        running_total.merge(&processor_activity);
+        let actions_taken = processor_activity.actions_taken;
+        running_total.merge(processor_activity, disable_action_stories_on_success);
         final_exit_code = bazel_result.exit_code;
-        if bazel_result.exit_code == 0 || processor_activity.actions_taken == 0 {
+        if bazel_result.exit_code == 0 || actions_taken == 0 {
             break;
         }
     }
@@ -279,17 +314,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // we should be very quiet if the build is successful/we added nothing.
     if attempts > 1 {
         eprintln!("--------------------Bazel Runner Report--------------------");
-        eprintln!("Bazel exit code: {}", final_exit_code);
-        eprintln!("Bazel build attempts: {}", attempts);
-        eprintln!("Actions taken: {}", running_total.actions_taken);
-        eprintln!(
-            "Jvm fragments (classes/packages) added to index: {}",
-            running_total.jvm_segments_indexed
-        );
-        if final_exit_code != 0 && running_total.target_story_actions.len() > 0 {
-            eprintln!(
-                "\nBuild still failed. Active stories about failed targets/what we've tried:"
-            );
+
+        if running_total.target_story_actions.len() > 0 {
+            if final_exit_code != 0 {
+                eprintln!(
+                    "\nBuild still failed. Active stories about failed targets/what we've tried:"
+                );
+            } else {
+                eprintln!("\nBuild still succeeded, but asked to print action stories anyway:");
+            }
             let mut v: Vec<(String, Vec<TargetStory>)> =
                 running_total.target_story_actions.into_iter().collect();
             v.sort_by_key(|k| k.0.clone());
@@ -299,16 +332,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 for entry in story_entries.into_iter() {
                     match entry.action {
                         TargetStoryAction::AddedDependency { added_what, why } => {
-                            eprintln!("\tAdded Dependency {}, because: {}", added_what, why);
+                            eprintln!("\tAdded Dependency {}\n\t\tReason: {}", added_what, why);
                         }
                         TargetStoryAction::RemovedDependency { removed_what, why } => {
-                            eprintln!("\tRemoved Dependency {}, because: {}", removed_what, why);
+                            eprintln!("\tRemoved Dependency {}\n\t\tReason: {}", removed_what, why);
                         }
-                        TargetStoryAction::Success => panic!("Shouldn't have a success item here"),
+                        TargetStoryAction::Success => eprintln!("\tTarget suceeded"),
                     }
                 }
             }
         }
+        eprintln!("Bazel exit code: {}", final_exit_code);
+        eprintln!("Bazel build attempts: {}", attempts);
+        eprintln!("Actions taken: {}", running_total.actions_taken);
+        eprintln!(
+            "Jvm fragments (classes/packages) added to index: {}",
+            running_total.jvm_segments_indexed
+        );
         eprintln!("------------------------------------------------------------\n");
     }
 
