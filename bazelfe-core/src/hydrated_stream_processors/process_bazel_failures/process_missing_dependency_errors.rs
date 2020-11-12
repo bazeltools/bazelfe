@@ -497,7 +497,6 @@ mod tests {
             }],
             Vec::default()
         ).await;
-
     }
 
     #[tokio::test]
