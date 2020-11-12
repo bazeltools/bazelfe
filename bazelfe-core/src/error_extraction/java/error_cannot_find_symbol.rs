@@ -72,7 +72,7 @@ fn extract_symbol(
     result: &mut Vec<JavaClassImportRequest>,
 ) {
     lazy_static! {
-        // We match a slew of things like locations around methods, or otherwise, we don't mind 
+        // We match a slew of things like locations around methods, or otherwise, we don't mind
         // where these come from. We will attempt to use the symbol info to figure out the lookup
         static ref SYMBOL_RE: Regex =
             Regex::new(r"^\s*symbol:\s*(class|variable)\s*(.*)$").unwrap();
@@ -162,7 +162,6 @@ pub(in crate::error_extraction) fn extract(
                 // so ditch the symbol info and use this instead!
                 extract_symbol_with_package(vec, src_file_name, &mut tmp);
 
-                // panic!("{:#?}", tmp);
                 if tmp.is_empty() {
                     result.extend(batch_result.drain(..));
                 } else {

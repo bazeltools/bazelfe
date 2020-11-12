@@ -9,11 +9,13 @@ use std::{
 use lazy_static::lazy_static;
 
 use crate::{
-    build_events::hydrated_stream::ActionFailedErrorInfo, buildozer_driver::Buildozer,
-    error_extraction, index_table,
+    build_events::hydrated_stream::ActionFailedErrorInfo,
+    buildozer_driver::Buildozer,
+    error_extraction::{self, ActionRequest},
+    index_table,
 };
 
-use dashmap::DashSet;
+use super::CurrentState;
 
 fn is_potentially_valid_target(target_kind: &Option<String>, label: &str) -> bool {
     lazy_static! {
@@ -58,7 +60,9 @@ fn is_potentially_valid_target(target_kind: &Option<String>, label: &str) -> boo
     }
 }
 
-fn output_error_paths(err_data: &ActionFailedErrorInfo) -> Vec<std::path::PathBuf> {
+pub(in crate::hydrated_stream_processors::process_bazel_failures) fn output_error_paths(
+    err_data: &ActionFailedErrorInfo,
+) -> Vec<std::path::PathBuf> {
     err_data
         .output_files
         .iter()
@@ -81,23 +85,18 @@ fn output_error_paths(err_data: &ActionFailedErrorInfo) -> Vec<std::path::PathBu
 async fn path_to_import_requests(
     error_info: &ActionFailedErrorInfo,
     path_to_use: &PathBuf,
-    candidate_import_requests: &mut Vec<error_extraction::ClassImportRequest>,
-    suffix_requests: &mut Vec<error_extraction::ClassSuffixMatch>,
+    action_requests: &mut Vec<ActionRequest>,
 ) {
     let loaded_path = tokio::fs::read_to_string(path_to_use).await.unwrap();
 
-    candidate_import_requests.extend(error_extraction::extract_errors(
-        &error_info.target_kind,
-        &loaded_path,
-    ));
-    suffix_requests.extend(error_extraction::extract_suffix_errors(
+    action_requests.extend(error_extraction::extract_errors(
         &error_info.target_kind,
         &loaded_path,
     ));
 }
 
 pub async fn load_up_ignore_references<T: Buildozer + Clone + Send + Sync + 'static>(
-    global_previous_seen: &DashSet<String>,
+    global_previous_seen: &mut HashSet<String>,
     buildozer: &T,
     action_failed_error_info: &ActionFailedErrorInfo,
 ) -> HashSet<String> {
@@ -125,69 +124,105 @@ pub async fn load_up_ignore_references<T: Buildozer + Clone + Send + Sync + 'sta
     to_ignore
 }
 
-#[derive(Debug, PartialEq)]
-enum ActionRequest {
-    Prefix(String),
-    Suffix(error_extraction::ClassSuffixMatch),
+pub fn expand_candidate_import_requests(action_requests: Vec<ActionRequest>) -> Vec<ActionRequest> {
+    let mut res_action_requests = Vec::default();
+    let mut candidate_import_requests = Vec::default();
+
+    for e in action_requests {
+        match e {
+            ActionRequest::Prefix(p) => candidate_import_requests.push(p),
+            ActionRequest::Suffix(s) => res_action_requests.push(ActionRequest::Suffix(s)),
+        }
+    }
+
+    let mut candidate_import_requests =
+        crate::label_utils::prepare_class_import_requests(candidate_import_requests);
+
+    let mut extras = Vec::default();
+
+    for c in candidate_import_requests.iter() {
+        if !c.exact_only {
+            let r = crate::label_utils::class_name_to_prefixes(&c.class_name);
+            let len = r.len();
+            for (offset, sub_pre) in r.into_iter().enumerate() {
+                let inner_offset = ((len - offset) as i32) * -1;
+                extras.push(error_extraction::ClassImportRequest {
+                    class_name: sub_pre,
+                    priority: -50 + c.priority + inner_offset,
+                    exact_only: true,
+                    src_fn: c.src_fn.clone(),
+                });
+            }
+        }
+    }
+
+    candidate_import_requests.extend(extras.into_iter());
+
+    for y in candidate_import_requests.into_iter() {
+        res_action_requests.push(ActionRequest::Prefix(y));
+    }
+
+    res_action_requests.sort();
+    res_action_requests.dedup();
+
+    res_action_requests
 }
 
 async fn generate_all_action_requests(
     action_failed_error_info: &ActionFailedErrorInfo,
-) -> Vec<Vec<ActionRequest>> {
-    let mut prefix_candidate_import_requests: Vec<error_extraction::ClassImportRequest> = vec![];
-    let mut suffix_requests: Vec<error_extraction::ClassSuffixMatch> = vec![];
+) -> Vec<ActionRequest> {
+    let mut action_requests: Vec<ActionRequest> = vec![];
     for path in output_error_paths(&action_failed_error_info).into_iter() {
         path_to_import_requests(
             &action_failed_error_info,
             &path.into(),
-            &mut prefix_candidate_import_requests,
-            &mut suffix_requests,
+            &mut action_requests,
         )
         .await
     }
-
-    Box::new(
-        crate::label_utils::expand_candidate_import_requests(prefix_candidate_import_requests)
-            .into_iter()
-            .map(|(_, inner)| {
-                inner
-                    .into_iter()
-                    .map(|e| ActionRequest::Prefix(e))
-                    .collect::<Vec<ActionRequest>>()
-            }),
-    )
-    .chain(
-        suffix_requests
-            .into_iter()
-            .map(|e| vec![ActionRequest::Suffix(e)]),
-    )
-    .collect()
+    expand_candidate_import_requests(action_requests)
 }
 pub async fn process_missing_dependency_errors<T: Buildozer>(
-    global_previous_seen: &DashSet<String>,
+    current_state: &mut CurrentState,
     buildozer: T,
     action_failed_error_info: &ActionFailedErrorInfo,
     index_table: &index_table::IndexTable,
+    epoch: usize,
 ) -> super::Response {
-    let ignore_dep_references: HashSet<String> =
-        load_up_ignore_references(global_previous_seen, &buildozer, action_failed_error_info).await;
-    let all_requests: Vec<Vec<ActionRequest>> =
-        generate_all_action_requests(&action_failed_error_info).await;
-    let (response, local_previous_seen) = inner_process_missing_dependency_errors(
-        buildozer,
-        &action_failed_error_info.label,
-        &action_failed_error_info.target_kind,
-        index_table,
-        all_requests,
-        ignore_dep_references,
+    if epoch <= current_state.epoch {
+        return super::Response::new(Vec::default());
+    }
+    let ignore_dep_references: HashSet<String> = load_up_ignore_references(
+        &mut current_state.ignore_list,
+        &buildozer,
+        action_failed_error_info,
     )
     .await;
+    let all_requests: Vec<ActionRequest> =
+        generate_all_action_requests(&action_failed_error_info).await;
+    debug!("generate_all_action_requests: {:#?}", all_requests);
+    let (response, local_previous_seen, remove_from_ignore_list) =
+        inner_process_missing_dependency_errors(
+            buildozer,
+            &action_failed_error_info.label,
+            &action_failed_error_info.target_kind,
+            index_table,
+            all_requests,
+            ignore_dep_references,
+            &mut current_state.added_target_for_class,
+        )
+        .await;
 
     // concat the global perm ignore with the local_previous seen data
     // this becomes our next global ignore for this target
     for e in local_previous_seen.into_iter() {
-        global_previous_seen.insert(e);
+        current_state.ignore_list.insert(e);
     }
+    for e in remove_from_ignore_list.into_iter() {
+        current_state.ignore_list.remove(&e);
+    }
+
+    current_state.epoch = epoch;
     response
 }
 async fn inner_process_missing_dependency_errors<T: Buildozer>(
@@ -195,61 +230,148 @@ async fn inner_process_missing_dependency_errors<T: Buildozer>(
     label: &str,
     target_kind: &Option<String>,
     index_table: &index_table::IndexTable,
-    all_requests: Vec<Vec<ActionRequest>>,
+    all_requests: Vec<ActionRequest>,
     ignore_dep_references: HashSet<String>,
-) -> (super::Response, HashSet<String>) {
+    previous_added: &mut HashMap<ActionRequest, HashSet<String>>,
+) -> (super::Response, HashSet<String>, HashSet<String>) {
     let mut local_previous_seen: HashSet<String> = HashSet::new();
+    let mut local_previous_seen_prefix: HashSet<String> = HashSet::new();
+
+    let mut to_remove: HashSet<String> = HashSet::new();
     let mut target_stories = Vec::default();
     let unsanitized_label = label;
     let label = crate::label_utils::sanitize_label(String::from(label));
 
-    for req in all_requests.into_iter() {
-        'class_entry_loop: for req in req.into_iter() {
-            let candidates = match &req {
-                ActionRequest::Prefix(class_name) => index_table.get_or_guess(class_name).await,
-                ActionRequest::Suffix(suffix) => index_table.get_from_suffix(&suffix.suffix).await,
-            };
-            for target_entry in &candidates.read_iter().await {
-                let target: String = index_table
-                    .decode_string(target_entry.target)
-                    .await
-                    .unwrap();
-
-                if !ignore_dep_references.contains(&target)
-                    && is_potentially_valid_target(&target_kind, &target)
-                {
-                    // If our top candidate hits to be a local previous seen stop
-                    // processing this class
-                    if local_previous_seen.contains(&target) {
-                        break 'class_entry_loop;
-                    }
-
-                    // otherwise... add the dependency with buildozer here
-                    // then add it ot the local seen dependencies
-                    info!(
-                        "Buildozer action: add dependency {:?} to {:?}",
-                        target, &label
-                    );
-                    buildozer.add_dependency(&label, &target).await.unwrap();
-                    target_stories.push(super::TargetStory {
-                        target: unsanitized_label.to_string(),
-                        action: super::TargetStoryAction::AddedDependency {
-                            added_what: target.clone(),
-                            why: String::from("Saw a missing dependency error"),
-                        },
-                        when: Instant::now(),
-                    });
-
-                    local_previous_seen.insert(target.clone());
-
-                    // Now that we have a version with a match we can jump right out to the outside
-                    break 'class_entry_loop;
+    let mut total_added = 0;
+    'req_point: for req in all_requests.into_iter() {
+        let candidates = match &req {
+            ActionRequest::Suffix(suffix) => index_table.get_from_suffix(&suffix.suffix).await,
+            ActionRequest::Prefix(prefix) => {
+                if local_previous_seen_prefix.contains(&prefix.class_name) {
+                    continue 'req_point;
+                } else {
+                    local_previous_seen_prefix.insert(prefix.class_name.clone());
                 }
+                // We dont guess if its exact only. Proxy for lower confidence.
+
+                if prefix.exact_only {
+                    index_table
+                        .get(&prefix.class_name)
+                        .await
+                        .unwrap_or_default()
+                } else {
+                    index_table.get_or_guess(&prefix.class_name).await
+                }
+            }
+        };
+        let why = match &req {
+            ActionRequest::Prefix(prefix) => format!(
+                "Saw missing dependency: prefix/class: {}, for: {}",
+                &prefix.class_name, &prefix.src_fn
+            ),
+            ActionRequest::Suffix(s) => format!(
+                "Saw missing dependency:  suffix match: {}, for: {}",
+                s.suffix, s.src_fn
+            ),
+        };
+
+        let previous_added_for_req = match previous_added.get_mut(&req) {
+            Some(req) => req,
+            None => {
+                previous_added.insert(req.clone(), Default::default());
+                previous_added.get_mut(&req).unwrap()
+            }
+        };
+
+        for prev in previous_added_for_req.iter() {
+            let prev_deps = buildozer.print_deps(&label).await.unwrap();
+
+            if prev_deps.contains(&prev) {
+                debug!(
+                    "Buildozer action: remove dependency {:?} to {:?}",
+                    prev, &label
+                );
+                buildozer.remove_dependency(&label, &prev).await.unwrap();
+
+                target_stories.push(super::TargetStory {
+                    target: unsanitized_label.to_string(),
+                    action: super::TargetStoryAction::RemovedDependency {
+                        removed_what: prev.clone(),
+                        why: format!(
+                            "Removed previously added dependency that didn't solve issue. on: {:?}",
+                            req
+                        ),
+                    },
+                    when: Instant::now(),
+                });
+
+                to_remove.insert(prev.clone());
+            } else {
+                debug!(
+                    "Was going to remove: {}  from {} but isn't in the deps anymore so no op",
+                    prev, label
+                );
+            }
+        }
+
+        let mut target_to_add = None;
+        for target_entry in &candidates.read_iter().await {
+            let target: String = index_table
+                .decode_string(target_entry.target)
+                .await
+                .unwrap();
+            if !ignore_dep_references.contains(&target)
+                && is_potentially_valid_target(&target_kind, &target)
+            {
+                // If our top candidate hits to be a local previous seen stop
+                // processing this class
+                if local_previous_seen.contains(&target) {
+                    continue 'req_point;
+                }
+
+                if previous_added_for_req.contains(&target) {
+                    continue 'req_point;
+                }
+
+                if target_to_add.is_none() {
+                    target_to_add = Some(target.clone());
+                }
+            }
+        }
+        if let Some(target) = target_to_add {
+            // otherwise... add the dependency with buildozer here
+            // then add it ot the local seen dependencies
+            debug!(
+                "Buildozer action: add dependency {:?} to {:?}",
+                target, &label
+            );
+            previous_added_for_req.insert(target.clone());
+
+            total_added += 1;
+            buildozer.add_dependency(&label, &target).await.unwrap();
+            target_stories.push(super::TargetStory {
+                target: unsanitized_label.to_string(),
+                action: super::TargetStoryAction::AddedDependency {
+                    added_what: target.clone(),
+                    why: why.clone(),
+                },
+                when: Instant::now(),
+            });
+
+            local_previous_seen.insert(target.clone());
+            if total_added < 5 {
+                continue 'req_point;
+            } else {
+                break 'req_point;
             }
         }
     }
 
-    (super::Response::new(target_stories), local_previous_seen)
+    (
+        super::Response::new(target_stories),
+        local_previous_seen,
+        to_remove,
+    )
 }
 
 #[cfg(test)]
@@ -260,7 +382,7 @@ mod tests {
 
     use crate::{
         buildozer_driver::ExecuteResultError,
-        error_extraction::{ClassImportRequest, ClassSuffixMatch},
+        error_extraction::{ActionRequest, ClassImportRequest, ClassSuffixMatch},
     };
 
     use super::*;
@@ -328,16 +450,27 @@ mod tests {
             .expect("Should be able to write to temp file");
         let tempfile_path = tempfile.into_temp_path();
 
-        let mut candidate_import_requests: Vec<error_extraction::ClassImportRequest> =
-            Vec::default();
-        let mut suffix_requests: Vec<error_extraction::ClassSuffixMatch> = Vec::default();
+        let mut action_requests: Vec<ActionRequest> = Vec::default();
         path_to_import_requests(
             &action_failed_error_info,
             &(*tempfile_path).to_path_buf(),
-            &mut candidate_import_requests,
-            &mut suffix_requests,
+            &mut action_requests,
         )
         .await;
+
+        let mut candidate_import_requests: Vec<error_extraction::ClassImportRequest> =
+            Vec::default();
+        let mut suffix_requests: Vec<error_extraction::ClassSuffixMatch> = Vec::default();
+        for e in action_requests.into_iter() {
+            match e {
+                ActionRequest::Prefix(p) => {
+                    candidate_import_requests.push(p);
+                }
+                ActionRequest::Suffix(p) => {
+                    suffix_requests.push(p);
+                }
+            }
+        }
 
         assert_eq!(
             candidate_import_requests,
@@ -364,7 +497,6 @@ mod tests {
             }],
             Vec::default()
         ).await;
-
     }
 
     #[tokio::test]
@@ -372,7 +504,7 @@ mod tests {
         async fn test_content_to_expected_result(
             content: &str,
             target_kind: &str,
-            expected_requests: Vec<Vec<ActionRequest>>,
+            expected_requests: Vec<ActionRequest>,
         ) {
             let mut tempfile = tempfile::NamedTempFile::new().expect("Can make a temp file");
             tempfile
@@ -408,28 +540,55 @@ mod tests {
             one warning found
             one error found",
             "scala_library",
-            vec![
-                vec![ActionRequest::Prefix(String::from("com.example.foo"))]
-            ],
+
+                vec![ActionRequest::Prefix(
+                    ClassImportRequest {
+                    class_name: String::from("com.example.foo"),
+    exact_only: false,
+    src_fn: String::from("scala::extract_not_a_member_of_package"),
+    priority: 5})]
         ).await;
 
         // we are just testing that we load the file and invoke the paths, so we just need ~any error types in here.
         test_content_to_expected_result(
             "src/main/java/com/example/foo/bar/Baz.java:205: error: cannot access JSONObject
-                Blah key = Blah.myfun(jwk);
-                
-src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
-    import javax.annotation.foo.bar.baz.Nullable;
-                           ^
-      symbol:   class Nullable
-      location: package javax.annotation.foo.bar.baz",
+                        Blah key = Blah.myfun(jwk);
+
+        src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
+            import javax.annotation.foo.bar.baz.Nullable;
+                                   ^
+              symbol:   class Nullable
+              location: package javax.annotation.foo.bar.baz",
             "java_library",
             vec![
-                vec![
-                    ActionRequest::Prefix(String::from("javax.annotation.foo.bar.baz.Nullable")),
-                    ActionRequest::Prefix(String::from("javax.annotation.foo.bar.baz")),
-                    ActionRequest::Prefix(String::from("javax.annotation.foo.bar")),
-                ],
+                ActionRequest::Prefix(ClassImportRequest {
+                    class_name: String::from("javax.annotation.foo.bar.baz.Nullable"),
+                    exact_only: false,
+                    src_fn: String::from("java::cannot_find_symbol"),
+                    priority: 1,
+                }),
+                ActionRequest::Prefix(ClassImportRequest {
+                    class_name: String::from("javax.annotation.foo.bar.baz"),
+                    exact_only: true,
+                    src_fn: String::from("java::cannot_find_symbol"),
+                    priority: -50,
+                }),
+                ActionRequest::Prefix(ClassImportRequest {
+                    class_name: String::from("javax.annotation.foo.bar"),
+                    exact_only: true,
+                    src_fn: String::from("java::cannot_find_symbol"),
+                    priority: -51,
+                }),
+                ActionRequest::Prefix(ClassImportRequest {
+                    class_name: String::from("javax.annotation.foo"),
+                    exact_only: true,
+                    src_fn: String::from("java::cannot_find_symbol"),
+                    priority: -52,
+                }),
+                ActionRequest::Suffix(ClassSuffixMatch {
+                    suffix: String::from("JSONObject"),
+                    src_fn: String::from("java::error_cannot_access"),
+                }),
             ],
         )
         .await
@@ -477,7 +636,7 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
         };
 
         let index_table = index_table::IndexTable::default();
-        let global_previous_seen = DashSet::new();
+        let mut global_previous_seen = CurrentState::default();
 
         let current_dir = std::env::current_dir().unwrap().to_owned();
 
@@ -500,10 +659,11 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
             .expect("Should be able to write file");
 
         let response = process_missing_dependency_errors(
-            &global_previous_seen,
+            &mut global_previous_seen,
             buildozer.clone(),
             &action_failed_error_info,
             &index_table,
+            1,
         )
         .await;
 
@@ -528,7 +688,7 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
             index_table: index_table::IndexTable,
             ignore_dep_references: HashSet<String>,
             buildozer: FakeBuildozer,
-            all_requests: Vec<Vec<ActionRequest>>,
+            all_requests: Vec<ActionRequest>,
         ) -> (Vec<ActionLogEntry>, super::super::Response) {
             // this is a simple scenario, nothing is in the index table, and we have our buildozer set to allow ~everything to pass through
 
@@ -548,13 +708,15 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
                     .expect("Should be able to write file");
             }
 
-            let (response, _) = inner_process_missing_dependency_errors(
+            let mut previous_added = HashMap::default();
+            let (response, _, _) = inner_process_missing_dependency_errors(
                 buildozer.clone(),
                 "//src/main/com/example/foo:Bar",
                 &Some(String::from("scala_library")),
                 &index_table,
                 all_requests,
                 ignore_dep_references,
+                &mut previous_added,
             )
             .await;
 
@@ -588,9 +750,12 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
             index_table::IndexTable::default(),
             HashSet::new(),
             FakeBuildozer::default(),
-            vec![vec![ActionRequest::Prefix(String::from(
-                "com.example.foo.bar.baz",
-            ))]],
+            vec![ActionRequest::Prefix(ClassImportRequest {
+                class_name: String::from("com.example.foo.bar.baz"),
+                exact_only: false,
+                src_fn: String::from("scala::extract_not_a_member_of_package"),
+                priority: 5,
+            })],
         )
         .await;
         assert_eq!(response.target_story_entries.len(), 1);
@@ -614,12 +779,18 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
             HashSet::new(),
             FakeBuildozer::default(),
             vec![
-                vec![ActionRequest::Prefix(String::from(
-                    "com.example.foo.bar.baz",
-                ))],
-                vec![ActionRequest::Prefix(String::from(
-                    "com.example.foo.bar.noof",
-                ))],
+                ActionRequest::Prefix(ClassImportRequest {
+                    class_name: String::from("com.example.foo.bar.baz"),
+                    exact_only: false,
+                    src_fn: String::from("scala::extract_not_a_member_of_package"),
+                    priority: 5,
+                }),
+                ActionRequest::Prefix(ClassImportRequest {
+                    class_name: String::from("com.example.foo.bar.noof"),
+                    exact_only: false,
+                    src_fn: String::from("scala::extract_not_a_member_of_package"),
+                    priority: 5,
+                }),
             ],
         )
         .await;
@@ -638,38 +809,6 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
             ]
         );
 
-        // Two not quite independent requests, via generation
-        // we expect that we will add baz:baz for the first request
-        // and such we should skip the operation on the second request, doing nothing.
-        let (action_log_entry, response) = run_scenario(
-            vec![
-                "src/main/scala/com/example/foo",
-                "src/main/scala/com/example/foo/bar/baz",
-                "src/main/scala/com/example/foo/bar/noof",
-            ],
-            index_table::IndexTable::default(),
-            HashSet::new(),
-            FakeBuildozer::default(),
-            vec![
-                vec![ActionRequest::Prefix(String::from(
-                    "com.example.foo.bar.baz",
-                ))],
-                vec![
-                    ActionRequest::Prefix(String::from("com.example.foo.bar.baz")),
-                    ActionRequest::Prefix(String::from("com.example.foo.bar.noof")),
-                ],
-            ],
-        )
-        .await;
-        assert_eq!(response.target_story_entries.len(), 1);
-        assert_eq!(
-            action_log_entry,
-            vec![ActionLogEntry::AddDependency {
-                target_to_operate_on: String::from("//src/main/com/example/foo:Bar"),
-                label_to_add: String::from("//src/main/scala/com/example/foo/bar/baz:baz"),
-            }]
-        );
-
         // Same set of requests as above, but we are going to stick baz:baz into our global have visited list, thus
         // it should be ignored.
         let mut ignore_dep_references = HashSet::new();
@@ -684,13 +823,24 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
             ignore_dep_references,
             FakeBuildozer::default(),
             vec![
-                vec![ActionRequest::Prefix(String::from(
-                    "com.example.foo.bar.baz",
-                ))],
-                vec![
-                    ActionRequest::Prefix(String::from("com.example.foo.bar.baz")),
-                    ActionRequest::Prefix(String::from("com.example.foo.bar.noof")),
-                ],
+                ActionRequest::Prefix(ClassImportRequest {
+                    class_name: String::from("com.example.foo.bar.baz"),
+                    exact_only: false,
+                    src_fn: String::from("scala::extract_not_a_member_of_package"),
+                    priority: 5,
+                }),
+                ActionRequest::Prefix(ClassImportRequest {
+                    class_name: String::from("com.example.foo.bar.baz"),
+                    exact_only: false,
+                    src_fn: String::from("scala::extract_not_a_member_of_package"),
+                    priority: 5,
+                }),
+                ActionRequest::Prefix(ClassImportRequest {
+                    class_name: String::from("com.example.foo.bar.noof"),
+                    exact_only: false,
+                    src_fn: String::from("scala::extract_not_a_member_of_package"),
+                    priority: 5,
+                }),
             ],
         )
         .await;
@@ -702,41 +852,6 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
                 label_to_add: String::from("//src/main/scala/com/example/foo/bar/noof:noof"),
             }]
         );
-
-        // Disabled till we re-do error handling to be result? or a catch unwind here could work.
-        //     // Here we are going to simulate a buildozer failure, which is a critical failure now.
-
-        //     let mut add_dependency_pairs_to_fail = HashSet::new();
-        //     add_dependency_pairs_to_fail.insert((String::from("//src/main/com/example/foo:Bar"), String::from("//src/main/scala/com/example/foo/bar/baz:baz")));
-        //     let buildozer = FakeBuildozer::new(
-        //         add_dependency_pairs_to_fail,
-        //         HashSet::new()
-        //     );
-        // let (action_log_entry, actions) = run_scenario(
-        //     vec![
-        //         "src/main/scala/com/example/foo",
-        //         "src/main/scala/com/example/foo/bar/baz",
-        //         "src/main/scala/com/example/foo/bar/noof",
-        //     ],
-        //     index_table::IndexTable::default(),
-        //     HashSet::new(),
-        //     buildozer,
-        //     vec![
-        //         vec![
-        //             ActionRequest::Prefix(String::from("com.example.foo.bar.baz")),
-        //             ActionRequest::Prefix(String::from("com.example.foo.bar.noof")),
-        //         ],
-        //     ],
-        // )
-        // .await;
-        // assert_eq!(actions, 1);
-        // assert_eq!(
-        //     action_log_entry,
-        //     vec![ActionLogEntry::AddDependency {
-        //         target_to_operate_on: String::from("//src/main/com/example/foo:Bar"),
-        //         label_to_add: String::from("//src/main/scala/com/example/foo/bar/noof:noof"),
-        //     }]
-        // );
     }
     #[derive(Clone, Debug, PartialEq)]
     enum ActionLogEntry {

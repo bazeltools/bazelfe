@@ -69,9 +69,9 @@ impl FileParseCache {
         self.file_parse_cache.get(file_path)
     }
 }
-pub fn extract_errors(input: &str) -> Vec<super::ClassImportRequest> {
+pub fn extract_errors(input: &str) -> Vec<super::ActionRequest> {
     let mut file_parse_cache: FileParseCache = FileParseCache::new();
-    let mut combined_vec: Vec<super::ClassImportRequest> = vec![
+    let mut combined_vec: Vec<super::ActionRequest> = vec![
         error_package_does_not_exist::extract(input, &mut file_parse_cache),
         error_indirect_dependency::extract(input),
         error_does_not_represent_a_declared_type::extract(input),
@@ -79,8 +79,13 @@ pub fn extract_errors(input: &str) -> Vec<super::ClassImportRequest> {
     ]
     .into_iter()
     .flat_map(|e| e.into_iter().flat_map(|inner| inner.into_iter()))
-    .map(|o| o.to_class_import_request())
+    .map(|o| super::ActionRequest::Prefix(o.to_class_import_request()))
     .collect();
 
+    combined_vec.extend(
+        error_cannot_access::extract(input)
+            .into_iter()
+            .map(|e| super::ActionRequest::Suffix(e)),
+    );
     combined_vec
 }

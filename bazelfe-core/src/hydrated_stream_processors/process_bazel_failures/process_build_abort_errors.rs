@@ -3,11 +3,13 @@ use crate::{
 };
 use bazelfe_protos::*;
 use lazy_static::lazy_static;
+use tokio::sync::{Mutex, RwLock};
 
 use crate::{build_events::hydrated_stream, buildozer_driver::Buildozer};
-use dashmap::{DashMap, DashSet};
 use regex::Regex;
-use std::{sync::Arc, time::Instant};
+use std::{collections::HashMap, sync::Arc, time::Instant};
+
+use super::CurrentState;
 #[derive(Clone, PartialEq, Debug)]
 
 enum BazelCorrectionCommand {
@@ -126,10 +128,10 @@ fn extract_target_not_visible(
     }
 }
 
-fn extract_added_cycle_in_dependency_graph(
+async fn extract_added_cycle_in_dependency_graph(
     bazel_abort_error_info: &ProgressEvt,
     command_stream: &mut Vec<BazelCorrectionCommand>,
-    previous_global_seen: &Arc<DashMap<String, DashSet<String>>>,
+    previous_global_seen: &Arc<RwLock<HashMap<String, Arc<Mutex<CurrentState>>>>>,
 ) {
     // ERROR: .*/BUILD:\d*:\d*: in [A-Za-z0-9_-]* rule (.*): cycle in dependency graph:
     // .-> //src/main/java/com/example/foo/actions:actions
@@ -171,8 +173,11 @@ fn extract_added_cycle_in_dependency_graph(
                     let target_to_operate_on = sanitize_label(wind[0].to_string());
                     let dependency_to_remove = wind[1].to_string();
 
-                    if let Some(ref hashset) = previous_global_seen.get(&target_to_operate_on) {
-                        if hashset.contains(&dependency_to_remove) {
+                    if let Some(hashset) =
+                        previous_global_seen.read().await.get(&target_to_operate_on)
+                    {
+                        let data = hashset.lock().await;
+                        if data.ignore_list.contains(&dependency_to_remove) {
                             let correction =
                                 BazelCorrectionCommand::BuildozerRemoveDep(BuildozerRemoveDepCmd {
                                     target_to_operate_on: target_to_operate_on,
@@ -216,10 +221,9 @@ async fn apply_candidates<T: Buildozer + Clone + Send + Sync + 'static>(
                 let target_to_operate_on = buildozer_remove_dep.target_to_operate_on;
                 // otherwise... add the dependency with buildozer here
                 // then add it ot the local seen dependencies
-                log::info!(
+                debug!(
                     "Buildozer action: remove dependency {:?} from {:?}",
-                    dependency_to_remove,
-                    target_to_operate_on
+                    dependency_to_remove, target_to_operate_on
                 );
                 let buildozer_res = buildozer
                     .remove_dependency(&target_to_operate_on, &dependency_to_remove)
@@ -245,7 +249,7 @@ async fn apply_candidates<T: Buildozer + Clone + Send + Sync + 'static>(
 pub async fn process_progress<T: Buildozer + Clone + Send + Sync + 'static>(
     buildozer: T,
     bazel_progress_error_info: &ProgressEvt,
-    previous_global_seen: Arc<DashMap<String, DashSet<String>>>,
+    previous_global_seen: Arc<RwLock<HashMap<String, Arc<Mutex<CurrentState>>>>>,
 ) -> super::Response {
     let mut candidate_correction_commands: Vec<BazelCorrectionCommand> = vec![];
 
@@ -253,7 +257,8 @@ pub async fn process_progress<T: Buildozer + Clone + Send + Sync + 'static>(
         &bazel_progress_error_info,
         &mut candidate_correction_commands,
         &previous_global_seen,
-    );
+    )
+    .await;
 
     extract_target_not_declared_in_package(
         &bazel_progress_error_info,
@@ -346,8 +351,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_extract_added_cycle_in_dependency_graph() {
+    #[tokio::test]
+    async fn test_extract_added_cycle_in_dependency_graph() {
         // This was referring to a random string put into the dependencies list of the target
         let sample_output = ProgressEvt {
                 stderr: String::from("ERROR: /Users/exampleuser/example_path/example_repo/src/main/java/com/example/foo/actions/BUILD:1:13: in java_library rule //src/main/java/com/example/foo/actions:actions: cycle in dependency graph:
@@ -358,17 +363,18 @@ mod tests {
             };
 
         let mut results = vec![];
-        let previous_global_seen = Arc::new(DashMap::new());
+        let previous_global_seen = Arc::new(RwLock::new(HashMap::new()));
         extract_added_cycle_in_dependency_graph(
             &sample_output,
             &mut results,
             &previous_global_seen,
-        );
+        )
+        .await;
         assert_eq!(results, vec![]);
     }
 
-    #[test]
-    fn test_extract_added_cycle_in_dependency_graph_with_state() {
+    #[tokio::test]
+    async fn test_extract_added_cycle_in_dependency_graph_with_state() {
         // This was referring to a random string put into the dependencies list of the target
         let sample_output = ProgressEvt {
                 stderr: String::from("ERROR: /Users/exampleuser/example_path/example_repo/src/main/java/com/example/foo/actions/BUILD:1:13: in java_library rule //src/main/java/com/example/foo/actions:actions: cycle in dependency graph:
@@ -379,18 +385,21 @@ mod tests {
             };
 
         let mut results = vec![];
-        let dashmap = DashMap::new();
-        let dashset = DashSet::new();
-        dashset.insert(String::from(
+        let previous_global_seen = Arc::new(RwLock::new(HashMap::new()));
+        let mut current_state = CurrentState::default();
+        current_state.ignore_list.insert(String::from(
             "//src/main/java/com/example/foo/actions:actions",
         ));
-        dashmap.insert(String::from("//src/main/java/com/example/foo:bar"), dashset);
-        let previous_global_seen = Arc::new(dashmap);
+        previous_global_seen.write().await.insert(
+            String::from("//src/main/java/com/example/foo:bar"),
+            Arc::new(Mutex::new(current_state)),
+        );
         extract_added_cycle_in_dependency_graph(
             &sample_output,
             &mut results,
             &previous_global_seen,
-        );
+        )
+        .await;
         assert_eq!(
             results,
             vec![BazelCorrectionCommand::BuildozerRemoveDep(

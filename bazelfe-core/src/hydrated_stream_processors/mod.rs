@@ -12,8 +12,6 @@ pub enum BuildEventResponse {
 }
 #[async_trait::async_trait]
 pub trait BazelEventHandler: std::fmt::Debug + Send + Sync {
-    async fn process_event(
-        &self,
-        event: &hydrated_stream::HydratedInfo,
-    ) -> Option<BuildEventResponse>;
+    async fn process_event(&self, event: &hydrated_stream::HydratedInfo)
+        -> Vec<BuildEventResponse>;
 }

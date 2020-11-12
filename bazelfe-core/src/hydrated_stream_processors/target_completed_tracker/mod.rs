@@ -14,7 +14,7 @@ impl super::BazelEventHandler for TargetCompletedTracker {
     async fn process_event(
         &self,
         event: &hydrated_stream::HydratedInfo,
-    ) -> Option<super::BuildEventResponse> {
+    ) -> Vec<super::BuildEventResponse> {
         self.process(event).await
     }
 }
@@ -27,7 +27,7 @@ impl TargetCompletedTracker {
     pub async fn process(
         &self,
         event: &hydrated_stream::HydratedInfo,
-    ) -> Option<super::BuildEventResponse> {
+    ) -> Vec<super::BuildEventResponse> {
         match event {
             hydrated_stream::HydratedInfo::TargetComplete(tce) => {
                 let mut guard = self.expected_targets.lock().await;
@@ -35,6 +35,6 @@ impl TargetCompletedTracker {
             }
             _ => (),
         };
-        None
+        Vec::default()
     }
 }
