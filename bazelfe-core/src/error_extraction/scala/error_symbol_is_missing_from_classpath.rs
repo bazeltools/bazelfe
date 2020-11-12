@@ -61,7 +61,7 @@ fn build_class_import_request(
 pub fn extract(input: &str) -> Option<Vec<ScalaClassImportRequest>> {
     lazy_static! {
         static ref RE: Regex = Regex::new(
-            r"^(.*\.scala).*error: Symbol 'type ([A-Za-z0-9.<>_]+)' is missing from the classpath.$"
+            r"^(.*\.scala).*error: Symbol '(type|term) ([A-Za-z0-9.<>_]+)' is missing from the classpath.$"
         )
         .unwrap();
     }
@@ -74,7 +74,7 @@ pub fn extract(input: &str) -> Option<Vec<ScalaClassImportRequest>> {
             None => (),
             Some(captures) => {
                 let src_file_name = captures.get(1).unwrap().as_str();
-                let class_name = captures.get(2).unwrap().as_str();
+                let class_name = captures.get(3).unwrap().as_str();
                 let class_import_request =
                     build_class_import_request(src_file_name.to_string(), class_name.to_string());
                 result = match result {
@@ -111,6 +111,25 @@ one error found";
             Some(vec![build_class_import_request(
                 String::from("src/main/scala/com/example/D.scala"),
                 "com.example.a.ATrait".to_string()
+            )])
+        );
+    }
+
+    #[test]
+    fn test_term_is_missing_from_classpath_error() {
+        let sample_output ="
+src/test/scala/foo/bar/baz/FooE.scala:73: error: Symbol 'term shapeless.LabelledGeneric' is missing from the classpath.
+This symbol is required by 'value frameless.TypedEncoder.i0'.
+Make sure that term LabelledGeneric is in your classpath and check for conflicting dependencies with `-Ylog-classpath`.
+A full rebuild may help if 'TypedEncoder.class' was compiled against an incompatible version of shapeless.
+      frameless.TypedDataset.create(Seq(parserOutput))
+                                       ^";
+
+        assert_eq!(
+            extract(sample_output),
+            Some(vec![build_class_import_request(
+                String::from("src/test/scala/foo/bar/baz/FooE.scala"),
+                "shapeless.LabelledGeneric".to_string()
             )])
         );
     }

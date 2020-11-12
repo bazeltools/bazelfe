@@ -2,14 +2,15 @@ use std::{collections::HashMap, path::Path};
 
 use crate::source_dependencies::ParsedFile;
 
+use super::ClassSuffixMatch;
+
 mod error_is_not_a_member_of_package;
 mod error_object_not_found;
 mod error_symbol_is_missing_from_classpath;
 mod error_symbol_type_missing_from_classpath;
-mod error_type_not_found;
 mod error_value_not_found;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, PartialOrd, Ord, Eq)]
 pub struct ScalaClassImportRequest {
     pub src_file_name: String,
     pub class_name: String,
@@ -74,14 +75,12 @@ impl FileParseCache {
 
 pub fn extract_errors(input: &str) -> Vec<super::ClassImportRequest> {
     let mut file_parse_cache: FileParseCache = FileParseCache::new();
-
     let combined_vec: Vec<super::ClassImportRequest> = vec![
         error_is_not_a_member_of_package::extract(input, &mut file_parse_cache),
         error_object_not_found::extract(input),
         error_symbol_is_missing_from_classpath::extract(input),
         error_symbol_type_missing_from_classpath::extract(input),
-        error_type_not_found::extract(input),
-        error_value_not_found::extract(input),
+        Some(error_value_not_found::extract(input)),
     ]
     .into_iter()
     .flat_map(|e| e.into_iter().flat_map(|inner| inner.into_iter()))
@@ -101,9 +100,19 @@ pub fn extract_errors(input: &str) -> Vec<super::ClassImportRequest> {
                         }
                         crate::source_dependencies::SelectorType::NoSelector => None,
                     })
-                    .map(|prefix| ScalaClassImportRequest {
-                        class_name: format!("{}.{}", prefix, e.class_name),
-                        ..e.clone()
+                    .chain(file_data.package_name.iter())
+                    .flat_map(|prefix| {
+                        let elements = e.class_name.chars().filter(|e| *e == '.').count();
+                        if elements < 3 {
+                            Some(ScalaClassImportRequest {
+                                class_name: format!("{}.{}", prefix, e.class_name),
+                                priority: -3,
+                                exact_only: true,
+                                ..e.clone()
+                            })
+                        } else {
+                            None
+                        }
                     })
                     .collect();
 
@@ -114,13 +123,17 @@ pub fn extract_errors(input: &str) -> Vec<super::ClassImportRequest> {
             }
         }
         .into_iter()
-        .map(|o| o.to_class_import_request())
+        .filter_map(|o| {
+            if o.class_name.find('.').is_none() {
+                None
+            } else {
+                let r = o.to_class_import_request();
+                debug!("Found class import request: {:#?}", r);
+                Some(r)
+            }
+        })
     })
     .collect();
 
     combined_vec
-}
-
-pub fn extract_suffix_errors(_input: &str) -> Vec<super::ClassSuffixMatch> {
-    Vec::new()
 }

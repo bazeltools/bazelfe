@@ -360,7 +360,7 @@ mod tests {
             one error found",
             "scala_library",
             vec![ClassImportRequest{
-                class_name: String::from("com.example.foo"), exact_only: false, src_fn: String::from("scala::extract_not_a_member_of_package"), priority: 1
+                class_name: String::from("com.example.foo"), exact_only: false, src_fn: String::from("scala::extract_not_a_member_of_package"), priority: 5
             }],
             Vec::default()
         ).await;
