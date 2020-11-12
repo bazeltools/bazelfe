@@ -122,6 +122,7 @@ impl Buildozer for BuildozerBinaryImpl {
                     },
                 })
             })
+            .map(|dep| crate::label_utils::sanitize_label(dep))
             .collect())
     }
 
