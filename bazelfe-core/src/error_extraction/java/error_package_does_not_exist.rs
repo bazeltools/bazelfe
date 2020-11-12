@@ -34,7 +34,8 @@ pub(in crate::error_extraction) fn extract(
     }
 
     let mut result = None;
-    for ln in input.lines() {
+    let lines: Vec<&str> = input.lines().collect();
+    for (pos, ln) in lines.iter().enumerate() {
         let captures = RE.captures(ln);
 
         match captures {
@@ -53,6 +54,22 @@ pub(in crate::error_extraction) fn extract(
                                 e.prefix_section.to_string(),
                                 30,
                             ));
+                        }
+                    }
+                } else {
+                    if pos < lines.len() - 1 {
+                        let target_line = lines[pos + 1];
+                        match crate::source_dependencies::java::parse_imports(target_line) {
+                            Ok(matched) => {
+                                if let Some(e) = matched.into_iter().next() {
+                                    class_import_request = Some(build_class_import_request(
+                                        src_file_name.to_string(),
+                                        e.prefix_section.to_string(),
+                                        30,
+                                    ));
+                                }
+                            }
+                            Err(_) => (),
                         }
                     }
                 }
@@ -128,6 +145,35 @@ mod tests {
             extract(sample_output, &mut file_cache),
             Some(vec![build_class_import_request(
                 String::from("src/main/java/com/example/Example.java"),
+                "com.google.common.base.Preconditions".to_string(),
+                30
+            )])
+        );
+    }
+
+    #[test]
+    fn test_not_a_member_of_package_error_with_no_file_parse_import() {
+        let mut file_cache = super::super::FileParseCache::init_from_par(
+            String::from("src/main/java/com/example/Example.java"),
+            crate::source_dependencies::ParsedFile {
+                package_name: None,
+                imports: vec![crate::source_dependencies::Import {
+                    line_number: 3,
+                    prefix_section: String::from("com.google.common.base.Preconditions"),
+                    suffix: crate::source_dependencies::SelectorType::NoSelector,
+                }],
+            },
+        );
+
+        // non existant path.
+        let sample_output =
+                "foo/bar/baz/doh/src/main/java/com/example/Example.java:3: error: package com.google.common.base does not exist
+        import com.google.common.base.Preconditions;
+    ";
+        assert_eq!(
+            extract(sample_output, &mut file_cache),
+            Some(vec![build_class_import_request(
+                String::from("foo/bar/baz/doh/src/main/java/com/example/Example.java"),
                 "com.google.common.base.Preconditions".to_string(),
                 30
             )])

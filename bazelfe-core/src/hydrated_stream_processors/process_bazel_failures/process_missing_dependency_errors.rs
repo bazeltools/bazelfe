@@ -365,18 +365,6 @@ mod tests {
             Vec::default()
         ).await;
 
-        // we are just testing that we load the file and invoke the paths, so we just need ~any error types in here.
-        test_content_to_expected_result(
-            "src/main/java/com/example/foo/bar/Baz.java:205: error: cannot access JSONObject
-                Blah key = Blah.myfun(jwk);",
-            "java_library",
-            Vec::default(),
-            vec![ClassSuffixMatch {
-                suffix: String::from("JSONObject"),
-                src_fn: String::from("java::error_cannot_access"),
-            }],
-        )
-        .await
     }
 
     #[tokio::test]
@@ -442,10 +430,6 @@ src/main/java/com/example/foo/Example.java:16: error: cannot find symbol
                     ActionRequest::Prefix(String::from("javax.annotation.foo.bar.baz")),
                     ActionRequest::Prefix(String::from("javax.annotation.foo.bar")),
                 ],
-                vec![ActionRequest::Suffix(ClassSuffixMatch {
-                    suffix: String::from("JSONObject"),
-                    src_fn: String::from("java::error_cannot_access"),
-                })],
             ],
         )
         .await
