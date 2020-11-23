@@ -22,7 +22,7 @@ log = "0.4"
 async-stream = "0.3.0"
 bytes = "0.6.0"
 ctrlc = "3.1.7"
-async-trait = "0.1.41"
+async-trait = "0.1.42"
 exec = "0.3.1"
 zip = "0.5.8"
 bazelfe-protos = { path = "../bazelfe-protos" }
