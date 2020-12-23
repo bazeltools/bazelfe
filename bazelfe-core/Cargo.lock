@@ -394,9 +394,9 @@ dependencies = [
 
 [[package]]
 name = "flume"
-version = "0.9.1"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9e818efa7776f4dd7df0e542f877f7a5a87bddd6a1a10f59a7732b71ffb9d55"
+checksum = "1e727ae0c455db3603e32c03fa722a8ccbd616b394eca686d76f9b2c9a91bb91"
 dependencies = [
  "spinning_top",
 ]
@@ -970,9 +970,9 @@ checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 
 [[package]]
 name = "pinky-swear"
-version = "5.0.1"
+version = "5.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dea216f5b079f60d0cfdad1e0bcf8b8e502ba53e028e30d946a2e6eea8c0915b"
+checksum = "77b0360fb8e24604f5f913d17255a563a0d4dceb1c88721c04c043b9970c9d0d"
 dependencies = [
  "doc-comment",
  "flume",
