@@ -129,7 +129,7 @@ dependencies = [
  "async-trait",
  "bazelfe-protos",
  "byteorder",
- "bytes 1.0.0",
+ "bytes 1.0.1",
  "clap",
  "ctrlc",
  "exec",
@@ -200,9 +200,9 @@ checksum = "0e4cec68f03f32e44924783795810fa50a7035d8c8ebe78580ad7e6c703fba38"
 
 [[package]]
 name = "bytes"
-version = "1.0.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad1f8e949d755f9d79112b5bb46938e0ef9d3804a0b16dfab13aafcaa5f0fa72"
+checksum = "b700ce4376041dcd0a327fd0097c41095743c4c8af8887265942faf1100bd040"
 
 [[package]]
 name = "bzip2"
@@ -1046,7 +1046,7 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e6984d2f1a23009bd270b8bb56d0926810a3d483f59c987d77969e9d8e840b2"
 dependencies = [
- "bytes 1.0.0",
+ "bytes 1.0.1",
  "prost-derive 0.7.0",
 ]
 
@@ -1110,7 +1110,7 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b518d7cdd93dab1d1122cf07fa9a60771836c668dde9d9e2a139f957f0d9f1bb"
 dependencies = [
- "bytes 1.0.0",
+ "bytes 1.0.1",
  "prost 0.7.0",
 ]
 
