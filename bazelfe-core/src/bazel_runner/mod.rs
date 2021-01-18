@@ -124,8 +124,8 @@ pub async fn execute_bazel_output_control<S: Into<String> + Clone>(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    let mut child = cmd.spawn().expect("failed to start bazel process");
-    SUB_PROCESS_PID.store(child.id(), Ordering::SeqCst);
+    let mut child: tokio::process::Child = cmd.spawn().expect("failed to start bazel process");
+    SUB_PROCESS_PID.store(child.id().unwrap(), Ordering::SeqCst);
 
     let mut child_stdout = child.stdout.take().expect("Child didn't have a stdout");
 
@@ -155,7 +155,7 @@ pub async fn execute_bazel_output_control<S: Into<String> + Clone>(
             }
         }
     });
-    let result = child.await.expect("The command wasn't running");
+    let result = child.wait().await.expect("The command wasn't running");
 
     stderr.await.unwrap();
     stdout.await.unwrap();

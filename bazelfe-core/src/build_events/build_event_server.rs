@@ -14,7 +14,6 @@ use tokio::sync::Mutex;
 
 pub mod bazel_event {
     use super::*;
-    use ::prost::Message;
 
     #[derive(Clone, PartialEq, Debug)]
     pub struct BazelBuildEvent {
@@ -35,6 +34,8 @@ pub mod bazel_event {
             let decoded_evt = match _event {
                 Some(inner) => match inner {
                     google::devtools::build::v1::build_event::Event::BazelEvent(e) => {
+                        use prost::Message;
+
                         let v = build_event_stream::BuildEvent::decode(&*e.value).unwrap();
 
                         let target_configured_evt: Option<TargetConfiguredEvt> = {
@@ -459,7 +460,6 @@ mod tests {
     use tempfile::tempdir;
     use tokio::net::UnixListener;
     use tokio::net::UnixStream;
-    use tokio::time;
     use tonic::transport::Server;
     use tonic::transport::{Endpoint, Uri};
     use tonic::Request;
@@ -502,10 +502,9 @@ mod tests {
         }
     }
 
-    use futures::TryStreamExt;
     use google::devtools::build::v1::publish_build_event_client;
     use google::devtools::build::v1::publish_build_event_server;
-
+    use futures::TryStreamExt;
     async fn make_test_server() -> (
         ServerStateHandler,
         publish_build_event_client::PublishBuildEventClient<tonic::transport::channel::Channel>,
@@ -526,7 +525,7 @@ mod tests {
         };
         // let shutdown_promise =
         tokio::spawn(async {
-            let mut uds = UnixListener::bind(path).expect("Should be able to setup unix listener");
+            let uds = UnixListener::bind(path).expect("Should be able to setup unix listener");
 
             eprintln!("Starting server..");
             Server::builder()
@@ -534,7 +533,7 @@ mod tests {
                     server_instance,
                 ))
                 .serve_with_incoming_shutdown(
-                    uds.incoming().map_ok(crate::tokioext::unix::UnixStream),
+                    tokio_stream::wrappers::UnixListenerStream::new(uds).map_ok(crate::tokioext::unix::UnixStream),
                     promise,
                 )
                 .inspect(|x| println!("resolving future: {:?}", &x))
@@ -542,7 +541,7 @@ mod tests {
                 .expect("Failed to start server")
         });
 
-        time::delay_for(Duration::from_millis(5)).await;
+        tokio::time::sleep(Duration::from_millis(5)).await;
 
         let endpoint: Endpoint =
             Endpoint::try_from("lttp://[::]:50051").expect("Can calculate endpoint");
