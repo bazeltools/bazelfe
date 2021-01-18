@@ -140,7 +140,7 @@ dependencies = [
  "once_cell",
  "pinky-swear",
  "pretty_env_logger",
- "prost 0.6.1",
+ "prost 0.7.0",
  "prost-types 0.7.0",
  "rand 0.8.2",
  "regex",
