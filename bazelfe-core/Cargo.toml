@@ -25,7 +25,7 @@ bytes = "1.0.1"
 ctrlc = "3.1.7"
 async-trait = "0.1.43"
 exec = "0.3.1"
-zip = "0.5.10"
+zip = "0.5.11"
 bazelfe-protos = { path = "../bazelfe-protos" }
 walkdir = "2.3.1"
 async-channel = "1.6.1"
