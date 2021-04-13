@@ -1,4 +1,3 @@
-use bazelfe_protos::*;
 use std::{
     collections::{HashMap, HashSet},
     path::Path,
@@ -16,6 +15,8 @@ use crate::{
 };
 
 use super::CurrentState;
+
+use super::shared_utils::output_error_paths;
 
 fn is_potentially_valid_target(target_kind: &Option<String>, label: &str) -> bool {
     lazy_static! {
@@ -58,28 +59,6 @@ fn is_potentially_valid_target(target_kind: &Option<String>, label: &str) -> boo
         }
         None => true,
     }
-}
-
-pub(in crate::hydrated_stream_processors::process_bazel_failures) fn output_error_paths(
-    err_data: &ActionFailedErrorInfo,
-) -> Vec<std::path::PathBuf> {
-    err_data
-        .output_files
-        .iter()
-        .flat_map(|e| match e {
-            build_event_stream::file::File::Uri(e) => {
-                if e.starts_with("file://") {
-                    let u: PathBuf = e.strip_prefix("file://").unwrap().into();
-                    Some(u)
-                } else {
-                    warn!("Path isn't a file, so skipping...{:?}", e);
-
-                    None
-                }
-            }
-            build_event_stream::file::File::Contents(_) => None,
-        })
-        .collect()
 }
 
 async fn path_to_import_requests(
@@ -376,6 +355,8 @@ async fn inner_process_missing_dependency_errors<T: Buildozer>(
 
 #[cfg(test)]
 mod tests {
+    use bazelfe_protos::*;
+
     use once_cell::sync::Lazy;
     use std::{path::PathBuf, sync::Arc};
     use tokio::sync::Mutex;

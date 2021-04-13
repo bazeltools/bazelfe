@@ -6,6 +6,7 @@ extern crate log;
 pub mod bazel_runner;
 pub mod build_events;
 pub mod buildozer_driver;
+pub mod config;
 pub mod error_extraction;
 pub mod hydrated_stream_processors;
 pub mod index_table;

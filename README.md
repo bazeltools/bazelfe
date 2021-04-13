@@ -55,9 +55,18 @@ FLAGS:
     -V, --version    Prints version information
 
 OPTIONS:
-        --bind-address <bind-address>                    [env: BIND_ADDRESS=]
-        --buildozer-path <buildozer-path>                [env: BUILDOZER_PATH=]
-        --index-input-location <index-input-location>    [env: INDEX_INPUT_LOCATION=]
+        --bind-address <bind-address>
+            [env: BIND_ADDRESS=]
+
+        --buildozer-path <buildozer-path>
+            [env: BUILDOZER_PATH=]
+
+        --config <config>
+        --disable-action-stories-on-success <disable-action-stories-on-success>
+            [env: DISABLE_ACTION_STORIES_ON_SUCCESS=]
+
+        --index-input-location <index-input-location>
+            [env: INDEX_INPUT_LOCATION=]
 ```
 
 Options:

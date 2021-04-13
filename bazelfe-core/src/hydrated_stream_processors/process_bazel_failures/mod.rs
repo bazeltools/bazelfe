@@ -2,26 +2,51 @@ use std::{collections::HashMap, collections::HashSet, sync::Arc, time::Instant};
 
 use tokio::sync::{Mutex, RwLock};
 
-use crate::{build_events::hydrated_stream, buildozer_driver::Buildozer, index_table};
+use crate::{
+    build_events::hydrated_stream, buildozer_driver::Buildozer, config::Config, index_table,
+};
 
+use self::{
+    command_line_runner::ExecutionResult,
+    process_user_defined_actions::UserDefinedActionsStateCache,
+};
+
+mod command_line_runner;
 mod process_action_failure_error;
 mod process_build_abort_errors;
 mod process_missing_dependency_errors;
+mod process_user_defined_actions;
+mod shared_utils;
 
-#[derive(Clone, Debug)]
+pub use command_line_runner::CommandLineRunner;
+pub use command_line_runner::CommandLineRunnerImpl;
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum TargetStoryAction {
-    AddedDependency { added_what: String, why: String },
-    RemovedDependency { removed_what: String, why: String },
+    AddedDependency {
+        added_what: String,
+        why: String,
+    },
+    RemovedDependency {
+        removed_what: String,
+        why: String,
+    },
+    RanUserAction {
+        user_action_name: String,
+        why: String,
+        command_line: String,
+        execution_result: ExecutionResult,
+    },
     Success,
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TargetStory {
     pub target: String,
     pub action: TargetStoryAction,
     pub when: Instant,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Response {
     pub target_story_entries: Vec<TargetStory>,
 }
@@ -49,15 +74,18 @@ impl Default for CurrentState {
     }
 }
 #[derive(Clone, Debug)]
-pub struct ProcessBazelFailures<T: Buildozer> {
+pub struct ProcessBazelFailures<T: Buildozer, U: CommandLineRunner> {
     index_table: index_table::IndexTable,
     previous_global_seen: Arc<RwLock<HashMap<String, Arc<Mutex<CurrentState>>>>>,
     epoch: Arc<RwLock<usize>>,
     buildozer: T,
+    command_line_runner: U,
+    config: Arc<Config>,
+    user_defined_action_cache: Arc<UserDefinedActionsStateCache>,
 }
 
 #[async_trait::async_trait]
-impl<T: Buildozer> super::BazelEventHandler for ProcessBazelFailures<T> {
+impl<T: Buildozer, U: CommandLineRunner> super::BazelEventHandler for ProcessBazelFailures<T, U> {
     async fn process_event(
         &self,
         event: &hydrated_stream::HydratedInfo,
@@ -65,14 +93,24 @@ impl<T: Buildozer> super::BazelEventHandler for ProcessBazelFailures<T> {
         self.process(event).await
     }
 }
-impl<T: Buildozer> ProcessBazelFailures<T> {
-    pub fn new(index_table: index_table::IndexTable, buildozer: T) -> Self {
-        Self {
+impl<T: Buildozer, U: CommandLineRunner> ProcessBazelFailures<T, U> {
+    pub fn new(
+        index_table: index_table::IndexTable,
+        buildozer: T,
+        command_line_runner: U,
+        config: Arc<Config>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let user_defined_action_cache =
+            Arc::new(UserDefinedActionsStateCache::from_config(&config)?);
+        Ok(Self {
             previous_global_seen: Arc::new(RwLock::new(HashMap::default())),
             index_table: index_table,
             buildozer: buildozer,
+            command_line_runner,
             epoch: Arc::new(RwLock::new(0)),
-        }
+            config,
+            user_defined_action_cache,
+        })
     }
 
     pub async fn advance_epoch(&self) -> () {
@@ -121,7 +159,19 @@ impl<T: Buildozer> ProcessBazelFailures<T> {
                     )
                     .await;
 
-                vec![action_failed_response, missing_dependencies_response]
+                let user_defined_action_failure =
+                    process_user_defined_actions::process_action_failed(
+                        self.command_line_runner.clone(),
+                        &action_failed_error_info,
+                        &self.user_defined_action_cache,
+                    )
+                    .await;
+
+                vec![
+                    action_failed_response,
+                    missing_dependencies_response,
+                    user_defined_action_failure,
+                ]
             }
 
             hydrated_stream::HydratedInfo::BazelAbort(bazel_abort_error_info) => vec![
@@ -144,7 +194,16 @@ impl<T: Buildozer> ProcessBazelFailures<T> {
             }
             // action successes can a be a bit hard to use since a rule often has ~several actions
             // things like writing out the input for a compiler step is of course its own action too.
-            hydrated_stream::HydratedInfo::ActionSuccess(_) => Vec::default(),
+            hydrated_stream::HydratedInfo::ActionSuccess(action_success_info) => {
+                let action_success_response = process_user_defined_actions::process_action_success(
+                    self.command_line_runner.clone(),
+                    &action_success_info,
+                    &self.user_defined_action_cache,
+                )
+                .await;
+
+                vec![action_success_response]
+            }
             hydrated_stream::HydratedInfo::Progress(progress_info) => {
                 let tbl = Arc::clone(&self.previous_global_seen);
 

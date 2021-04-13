@@ -502,9 +502,9 @@ mod tests {
         }
     }
 
+    use futures::TryStreamExt;
     use google::devtools::build::v1::publish_build_event_client;
     use google::devtools::build::v1::publish_build_event_server;
-    use futures::TryStreamExt;
     async fn make_test_server() -> (
         ServerStateHandler,
         publish_build_event_client::PublishBuildEventClient<tonic::transport::channel::Channel>,
@@ -533,7 +533,8 @@ mod tests {
                     server_instance,
                 ))
                 .serve_with_incoming_shutdown(
-                    tokio_stream::wrappers::UnixListenerStream::new(uds).map_ok(crate::tokioext::unix::UnixStream),
+                    tokio_stream::wrappers::UnixListenerStream::new(uds)
+                        .map_ok(crate::tokioext::unix::UnixStream),
                     promise,
                 )
                 .inspect(|x| println!("resolving future: {:?}", &x))

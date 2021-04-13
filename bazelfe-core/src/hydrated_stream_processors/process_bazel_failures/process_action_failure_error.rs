@@ -1,11 +1,11 @@
-use crate::build_events::hydrated_stream::ActionFailedErrorInfo;
 use lazy_static::lazy_static;
 
 use crate::{build_events::hydrated_stream, buildozer_driver::Buildozer};
 use regex::Regex;
-use std::{path::PathBuf, time::Instant};
+use std::time::Instant;
 
-use super::process_missing_dependency_errors::output_error_paths;
+use super::shared_utils::text_logs_from_failure;
+
 #[derive(Clone, PartialEq, Debug)]
 
 enum BazelCorrectionCommand {
@@ -16,21 +16,6 @@ struct BuildozerRemoveDepCmd {
     pub target_to_operate_on: String,
     pub dependency_to_remove: String,
     pub why: String,
-}
-
-async fn error_inputs(action_failed_error_info: &ActionFailedErrorInfo) -> Vec<String> {
-    let mut error_data = Vec::default();
-    for path_str in output_error_paths(&action_failed_error_info).into_iter() {
-        let path: PathBuf = path_str.into();
-        if path.exists() {
-            let file_len = std::fs::metadata(&path).unwrap().len();
-            if file_len < 10 * 1024 * 1024 {
-                // 10 MB
-                error_data.push(tokio::fs::read_to_string(&path).await.unwrap());
-            }
-        }
-    }
-    error_data
 }
 
 fn extract_dependency_isnt_used(
@@ -115,7 +100,7 @@ pub async fn process_action_failed<T: Buildozer + Clone + Send + Sync + 'static>
 ) -> super::Response {
     let mut candidate_correction_commands: Vec<BazelCorrectionCommand> = vec![];
 
-    let error_streams = error_inputs(action_failed_error_info).await;
+    let error_streams = text_logs_from_failure(action_failed_error_info).await;
     extract_dependency_isnt_used(
         action_failed_error_info,
         &error_streams,
@@ -129,6 +114,7 @@ mod tests {
 
     use super::*;
     use bazelfe_protos::*;
+    use hydrated_stream::ActionFailedErrorInfo;
     #[test]
     fn test_extract_dependency_isnt_used() {
         // This was referring to a random string put into the dependencies list of the target
