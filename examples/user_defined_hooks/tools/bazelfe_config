@@ -1,0 +1,8 @@
+ [[error_processors]]
+ name = "Identifying unused proto imports"
+ active_action_type = "proto_library"
+ run_on_success = true
+ regex_match =  '^(.*):(\d+):(\d+): warning: Import (.*) but not used.$'
+ target_command_line = '''
+    /bin/bash -c "echo '{1}' "{2}" >> /tmp/run_log"
+ '''

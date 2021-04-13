@@ -10,7 +10,6 @@ use tonic::transport::Server;
 use bazelfe_protos::*;
 use std::ffi::OsString;
 
-use bazelfe_core::build_events::build_event_server::bazel_event;
 use bazelfe_core::build_events::build_event_server::BuildEventAction;
 use bazelfe_core::build_events::hydrated_stream::HydratedInfo;
 use bazelfe_core::buildozer_driver;
@@ -23,6 +22,7 @@ use bazelfe_core::{
         BazelEventHandler,
     },
 };
+use bazelfe_core::{build_events::build_event_server::bazel_event, config::Config};
 use google::devtools::build::v1::publish_build_event_server::PublishBuildEventServer;
 use rand::Rng;
 use std::sync::Arc;
@@ -45,6 +45,9 @@ struct Opt {
 
     #[clap(long, env = "DISABLE_ACTION_STORIES_ON_SUCCESS")]
     disable_action_stories_on_success: bool,
+
+    #[clap(long)]
+    config: Option<String>,
 }
 
 struct ProcessorActivity {
@@ -187,10 +190,40 @@ async fn spawn_bazel_attempt(
     let r = results_data.write().await.take().unwrap();
     (r, res)
 }
+
+async fn load_config(opt: &Opt) -> Result<Config, Box<dyn std::error::Error>> {
+    use std::str::FromStr;
+    let mut path: Option<String> = None;
+    if let Some(p) = &opt.config {
+        let pbuf = PathBuf::from_str(&p)?;
+        if !pbuf.exists() {
+            panic!("Expected to find config at path {}, but it didn't exist", p);
+        }
+        path = Some(p.clone())
+    };
+
+    if path == None {
+        if let Ok(home_dir) = std::env::var("HOME") {
+            let cur_p = PathBuf::from(format!("{}/.bazelfe_config", home_dir));
+            if cur_p.exists() {
+                path = Some(cur_p.to_str().unwrap().to_string());
+            }
+        }
+    }
+
+    if let Some(path) = path {
+        Ok(bazelfe_core::config::parse_config(
+            &std::fs::read_to_string(path)?,
+        )?)
+    } else {
+        Ok(Config::default())
+    }
+}
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opt = Opt::parse();
 
+    let config = Arc::new(load_config(&opt).await?);
     // If someone is using a bes backend we need to nope out so we don't conflict.
     // This also means our other tools can call in using our same utilities
     // with this already set to make this app passthrough
@@ -256,7 +289,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let process_build_failures = Box::new(ProcessBazelFailures::new(
         index_table.clone(),
         buildozer_driver::from_binary_path(opt.buildozer_path),
-    ));
+        bazelfe_core::hydrated_stream_processors::process_bazel_failures::CommandLineRunnerImpl(),
+        config.clone(),
+    )?);
     let processors: Vec<Box<dyn BazelEventHandler>> = vec![
         process_build_failures.clone(),
         Box::new(IndexNewResults::new(index_table.clone())),
@@ -297,6 +332,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut running_total = ProcessorActivity::default();
     let mut final_exit_code = 0;
     let disable_action_stories_on_success = opt.disable_action_stories_on_success;
+    let mut total_actions_taken = 0;
     while attempts < 15 {
         attempts += 1;
         process_build_failures.advance_epoch().await;
@@ -304,6 +340,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let (processor_activity, bazel_result) =
             spawn_bazel_attempt(&sender_arc, &aes, bes_port, &passthrough_args).await;
         let actions_taken = processor_activity.actions_taken;
+        total_actions_taken += actions_taken;
         running_total.merge(processor_activity, disable_action_stories_on_success);
         final_exit_code = bazel_result.exit_code;
         if bazel_result.exit_code == 0 || actions_taken == 0 {
@@ -312,7 +349,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // we should be very quiet if the build is successful/we added nothing.
-    if attempts > 1 {
+    if total_actions_taken > 0 && !(final_exit_code == 0 && disable_action_stories_on_success) {
         eprintln!("--------------------Bazel Runner Report--------------------");
 
         if running_total.target_story_actions.len() > 0 {
@@ -321,7 +358,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "\nBuild still failed. Active stories about failed targets/what we've tried:"
                 );
             } else {
-                eprintln!("\nBuild still succeeded, but asked to print action stories anyway:");
+                eprintln!("\nBuild succeeded, but documenting actions we took(some may have failed, but the build completed ok.):\n");
             }
             let mut v: Vec<(String, Vec<TargetStory>)> =
                 running_total.target_story_actions.into_iter().collect();
@@ -338,6 +375,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             eprintln!("\tRemoved Dependency {}\n\t\tReason: {}", removed_what, why);
                         }
                         TargetStoryAction::Success => eprintln!("\tTarget suceeded"),
+                        TargetStoryAction::RanUserAction {
+                            user_action_name,
+                            why,
+                            command_line,
+                            execution_result,
+                        } => {
+                            if execution_result.exit_success {
+                                eprintln!("\tRan user action: {}\n\t\tReason: {}\n\t\tSuccess: {}\n\t\tCommand line: {}", user_action_name, why, true, command_line);
+                            } else {
+                                eprintln!("\tRan user action: {}\n\t\tReason: {}\n\t\tSuccess: {}\n\t\tCommand line: {}\nstdout:\n{}\n\nstderr:\n{}\n\n", user_action_name, why, false, command_line, execution_result.stdout, execution_result.stderr);
+                            }
+                        }
                     }
                 }
             }

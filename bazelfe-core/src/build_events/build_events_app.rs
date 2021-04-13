@@ -9,10 +9,10 @@ use tonic::transport::Server;
 use ::prost::Message;
 use bazelfe_core::build_events::build_event_server::{BuildEventAction, BuildEventService};
 use bazelfe_protos::*;
-use tokio::{sync::Mutex};
-use tokio::io::AsyncWriteExt;
 use google::devtools::build::v1::publish_build_event_server::PublishBuildEventServer;
 use google::devtools::build::v1::PublishBuildToolEventStreamRequest;
+use tokio::io::AsyncWriteExt;
+use tokio::sync::Mutex;
 
 #[derive(Clap, Debug)]
 #[clap(name = "basic")]

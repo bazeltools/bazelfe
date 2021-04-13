@@ -1,0 +1,6 @@
+syntax = "proto3";
+
+import "src/main/proto/foo/bar/baz/b.proto";
+
+message Sample {
+}
