@@ -644,7 +644,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             batch_start_time.elapsed().as_secs(),
             remaining_targets
         );
-    };
+    }
 
     let mut batch_idx = 0;
     let mut batch_elements = Vec::default();
