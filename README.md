@@ -10,6 +10,7 @@ Be a suite of tools to provide ultimately a different frontend around bazel. Ini
 - Not be consuming the BEP from bazel directly. The tool hooks in and tells bazel to send the BEP out to it to sniff on the results.
 
 ## Using it
+The best way to see it in action is to visit the examples folder and have a look at what it does.
 
 1. Configure a CI job to run the indexer, it should produce a binary output
 2. Store the output in a location which is fetchable by your developers/users
