@@ -2,14 +2,14 @@ use std::sync::Arc;
 
 use crate::{build_events::hydrated_stream, hydrated_stream_processors::BuildEventResponse};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EventStreamListener {
-    processors: Arc<Vec<Box<dyn crate::hydrated_stream_processors::BazelEventHandler>>>,
+    processors: Arc<Vec<Arc<dyn crate::hydrated_stream_processors::BazelEventHandler>>>,
 }
 
 impl EventStreamListener {
     pub fn new(
-        processors: Vec<Box<dyn crate::hydrated_stream_processors::BazelEventHandler>>,
+        processors: Vec<Arc<dyn crate::hydrated_stream_processors::BazelEventHandler>>,
     ) -> Self {
         Self {
             processors: Arc::new(processors),

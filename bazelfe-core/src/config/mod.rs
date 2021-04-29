@@ -3,9 +3,27 @@ use serde_derive::Deserialize;
 
 #[derive(Deserialize, Default, Debug, PartialEq, Eq)]
 pub struct Config {
-    pub error_processors: Vec<ErrorProcessor>,
+    pub error_processors: Option<Vec<ErrorProcessor>>,
+    pub index_input_location: Option<std::path::PathBuf>,
+    pub buildozer_path: Option<std::path::PathBuf>,
+    #[serde(default, deserialize_with = "parse_bes_bind_address")]
+    pub bes_server_bind_address: Option<std::net::SocketAddr>,
+    #[serde(default)]
+    pub disable_action_stories_on_success: bool,
 }
 
+fn parse_bes_bind_address<'de, D>(deserializer: D) -> Result<Option<std::net::SocketAddr>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s: Option<&str> = Deserialize::deserialize(deserializer)?;
+
+    if let Some(s) = s {
+        s.parse().map_err(serde::de::Error::custom).map(Some)
+    } else {
+        Ok(None)
+    }
+}
 fn clean_command_line<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
     D: Deserializer<'de>,
@@ -50,13 +68,20 @@ mod tests {
 
         assert_eq!(
             config.error_processors,
-            vec![ErrorProcessor {
+            Some(vec![ErrorProcessor {
                 name: String::from("Identifying unused proto imports"),
                 active_action_type: String::from("proto_library"),
                 run_on_success: false,
                 regex_match: String::from(r#"^(.*):(\d+):(\d+): warning: Import (.*) is unused.$"#),
                 target_command_line: String::from(r#""/bin/foo" '$1' "$2" "$3""#)
-            }]
+            }])
         );
+    }
+
+    #[test]
+    fn test_empty_parse() {
+        let config: Config = super::parse_config("").unwrap();
+
+        assert_eq!(config.error_processors, None);
     }
 }

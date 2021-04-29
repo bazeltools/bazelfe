@@ -16,7 +16,7 @@ struct Opt {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let opt = Opt::parse();
-    let buildozer = from_binary_path(opt.buildozer_path);
+    let buildozer = from_binary_path(&opt.buildozer_path);
     let buildozer_resp = buildozer.print_deps(&opt.target_name).await.unwrap();
     println!("{:?}", buildozer_resp);
     Ok(())

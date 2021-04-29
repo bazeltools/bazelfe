@@ -8,6 +8,11 @@ use tokio::process::Command;
 
 static SUB_PROCESS_PID: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
+pub mod bazel_runner;
+mod configured_bazel_runner;
+
+mod processor_activity;
+
 pub fn register_ctrlc_handler() {
     ctrlc::set_handler(move || {
         let current_sub_process_pid: u32 = SUB_PROCESS_PID.load(Ordering::SeqCst);

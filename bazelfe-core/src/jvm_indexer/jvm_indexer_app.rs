@@ -563,9 +563,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let target_completed_tracker = TargetCompletedTracker::new(all_found_targets);
 
-    let processors: Vec<Box<dyn BazelEventHandler>> = vec![
-        Box::new(IndexNewResults::new(index_table.clone())),
-        Box::new(target_completed_tracker.clone()),
+    let processors: Vec<Arc<dyn BazelEventHandler>> = vec![
+        Arc::new(IndexNewResults::new(index_table.clone())),
+        Arc::new(target_completed_tracker.clone()),
     ];
     let aes = EventStreamListener::new(processors);
 
