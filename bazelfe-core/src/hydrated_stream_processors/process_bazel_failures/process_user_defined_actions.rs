@@ -23,7 +23,12 @@ impl UserDefinedActionsStateCache {
         let mut failure_only: HashMap<String, Vec<Arc<(Regex, ErrorProcessor)>>> =
             HashMap::default();
         let mut run_always: HashMap<String, Vec<Arc<(Regex, ErrorProcessor)>>> = HashMap::default();
-        for ep in &config.error_processors {
+        for ep in config
+            .error_processors
+            .as_ref()
+            .unwrap_or(&Vec::default())
+            .iter()
+        {
             let ep = ep.clone();
             let regexp = Regex::new(&ep.regex_match)?;
             let r = if ep.run_on_success {

@@ -47,9 +47,9 @@ pub struct BuildozerBinaryImpl {
     buildozer_executable_path: PathBuf,
 }
 
-pub fn from_binary_path(pb: PathBuf) -> BuildozerBinaryImpl {
+pub fn from_binary_path(pb: &PathBuf) -> BuildozerBinaryImpl {
     BuildozerBinaryImpl {
-        buildozer_executable_path: pb,
+        buildozer_executable_path: pb.clone(),
     }
 }
 
