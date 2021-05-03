@@ -122,6 +122,7 @@ dependencies = [
  "serde_derive",
  "shellwords",
  "tempfile",
+ "thiserror",
  "tokio",
  "tokio-stream",
  "toml",

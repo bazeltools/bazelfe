@@ -122,11 +122,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.disable_action_stories_on_success = opt.disable_action_stories_on_success;
     }
 
+    let config = Arc::new(config);
     let bazel_runner = bazel_runner::bazel_runner::BazelRunner {
-        config: Arc::new(config),
+        config: Arc::clone(&config),
         passthrough_args: opt.passthrough_args.clone(),
     };
 
-    let final_exit_code = bazel_runner.run().await?;
-    std::process::exit(final_exit_code);
+    match bazel_runner.run().await {
+        Ok(final_exit_code) => {
+            std::process::exit(final_exit_code);
+        }
+        Err(ex) => {
+            match ex {
+                bazel_runner::bazel_runner::BazelRunnerError::UserErrorReport(user_error) => {
+                    eprintln!("\x1b[0;31m{}\x1b[0m", user_error.0);
+                }
+                other => eprintln!("Error:\n{}", other),
+            }
+            std::process::exit(-1);
+        }
+    }
 }
