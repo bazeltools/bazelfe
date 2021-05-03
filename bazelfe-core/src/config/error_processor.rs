@@ -1,13 +1,23 @@
-mod error_processor;
-pub use error_processor::ErrorProcessor;
-mod base_config;
-pub use base_config::Config;
+use serde::{Deserialize, Deserializer};
+use serde_derive::Deserialize;
 
-pub mod command_line_rewriter;
-pub use command_line_rewriter::CommandLineRewriter;
+fn clean_command_line<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s: &str = Deserialize::deserialize(deserializer)?;
+    Ok(s.lines().map(|ln| ln.trim_start()).collect::<String>())
+}
 
-pub fn parse_config(input: &str) -> Result<Config, toml::de::Error> {
-    toml::from_str(input)
+#[derive(Deserialize, Debug, PartialEq, Eq, Clone)]
+pub struct ErrorProcessor {
+    pub name: String,
+    pub active_action_type: String,
+    #[serde(default)]
+    pub run_on_success: bool,
+    pub regex_match: String,
+    #[serde(deserialize_with = "clean_command_line")]
+    pub target_command_line: String,
 }
 
 #[cfg(test)]
@@ -16,9 +26,8 @@ mod tests {
     use super::*;
     #[test]
     fn test_simple_parse() {
-        let config: Config = super::parse_config(
+        let error_processor: ErrorProcessor = toml::from_str(
             r#"
-        [[error_processors]]
         name = "Identifying unused proto imports"
         active_action_type = "proto_library"
         regex_match =  '^(.*):(\d+):(\d+): warning: Import (.*) is unused.$'
@@ -30,14 +39,14 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            config.error_processors,
-            Some(vec![ErrorProcessor {
+            error_processor,
+            ErrorProcessor {
                 name: String::from("Identifying unused proto imports"),
                 active_action_type: String::from("proto_library"),
                 run_on_success: false,
                 regex_match: String::from(r#"^(.*):(\d+):(\d+): warning: Import (.*) is unused.$"#),
                 target_command_line: String::from(r#""/bin/foo" '$1' "$2" "$3""#)
-            }])
+            }
         );
     }
 }

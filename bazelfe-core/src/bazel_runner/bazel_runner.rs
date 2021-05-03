@@ -24,8 +24,13 @@ pub struct BazelRunner {
 }
 
 impl BazelRunner {
-    pub async fn run(self) -> Result<i32, Box<dyn std::error::Error>> {
+    pub async fn run(mut self) -> Result<i32, Box<dyn std::error::Error>> {
         let mut rng = rand::thread_rng();
+
+        super::command_line_rewriter_action::rewrite_command_line(
+            &mut self.passthrough_args,
+            &self.config.command_line_rewriter,
+        )?;
 
         bazel_runner::register_ctrlc_handler();
 
