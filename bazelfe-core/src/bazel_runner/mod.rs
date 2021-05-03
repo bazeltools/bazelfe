@@ -12,6 +12,8 @@ pub mod bazel_runner;
 mod command_line_rewriter_action;
 mod configured_bazel_runner;
 mod processor_activity;
+mod user_report_error;
+pub use user_report_error::UserReportError;
 
 pub fn register_ctrlc_handler() {
     ctrlc::set_handler(move || {

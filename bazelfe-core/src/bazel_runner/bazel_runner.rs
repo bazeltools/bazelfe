@@ -18,13 +18,44 @@ use google::devtools::build::v1::publish_build_event_server::PublishBuildEventSe
 use rand::Rng;
 use std::sync::Arc;
 
+use thiserror::Error;
+
+use super::command_line_rewriter_action;
+
+#[derive(Error, Debug)]
+pub enum BazelRunnerError {
+    #[error("Reporting user error: `{0}`")]
+    UserErrorReport(super::UserReportError),
+    #[error(transparent)]
+    CommandLineRewriterActionError(command_line_rewriter_action::RewriteCommandLineError),
+
+    #[error("Unclassified or otherwise unknown error occured: `{0}`")]
+    Unknown(Box<dyn std::error::Error>),
+}
+
+impl From<command_line_rewriter_action::RewriteCommandLineError> for BazelRunnerError {
+    fn from(inner: command_line_rewriter_action::RewriteCommandLineError) -> Self {
+        match inner {
+            command_line_rewriter_action::RewriteCommandLineError::UserErrorReport(ex) => {
+                BazelRunnerError::UserErrorReport(ex)
+            }
+        }
+    }
+}
+
+impl From<Box<dyn std::error::Error>> for BazelRunnerError {
+    fn from(inner: Box<dyn std::error::Error>) -> Self {
+        BazelRunnerError::Unknown(inner)
+    }
+}
+
 pub struct BazelRunner {
     pub config: Arc<Config>,
     pub passthrough_args: Vec<String>,
 }
 
 impl BazelRunner {
-    pub async fn run(mut self) -> Result<i32, Box<dyn std::error::Error>> {
+    pub async fn run(mut self) -> Result<i32, BazelRunnerError> {
         let mut rng = rand::thread_rng();
 
         super::command_line_rewriter_action::rewrite_command_line(

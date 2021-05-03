@@ -1,7 +1,13 @@
-use std::error::Error;
-
 use crate::config::command_line_rewriter::TestActionMode;
 use crate::config::CommandLineRewriter;
+
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum RewriteCommandLineError {
+    #[error("Reporting user error: `{0}`")]
+    UserErrorReport(super::UserReportError),
+}
 
 fn find_first_non_flag_arg<'a>(iter: impl Iterator<Item = &'a String>) -> Option<(usize, String)> {
     iter.enumerate().find_map(|(idx, e)| {
@@ -16,7 +22,7 @@ fn find_first_non_flag_arg<'a>(iter: impl Iterator<Item = &'a String>) -> Option
 pub fn rewrite_command_line(
     args: &mut Vec<String>,
     command_line_rewriter: &CommandLineRewriter,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), RewriteCommandLineError> {
     // Keep in mind here the first arg is the path to the bazel binary, so needs to be ignored!
 
     let action_and_pos = find_first_non_flag_arg(args.iter().skip(1));
@@ -37,7 +43,7 @@ pub fn rewrite_command_line(
                 }
                 TestActionMode::EmptyTestToFail => {
                     if target_opt.is_none() {
-                        Err("Please specify a target to test with".to_owned())?;
+                        Err(RewriteCommandLineError::UserErrorReport(super::UserReportError("No test target specified.\nUnlike other build tools, bazel requires you specify which test target to test.\nTo test the whole repo add //... to the end. But beware this could be slow!".to_owned())))?;
                     }
                 }
                 TestActionMode::Passthrough => {}
@@ -114,9 +120,13 @@ mod tests {
 
         assert_eq!(true, ret.is_err());
 
-        assert_eq!(
-            true,
-            format!("{:?}", ret).contains("Please specify a target to test with")
-        );
+        match ret {
+            Ok(_) => panic!("Expected to get an error condition from the call"),
+            Err(e) => match e {
+                RewriteCommandLineError::UserErrorReport(err) => {
+                    assert_eq!(true, err.0.contains("No test target specified"));
+                }
+            },
+        }
     }
 }
