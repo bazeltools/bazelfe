@@ -4,6 +4,7 @@ extern crate lazy_static;
 extern crate log;
 
 pub mod bazel_runner;
+pub mod bazel_runner_daemon;
 pub mod build_events;
 pub mod buildozer_driver;
 pub mod config;
