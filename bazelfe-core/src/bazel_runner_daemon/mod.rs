@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+pub mod query_graph;
+
 use fork::Fork;
 use thiserror::Error;
 pub enum DaemonType {
