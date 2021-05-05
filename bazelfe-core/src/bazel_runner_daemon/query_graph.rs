@@ -2,9 +2,8 @@ use crate::jvm_indexer::bazel_query::{BazelQuery, ExecuteResult};
 use lazy_static::lazy_static;
 
 use regex::Regex;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::collections::{HashSet, HashMap};
-
 
 // bazel_query
 // .execute(&vec![
@@ -38,31 +37,31 @@ fn parse_current_repo_name() -> Option<String> {
     None
 }
 
-
-pub async fn graph_query<B: BazelQuery, Q: AsRef<str>>(
-    bazel_query: &B,
-    query: Q
-) -> ExecuteResult {
+pub async fn graph_query<B: BazelQuery, Q: AsRef<str>>(bazel_query: &B, query: Q) -> ExecuteResult {
     let res = bazel_query
-    .execute(&vec![
-    String::from("query"),
-    String::from("--keep_going"),
-    String::from("--output"),
-    String::from("graph"),
-    String::from(query.as_ref()),
-])
+        .execute(&vec![
+            String::from("query"),
+            String::from("--keep_going"),
+            String::from("--output"),
+            String::from("graph"),
+            String::from(query.as_ref()),
+        ])
         .await;
 
+    let mut result: HashMap<String, HashSet<String>> = Default::default();
+    lazy_static! {
+        static ref EXTERNAL_REPO_REGEX: Regex = Regex::new(r#"@([A-Za-z0-9_-]+)"#).unwrap();
+    }
 
-        let mut result: HashMap<String, HashSet<String>> = Default::default();
-        lazy_static! {
-            static ref EXTERNAL_REPO_REGEX: Regex =
-                Regex::new(r#"@([A-Za-z0-9_-]+)"#).unwrap();
-        }
+    let current_repo_name = parse_current_repo_name();
 
-        let current_repo_name = parse_current_repo_name();
-
-        let updated = res.stdout.lines().skip(2).map(|e|e.trim()).filter(|e| e.starts_with("\"")).filter(|e| {
+    let updated = res
+        .stdout
+        .lines()
+        .skip(2)
+        .map(|e| e.trim())
+        .filter(|e| e.starts_with("\""))
+        .filter(|e| {
             let mut line_ok = true;
             if let Some(repo) = &current_repo_name {
                 for r in EXTERNAL_REPO_REGEX.captures_iter(e) {
@@ -73,30 +72,28 @@ pub async fn graph_query<B: BazelQuery, Q: AsRef<str>>(
             }
             line_ok
         });
-        
-        for ln in updated {
-            let mut split_v = ln.split(" -> ");
-            let lhs = split_v.next().map(|e| e.replace("\"", ""));
-            let rhs = split_v.next().map(|e| e.replace("\"", ""));
-            if let Some(lhs) = lhs {
-                if let Some(rhs) = rhs {
 
-                    if let Some(existing_rhs) = result.get_mut(&rhs) {
-                        existing_rhs.insert(lhs.to_string());
-                    } else {
-                        let mut hash_set = HashSet::default();
-                        hash_set.insert(lhs.to_string());
-                        result.insert(rhs.to_string(), hash_set);
-                    }
-                    
+    for ln in updated {
+        let mut split_v = ln.split(" -> ");
+        let lhs = split_v.next().map(|e| e.replace("\"", ""));
+        let rhs = split_v.next().map(|e| e.replace("\"", ""));
+        if let Some(lhs) = lhs {
+            if let Some(rhs) = rhs {
+                if let Some(existing_rhs) = result.get_mut(&rhs) {
+                    existing_rhs.insert(lhs.to_string());
                 } else {
-                    if let None = result.get(&lhs) {
-                        result.insert(lhs.to_string(), Default::default());
-                    }
+                    let mut hash_set = HashSet::default();
+                    hash_set.insert(lhs.to_string());
+                    result.insert(rhs.to_string(), hash_set);
+                }
+            } else {
+                if let None = result.get(&lhs) {
+                    result.insert(lhs.to_string(), Default::default());
                 }
             }
         }
+    }
 
-        eprintln!("{:#?}", result);
+    eprintln!("{:#?}", result);
     res
 }
