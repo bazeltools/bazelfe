@@ -42,8 +42,33 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 eprintln!("Command line client wing...{}", std::process::id());
             }
             bazelfe_core::bazel_runner_daemon::DaemonType::DaemonProcess => {
-                std::thread::sleep(std::time::Duration::from_secs(2));
-                eprintln!("DaemonProcess wing...{}", std::process::id());
+
+            let current_dir = std::env::current_dir()
+                .expect("Failed to determine current directory");
+        
+                
+    let current_dir = current_dir;
+
+    use notify::{RecommendedWatcher, RecursiveMode, Result,Watcher};
+    use std::time::Duration;
+
+    let mut watcher: RecommendedWatcher = Watcher::new_immediate(|res| {
+        match res {
+           Ok(event) => println!("event: {:?}", event),
+           Err(e) => println!("watch error: {:?}", e),
+        }
+    }).unwrap();
+
+    // Add a path to be watched. All files and directories at that path and
+    // below will be monitored for changes.
+    watcher.watch(current_dir, RecursiveMode::Recursive).unwrap();
+
+                std::thread::sleep(std::time::Duration::from_secs(120));
+
+                eprintln!("DaemonProcess wing...{}, quitting.", std::process::id());
+                println!("DaemonProcess wing...{}, quitting.", std::process::id());
+                std::process::exit(0);
+
             }
         }
     } else if opt.mode == RunMode::QueryGraph {
