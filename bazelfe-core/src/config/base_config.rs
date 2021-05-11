@@ -1,7 +1,6 @@
-use super::command_line_rewriter::CommandLineRewriter;
 use super::error_processor::ErrorProcessor;
+use super::{command_line_rewriter::CommandLineRewriter, DaemonConfig};
 use serde::{Deserialize, Deserializer};
-use serde_derive::Deserialize;
 
 #[derive(Deserialize, Debug, PartialEq, Eq)]
 pub struct Config {
@@ -30,6 +29,9 @@ pub struct Config {
         default = "CommandLineRewriter::default"
     )]
     pub command_line_rewriter: CommandLineRewriter,
+
+    #[serde(rename = "DaemonConfig", default = "DaemonConfig::default")]
+    pub daemon_config: DaemonConfig,
 }
 
 // We want to use the serde configured defaults for our default implemenation to not be

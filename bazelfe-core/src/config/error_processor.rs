@@ -1,5 +1,4 @@
 use serde::{Deserialize, Deserializer};
-use serde_derive::Deserialize;
 
 fn clean_command_line<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
