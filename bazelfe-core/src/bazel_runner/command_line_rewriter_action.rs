@@ -68,8 +68,8 @@ mod tests {
 
     use crate::config::command_line_rewriter::*;
 
-    #[test]
-    fn test_passthrough_args() {
+    #[tokio::test]
+    async fn test_passthrough_args() {
         let mut passthrough_command_line = vec![
             "bazel".to_string(),
             "test".to_string(),
@@ -80,7 +80,9 @@ mod tests {
         let _ = rewrite_command_line(
             &mut passthrough_command_line,
             &CommandLineRewriter::default(),
+            &None,
         )
+        .await
         .unwrap();
 
         assert_eq!(
@@ -94,15 +96,17 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_rewrite_empty_test() {
+    #[tokio::test]
+    async fn test_rewrite_empty_test() {
         let mut passthrough_command_line =
             vec!["bazel".to_string(), "test".to_string(), "--foo".to_string()];
 
         let rewrite_config = CommandLineRewriter {
             test: TestActionMode::EmptyTestToLocalRepo(EmptyTestToLocalRepoCfg::default()),
         };
-        let _ = rewrite_command_line(&mut passthrough_command_line, &rewrite_config).unwrap();
+        let _ = rewrite_command_line(&mut passthrough_command_line, &rewrite_config, &None)
+            .await
+            .unwrap();
 
         assert_eq!(
             passthrough_command_line,
@@ -115,15 +119,15 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_rewrite_empty_test_to_fail() {
+    #[tokio::test]
+    async fn test_rewrite_empty_test_to_fail() {
         let mut passthrough_command_line =
             vec!["bazel".to_string(), "test".to_string(), "--foo".to_string()];
 
         let rewrite_config = CommandLineRewriter {
             test: TestActionMode::EmptyTestToFail,
         };
-        let ret = rewrite_command_line(&mut passthrough_command_line, &rewrite_config);
+        let ret = rewrite_command_line(&mut passthrough_command_line, &rewrite_config, &None).await;
 
         assert_eq!(true, ret.is_err());
 
