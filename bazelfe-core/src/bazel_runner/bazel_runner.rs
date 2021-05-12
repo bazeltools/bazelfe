@@ -130,12 +130,19 @@ impl BazelRunner {
                 .unwrap();
         });
 
+
+        let runner_daemon = crate::bazel_runner_daemon::daemon_manager::connect_to_server(
+            &self.config.daemon_config,
+            &self.passthrough_args.get(0).expect("Should have a bazel binary").into()
+        ).await?;
+
         let configured_bazel =
             super::configured_bazel_runner::ConfiguredBazel::new(&sender_arc, &aes, bes_port);
 
         let configured_bazel_runner = ConfiguredBazelRunner::new(
             Arc::clone(&self.config),
             configured_bazel,
+            runner_daemon,
             index_table.clone(),
             aes,
             self.passthrough_args.clone(),

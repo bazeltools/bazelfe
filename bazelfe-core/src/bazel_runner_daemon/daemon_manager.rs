@@ -4,17 +4,14 @@ use std::{error::Error, sync::Arc};
 use crate::config::DaemonConfig;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone)]
-struct Daemon {
-    config: Arc<DaemonConfig>,
-    bazel_binary_path: PathBuf,
-}
+// #[derive(Debug, Clone)]
+// struct Daemon {
+//     config: Arc<DaemonConfig>,
+//     bazel_binary_path: PathBuf,
+// }
 
-impl Daemon {
-    pub async fn recently_touched_files() -> Vec<PathBuf> {
-        todo!()
-    }
-}
+// impl Daemon {
+// }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DaemonPaths {
