@@ -1,8 +1,8 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Instant};
 use std::{error::Error, sync::Arc};
 use tarpc::serde_transport as transport;
 use tarpc::server::Channel;
-use tokio::task::JoinHandle;
+use tokio::{sync::Mutex, task::JoinHandle};
 
 use crate::bazel_runner_daemon::daemon_service::RunnerDaemon;
 use crate::config::DaemonConfig;
@@ -17,7 +17,9 @@ struct Daemon {
 }
 
 #[derive(Debug, Clone)]
-struct DaemonServerInstance {}
+struct DaemonServerInstance {
+    pub shared_last_files: Arc<SharedLastFiles>
+}
 
 #[tarpc::server]
 impl super::daemon_service::RunnerDaemon for DaemonServerInstance {
@@ -80,6 +82,31 @@ pub async fn main_from_config(config_path: &PathBuf) -> Result<(), Box<dyn Error
     main(&u.daemon_config, &u.bazel_binary_path, &u.daemon_paths).await
 }
 
+#[derive(Debug, Clone)]
+struct SharedLastFiles {
+    last_files_updated: Arc<Mutex<Vec<(PathBuf, Instant)>>>
+}
+impl SharedLastFiles {
+    pub fn new() -> Self {
+        Self {
+            last_files_updated: Arc::new(Mutex::new(Vec::default()))
+        }
+    }
+    pub async fn register_new_file(&self, path: PathBuf) -> () {
+        let mut lock = self.last_files_updated.lock().await;
+        lock.push((path, Instant::now()));
+    }
+
+    pub async fn get_recent_files(&self) -> Vec<(PathBuf, usize)> {
+        let lock = self.last_recent_files.lock().await;
+        // lock.iter().map(|(k, t)|{
+        //     t.duration
+        // })
+        vec![]
+    }
+
+}
+
 pub async fn main(
     daemon_config: &DaemonConfig,
     _bazel_binary_path: &PathBuf,
@@ -87,7 +114,32 @@ pub async fn main(
 ) -> Result<(), Box<dyn Error>> {
     super::setup_daemon_io(&daemon_config.daemon_communication_folder)?;
 
-    start_tarpc_server(&paths.socket_path, || DaemonServerInstance {}).await?;
+    let shared_last_files = Arc::new(SharedLastFiles::new());
+    let current_dir = std::env::current_dir().expect("Failed to determine current directory");
+
+    let current_dir = current_dir;
+
+    use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+
+    let mut watcher: RecommendedWatcher = Watcher::new_immediate(|res| match res {
+        Ok(event) => println!("event: {:?}", event),
+        Err(e) => println!("watch error: {:?}", e),
+    })
+    .unwrap();
+
+    // Add a path to be watched. All files and directories at that path and
+    // below will be monitored for changes.
+    watcher
+        .watch(current_dir, RecursiveMode::Recursive)
+        .unwrap();
+
+        let captured = Arc::clone(&shared_last_files);
+    start_tarpc_server(&paths.socket_path, move || {
+
+        DaemonServerInstance {
+            shared_last_files: captured.clone()
+        }
+    }).await?;
 
     eprintln!("Daemon process is up! and serving on socket");
     tokio::time::sleep(tokio::time::Duration::from_secs(20)).await;
