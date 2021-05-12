@@ -89,6 +89,7 @@ where
                         if let Ok(root_path) = std::env::var("REPO_ROOT") {
                             std::env::set_current_dir(root_path)?;
                         }
+                        std::env::set_var("BAZEL_FE_ENABLE_DAEMON_MODE", "true");
                         let e = exec::Command::new(std::env::current_exe()?)
                             .args(child_process_args)
                             .exec();
@@ -106,7 +107,7 @@ pub mod daemon_service {
     use std::path::PathBuf;
 
     #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
-    pub struct FileStatus(PathBuf, u128);
+    pub struct FileStatus(pub PathBuf, pub u128);
     #[tarpc::service]
     pub trait RunnerDaemon {
         async fn recently_changed_files() -> Vec<FileStatus>;

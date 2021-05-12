@@ -40,10 +40,8 @@ async fn start_server(
     serde_json::ser::to_writer_pretty(&mut writer, &merged_config)?;
     drop(writer);
 
-    crate::bazel_runner_daemon::spawn_daemon(
-        &paths.pid_path,
-        &["run-fork-exec-daemon", &child_cfg.to_string_lossy()],
-    )?;
+    let o: std::ffi::OsString = child_cfg.to_string_lossy().to_string().into();
+    crate::bazel_runner_daemon::spawn_daemon(&paths.pid_path, &[&o])?;
 
     Ok(())
 }

@@ -19,9 +19,10 @@ fn find_first_non_flag_arg<'a>(iter: impl Iterator<Item = &'a String>) -> Option
     })
 }
 
-pub fn rewrite_command_line(
+pub async fn rewrite_command_line(
     args: &mut Vec<String>,
     command_line_rewriter: &CommandLineRewriter,
+    daemon_client: &Option<crate::bazel_runner_daemon::daemon_service::RunnerDaemonClient>,
 ) -> Result<(), RewriteCommandLineError> {
     // Keep in mind here the first arg is the path to the bazel binary, so needs to be ignored!
 
@@ -35,18 +36,24 @@ pub fn rewrite_command_line(
             let iter = iter.skip(indx + 2);
             let target_opt = find_first_non_flag_arg(iter);
 
-            match &command_line_rewriter.test {
-                TestActionMode::EmptyTestToLocalRepo(cfg) => {
-                    if target_opt.is_none() {
+            if target_opt.is_none() {
+                if let Some(daemon_cli) = daemon_client.as_ref() {
+                    eprintln!(
+                        "{:#?}",
+                        daemon_cli
+                            .recently_changed_files(tarpc::context::current())
+                            .await
+                    );
+                }
+                match &command_line_rewriter.test {
+                    TestActionMode::EmptyTestToLocalRepo(cfg) => {
                         args.push(cfg.command_to_use.clone());
                     }
-                }
-                TestActionMode::EmptyTestToFail => {
-                    if target_opt.is_none() {
+                    TestActionMode::EmptyTestToFail => {
                         Err(RewriteCommandLineError::UserErrorReport(super::UserReportError("No test target specified.\nUnlike other build tools, bazel requires you specify which test target to test.\nTo test the whole repo add //... to the end. But beware this could be slow!".to_owned())))?;
                     }
+                    TestActionMode::Passthrough => {}
                 }
-                TestActionMode::Passthrough => {}
             }
         }
     }

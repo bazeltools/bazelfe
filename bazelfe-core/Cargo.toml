@@ -79,6 +79,7 @@ tokio-util = { version = "0.6.4", features = ["compat"] }
 sha2 = "0.9.4"
 nix = "0.20.0"
 serde_json = "1.0.64"
+flume = "0.10.5"
 
 
 [dependencies.bazelfe-protos]

@@ -130,7 +130,7 @@ pub struct ConfiguredBazelRunner<
 > {
     config: Arc<Config>,
     configured_bazel: ConfiguredBazel,
-    _runner_daemon: Option<crate::bazel_runner_daemon::daemon_service::RunnerDaemonClient>,
+    runner_daemon: Option<crate::bazel_runner_daemon::daemon_service::RunnerDaemonClient>,
     _index_table: crate::index_table::IndexTable,
     _aes: EventStreamListener,
     passthrough_args: Vec<String>,
@@ -154,14 +154,21 @@ impl<
         Self {
             config,
             configured_bazel,
-            _runner_daemon: runner_daemon,
+            runner_daemon,
             _index_table: index_table,
             _aes: aes,
             passthrough_args,
             process_build_failures,
         }
     }
-    pub async fn run(self) -> Result<i32, Box<dyn std::error::Error>> {
+    pub async fn run(mut self) -> Result<i32, Box<dyn std::error::Error>> {
+        super::command_line_rewriter_action::rewrite_command_line(
+            &mut self.passthrough_args,
+            &self.config.command_line_rewriter,
+            &self.runner_daemon,
+        )
+        .await?;
+
         let mut attempts: u16 = 0;
 
         let mut running_total = ProcessorActivity::default();
