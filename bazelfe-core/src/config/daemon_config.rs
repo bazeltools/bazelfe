@@ -67,7 +67,7 @@ mod tests {
         assert_eq!(
             command_line_rewriter,
             DaemonConfig {
-                enabled: true,
+                enabled: false,
                 daemon_communication_folder: PathBuf::from("/tmp/foo")
             }
         );
@@ -84,7 +84,7 @@ mod tests {
         assert_eq!(
             command_line_rewriter,
             DaemonConfig {
-                enabled: true,
+                enabled: false,
                 daemon_communication_folder: default_communication_folder()
             }
         );
