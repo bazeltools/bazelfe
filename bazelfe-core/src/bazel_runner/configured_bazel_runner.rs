@@ -130,7 +130,7 @@ pub struct ConfiguredBazelRunner<
 > {
     config: Arc<Config>,
     configured_bazel: ConfiguredBazel,
-    runner_daemon: Option<crate::bazel_runner_daemon::daemon_service::RunnerDaemonClient>,
+    _runner_daemon: Option<crate::bazel_runner_daemon::daemon_service::RunnerDaemonClient>,
     _index_table: crate::index_table::IndexTable,
     _aes: EventStreamListener,
     passthrough_args: Vec<String>,
@@ -154,7 +154,7 @@ impl<
         Self {
             config,
             configured_bazel,
-            runner_daemon,
+            _runner_daemon: runner_daemon,
             _index_table: index_table,
             _aes: aes,
             passthrough_args,

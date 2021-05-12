@@ -6,7 +6,6 @@ pub mod daemon_manager;
 pub mod daemon_server;
 
 use fork::Fork;
-use serde::Serialize;
 use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum SpawnFailure {

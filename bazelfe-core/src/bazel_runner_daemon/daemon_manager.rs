@@ -1,17 +1,8 @@
+use std::error::Error;
 use std::path::PathBuf;
-use std::{error::Error, sync::Arc};
 
 use crate::config::DaemonConfig;
 use serde::{Deserialize, Serialize};
-
-// #[derive(Debug, Clone)]
-// struct Daemon {
-//     config: Arc<DaemonConfig>,
-//     bazel_binary_path: PathBuf,
-// }
-
-// impl Daemon {
-// }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DaemonPaths {
@@ -147,7 +138,6 @@ pub async fn connect_to_server(
     daemon_config: &DaemonConfig,
     bazel_binary_path: &PathBuf,
 ) -> Result<Option<super::daemon_service::RunnerDaemonClient>, Box<dyn Error>> {
-    let cfg = Arc::new(daemon_config.clone());
     std::fs::create_dir_all(&daemon_config.daemon_communication_folder)?;
 
     if !daemon_config.enabled {

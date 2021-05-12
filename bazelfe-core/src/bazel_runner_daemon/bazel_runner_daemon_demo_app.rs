@@ -1,5 +1,4 @@
-use bazelfe_core::{config::DaemonConfig, jvm_indexer::bazel_query::BazelQuery};
-use bazelfe_protos::build::bazel;
+use bazelfe_core::config::DaemonConfig;
 use clap::Clap;
 use std::error::Error;
 use std::path::PathBuf;

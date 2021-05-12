@@ -1,6 +1,3 @@
-use crate::jvm_indexer::bazel_query::BazelQuery;
-use bazelfe_protos::build::bazel;
-use clap::Clap;
 use std::path::PathBuf;
 use std::{error::Error, sync::Arc};
 use tarpc::serde_transport as transport;
@@ -10,7 +7,6 @@ use tokio::task::JoinHandle;
 use crate::bazel_runner_daemon::daemon_service::RunnerDaemon;
 use crate::config::DaemonConfig;
 use tokio::net::UnixListener;
-use tokio::{io::AsyncWriteExt, sync::Mutex};
 use tokio_serde::formats::Bincode;
 use tokio_util::codec::LengthDelimitedCodec;
 
@@ -86,7 +82,7 @@ pub async fn main_from_config(config_path: &PathBuf) -> Result<(), Box<dyn Error
 
 pub async fn main(
     daemon_config: &DaemonConfig,
-    bazel_binary_path: &PathBuf,
+    _bazel_binary_path: &PathBuf,
     paths: &super::daemon_manager::DaemonPaths,
 ) -> Result<(), Box<dyn Error>> {
     super::setup_daemon_io(&daemon_config.daemon_communication_folder)?;
