@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf, sync::atomic::AtomicUsize, time::Duration};
 use std::time::SystemTime;
 
 use std::{error::Error, sync::Arc};
@@ -21,6 +21,8 @@ struct Daemon {
 #[derive(Debug, Clone)]
 struct DaemonServerInstance {
     pub shared_last_files: Arc<SharedLastFiles>,
+    pub executable_id: Arc<super::ExecutableId>,
+    pub most_recent_call: Arc<AtomicUsize>
 }
 
 #[tarpc::server]
@@ -29,11 +31,13 @@ impl super::daemon_service::RunnerDaemon for DaemonServerInstance {
         self,
         _: tarpc::context::Context,
     ) -> Vec<super::daemon_service::FileStatus> {
+        self.most_recent_call.fetch_add(1, std::sync::atomic::Ordering::Acquire);
         self.shared_last_files.get_recent_files().await
     }
 
-    async fn ping(self, _: tarpc::context::Context) -> () {
-        ()
+    async fn ping(self, _: tarpc::context::Context) -> super::ExecutableId {
+        self.most_recent_call.fetch_add(1, std::sync::atomic::Ordering::Acquire);
+        self.executable_id.as_ref().clone()
     }
 }
 
@@ -86,19 +90,26 @@ pub async fn main_from_config(config_path: &PathBuf) -> Result<(), Box<dyn Error
 
 #[derive(Debug, Clone)]
 struct SharedLastFiles {
-    last_files_updated: Arc<Mutex<Vec<(PathBuf, SystemTime)>>>,
+    last_files_updated: Arc<Mutex<HashMap<PathBuf, SystemTime>>>,
 }
 impl SharedLastFiles {
     pub fn new() -> Self {
         Self {
-            last_files_updated: Arc::new(Mutex::new(Vec::default())),
+            last_files_updated: Arc::new(Mutex::new(HashMap::default())),
         }
     }
     pub async fn register_new_files(&self, paths: Vec<PathBuf>) -> () {
         let mut lock = self.last_files_updated.lock().await;
         let t = SystemTime::now();
         for p in paths {
-            lock.push((p, t));
+            lock.insert(p, t);
+        }
+        let mut max_age = Duration::from_secs(3600);
+        while lock.len() > 20 && max_age > Duration::from_secs(120) {
+            lock.retain(|_, v| {
+                t.duration_since(*v).unwrap() < max_age
+            });
+            max_age /= 2;
         }
     }
 
@@ -113,9 +124,6 @@ impl SharedLastFiles {
                 )
             })
             .collect()
-        // lock.iter().map(|(k, t)|{
-        //     t.duration
-        // })
     }
 }
 use clap::Clap;
@@ -143,24 +151,34 @@ pub async fn main(
 ) -> Result<(), Box<dyn Error>> {
     super::setup_daemon_io(&daemon_config.daemon_communication_folder)?;
 
-    eprintln!("Here!!!");
+    println!("Starting up bazelfe daemon");
+    let executable_id = Arc::new(super::current_executable_id());
     let shared_last_files = Arc::new(SharedLastFiles::new());
     let current_dir = std::env::current_dir().expect("Failed to determine current directory");
 
+
+    let most_recent_call = Arc::new(AtomicUsize::new(0));
+
+
     let captured = Arc::clone(&shared_last_files);
+    let captured_most_recent_call = most_recent_call.clone();
+
+    println!("Starting tarpc");
     start_tarpc_server(&paths.socket_path, move || DaemonServerInstance {
         shared_last_files: captured.clone(),
+        executable_id: executable_id.clone(),
+        most_recent_call: captured_most_recent_call.clone()
     })
     .await?;
 
     let current_dir = current_dir;
-    eprintln!("Here!!!");
 
     use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
     let (flume_tx, flume_rx) = flume::unbounded::<notify::Event>();
     let copy_shared = Arc::clone(&shared_last_files);
 
+    println!("Starting tarpc");
     let _ = tokio::task::spawn(async move {
         while let Ok(event) = flume_rx.recv_async().await {
             use notify::EventKind;
@@ -178,6 +196,8 @@ pub async fn main(
             }
         }
     });
+
+    println!("Starting inotify watcher");
     let mut watcher: RecommendedWatcher =
         Watcher::new_immediate(move |res: notify::Result<notify::Event>| {
             match res {
@@ -199,7 +219,18 @@ pub async fn main(
         .unwrap();
 
     eprintln!("Daemon process is up! and serving on socket");
-    tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+    let mut last_call = usize::MAX;
+    println!("Looping to track activity.");
+    loop {
+        tokio::time::sleep(tokio::time::Duration::from_secs(3600)).await;
+
+        let current_v = most_recent_call.load(std::sync::atomic::Ordering::Release);
+        if current_v == last_call {
+            break;
+        } else {
+            last_call = current_v;
+        }
+    }
 
     eprintln!("Daemon terminating after 60 seconds.");
 

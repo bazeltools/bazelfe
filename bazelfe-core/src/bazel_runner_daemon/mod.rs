@@ -102,16 +102,34 @@ where
     }
 }
 
+#[derive(Debug, PartialEq, Clone, Eq, serde::Deserialize, serde::Serialize)]
+pub struct ExecutableId {
+    build_timestamp: String,
+    git_branch: String,
+    git_sha: String
+}
+
+
 pub mod daemon_service {
     use serde::{Deserialize, Serialize};
     use std::path::PathBuf;
 
     #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
     pub struct FileStatus(pub PathBuf, pub u128);
+
+
     #[tarpc::service]
     pub trait RunnerDaemon {
         async fn recently_changed_files() -> Vec<FileStatus>;
 
-        async fn ping() -> ();
+        async fn ping() -> super::ExecutableId;
+    }
+}
+
+pub fn current_executable_id() -> ExecutableId {
+    ExecutableId {
+        build_timestamp: String::from(env!("VERGEN_BUILD_TIMESTAMP")),
+        git_branch: String::from(env!("VERGEN_GIT_BRANCH")),
+        git_sha: String::from(env!("VERGEN_GIT_SHA")),
     }
 }

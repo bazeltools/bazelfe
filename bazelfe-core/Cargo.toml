@@ -4,6 +4,8 @@ edition = "2018"
 license = "Apache-2.0"
 name = "bazelfe-core"
 version = "0.1.0"
+build = "build.rs"
+
 [[bin]]
 name = "scala-parser"
 path = "src/source_dependencies/scala/scala_parser_app.rs"
@@ -80,6 +82,10 @@ sha2 = "0.9.4"
 nix = "0.20.0"
 serde_json = "1.0.64"
 flume = "0.10.5"
+
+[build-dependencies]
+vergen = "5.1.5"
+anyhow = "1.0.40"
 
 
 [dependencies.bazelfe-protos]

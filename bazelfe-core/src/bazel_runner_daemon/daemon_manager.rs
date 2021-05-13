@@ -81,6 +81,7 @@ mod signal_mgr {
 
 async fn maybe_connect_to_server(
     paths: &DaemonPaths,
+    executable_id: &super::ExecutableId
 ) -> Result<Option<super::daemon_service::RunnerDaemonClient>, Box<dyn Error>> {
     if !paths.pid_path.exists() {
         return Ok(None);
@@ -117,8 +118,18 @@ async fn maybe_connect_to_server(
         super::daemon_service::RunnerDaemonClient::new(Default::default(), transport).spawn()
     {
         match cli.ping(tarpc::context::current()).await {
-            Ok(_) => {
-                return Ok(Some(cli));
+            Ok(remote_id) => {
+                if executable_id == &remote_id {
+                    eprintln!(r#"
+                    current: {:#?}
+                    remote: {:#?}
+                "#, executable_id, remote_id);
+                    return Ok(Some(cli));
+                } else {
+                    eprintln!("Remote process was spawned by a different copy of bazelfe. Killing and restarting.");
+                    return Ok(None);
+                }
+
             }
             Err(err) => {
                 eprintln!(
@@ -142,6 +153,8 @@ pub async fn connect_to_server(
         return Ok(None);
     }
 
+    let executable_id = super::current_executable_id();
+
     let paths = DaemonPaths {
         logs_path: daemon_config.daemon_communication_folder.clone(),
         pid_path: daemon_config
@@ -158,13 +171,16 @@ pub async fn connect_to_server(
     while cntr < 3 {
         cntr += 1;
 
-        let connection = maybe_connect_to_server(&paths).await?;
+        let connection = maybe_connect_to_server(&paths, &executable_id).await?;
 
         if connection.is_some() {
             return Ok(connection);
         }
 
+        
+
         if cntr < 3 {
+            eprintln!("Tring to start server");
             start_server(daemon_config, bazel_binary_path, &paths).await?;
             tokio::time::sleep(tokio::time::Duration::from_millis(4)).await;
         }
