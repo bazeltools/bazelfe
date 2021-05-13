@@ -120,13 +120,8 @@ async fn maybe_connect_to_server(
         match cli.ping(tarpc::context::current()).await {
             Ok(remote_id) => {
                 if executable_id == &remote_id {
-                    eprintln!(r#"
-                    current: {:#?}
-                    remote: {:#?}
-                "#, executable_id, remote_id);
                     return Ok(Some(cli));
                 } else {
-                    eprintln!("Remote process was spawned by a different copy of bazelfe. Killing and restarting.");
                     return Ok(None);
                 }
 
@@ -177,10 +172,7 @@ pub async fn connect_to_server(
             return Ok(connection);
         }
 
-        
-
         if cntr < 3 {
-            eprintln!("Tring to start server");
             start_server(daemon_config, bazel_binary_path, &paths).await?;
             tokio::time::sleep(tokio::time::Duration::from_millis(4)).await;
         }
