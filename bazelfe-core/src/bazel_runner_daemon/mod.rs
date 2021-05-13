@@ -106,9 +106,8 @@ where
 pub struct ExecutableId {
     build_timestamp: String,
     git_branch: String,
-    git_sha: String
+    git_sha: String,
 }
-
 
 pub mod daemon_service {
     use serde::{Deserialize, Serialize};
@@ -116,7 +115,6 @@ pub mod daemon_service {
 
     #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
     pub struct FileStatus(pub PathBuf, pub u128);
-
 
     #[tarpc::service]
     pub trait RunnerDaemon {

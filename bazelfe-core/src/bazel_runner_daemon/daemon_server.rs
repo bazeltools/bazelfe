@@ -1,5 +1,5 @@
-use std::{collections::HashMap, path::PathBuf, sync::atomic::AtomicUsize, time::Duration};
 use std::time::SystemTime;
+use std::{collections::HashMap, path::PathBuf, sync::atomic::AtomicUsize, time::Duration};
 
 use std::{error::Error, sync::Arc};
 use tarpc::serde_transport as transport;
@@ -22,7 +22,7 @@ struct Daemon {
 struct DaemonServerInstance {
     pub shared_last_files: Arc<SharedLastFiles>,
     pub executable_id: Arc<super::ExecutableId>,
-    pub most_recent_call: Arc<AtomicUsize>
+    pub most_recent_call: Arc<AtomicUsize>,
 }
 
 #[tarpc::server]
@@ -31,12 +31,14 @@ impl super::daemon_service::RunnerDaemon for DaemonServerInstance {
         self,
         _: tarpc::context::Context,
     ) -> Vec<super::daemon_service::FileStatus> {
-        self.most_recent_call.fetch_add(1, std::sync::atomic::Ordering::Acquire);
+        self.most_recent_call
+            .fetch_add(1, std::sync::atomic::Ordering::Acquire);
         self.shared_last_files.get_recent_files().await
     }
 
     async fn ping(self, _: tarpc::context::Context) -> super::ExecutableId {
-        self.most_recent_call.fetch_add(1, std::sync::atomic::Ordering::Acquire);
+        self.most_recent_call
+            .fetch_add(1, std::sync::atomic::Ordering::Acquire);
         self.executable_id.as_ref().clone()
     }
 }
@@ -106,9 +108,7 @@ impl SharedLastFiles {
         }
         let mut max_age = Duration::from_secs(3600);
         while lock.len() > 20 && max_age > Duration::from_secs(120) {
-            lock.retain(|_, v| {
-                t.duration_since(*v).unwrap() < max_age
-            });
+            lock.retain(|_, v| t.duration_since(*v).unwrap() < max_age);
             max_age /= 2;
         }
     }
@@ -156,9 +156,7 @@ pub async fn main(
     let shared_last_files = Arc::new(SharedLastFiles::new());
     let current_dir = std::env::current_dir().expect("Failed to determine current directory");
 
-
     let most_recent_call = Arc::new(AtomicUsize::new(0));
-
 
     let captured = Arc::clone(&shared_last_files);
     let captured_most_recent_call = most_recent_call.clone();
@@ -167,7 +165,7 @@ pub async fn main(
     start_tarpc_server(&paths.socket_path, move || DaemonServerInstance {
         shared_last_files: captured.clone(),
         executable_id: executable_id.clone(),
-        most_recent_call: captured_most_recent_call.clone()
+        most_recent_call: captured_most_recent_call.clone(),
     })
     .await?;
 

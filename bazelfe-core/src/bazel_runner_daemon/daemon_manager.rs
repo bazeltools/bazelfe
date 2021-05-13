@@ -81,7 +81,7 @@ mod signal_mgr {
 
 async fn maybe_connect_to_server(
     paths: &DaemonPaths,
-    executable_id: &super::ExecutableId
+    executable_id: &super::ExecutableId,
 ) -> Result<Option<super::daemon_service::RunnerDaemonClient>, Box<dyn Error>> {
     if !paths.pid_path.exists() {
         return Ok(None);
@@ -124,7 +124,6 @@ async fn maybe_connect_to_server(
                 } else {
                     return Ok(None);
                 }
-
             }
             Err(err) => {
                 eprintln!(
