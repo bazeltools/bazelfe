@@ -73,7 +73,7 @@ pub async fn rewrite_command_line(
                                     targets.iter().for_each(|target| {
                                         if !seen_targets.contains(target.target_label()) {
                                             seen_targets.insert(target.target_label().clone());
-                                            buf.push_str(&format!("|{}\n", target.target_label()));
+                                            buf.push_str(&format!("\n|{}", target.target_label()));
                                         }
                                     });
                                 });
@@ -83,7 +83,7 @@ pub async fn rewrite_command_line(
                                         format!(
                                             r#"|No test target specified.
                                     | Suggestions: 
-                                    {}
+                                    |{}
                                     |"#,
                                             buf
                                         )
