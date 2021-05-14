@@ -18,11 +18,48 @@ struct Daemon {
     bazel_binary_path: PathBuf,
 }
 
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub struct Distance(pub u16);
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct TargetData {
+    pub target_label: String,
+    pub target_kind: String,
+    pub is_test: bool,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct TargetId(u32);
+
+#[derive(Debug)]
+struct TargetCache {
+    src_file_to_target: HashMap<PathBuf, TargetId>,
+    target_to_deps: HashMap<TargetId, Vec<TargetId>>,
+    target_id_to_details: HashMap<TargetId, TargetData>,
+    label_string_to_id: HashMap<String, TargetId>,
+    max_id: usize
+}
+
+impl Default for TargetCache {
+    fn default() -> Self {
+        Self {
+            src_file_to_target: HashMap::default(),
+            target_to_deps: HashMap::default(),
+            target_id_to_details: HashMap::default(),
+            label_string_to_id: HashMap::default(),
+            max_id: 0
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 struct DaemonServerInstance {
     pub shared_last_files: Arc<SharedLastFiles>,
     pub executable_id: Arc<super::ExecutableId>,
     pub most_recent_call: Arc<AtomicUsize>,
+    pub target_cache: Arc<Mutex<TargetCache>>,
+    pub daemon_config: Arc<DaemonConfig>,
+    pub bazel_binary_path: Arc<PathBuf>,
 }
 
 #[tarpc::server]
@@ -40,6 +77,54 @@ impl super::daemon_service::RunnerDaemon for DaemonServerInstance {
         self.most_recent_call
             .fetch_add(1, std::sync::atomic::Ordering::Acquire);
         self.executable_id.as_ref().clone()
+    }
+
+    async fn recently_invalidated_targets(
+        self,
+        _: tarpc::context::Context,
+        distance: u32,
+    ) -> Vec<super::daemon_service::Targets> {
+        self.most_recent_call
+            .fetch_add(1, std::sync::atomic::Ordering::Acquire);
+
+        let recent_files = self.shared_last_files.get_recent_files().await;
+
+        let mut target_cache = self.target_cache.lock().await;
+
+        let paths_missing_owner = recent_files.iter().filter(|&f| {
+            let path = &f.0;
+            !target_cache.src_file_to_target.contains_key(path)
+        });
+
+        let bazel_query =
+        crate::jvm_indexer::bazel_query::from_binary_path(self.bazel_binary_path.as_ref());
+
+
+        for path in paths_missing_owner {
+            let mut cur_path = Some(path.0.as_path());
+            loop {
+                if let Some(p) = cur_path {
+                    if p.join("BUILD").exists() || p.join("WORKSPACE").exists() {
+                        break;
+                    } else {
+                        cur_path = p.parent();
+                    }
+                } else {
+                    break;
+                };
+            }
+
+            if let Some(p) = cur_path {
+                let dependencies_calculated = crate::bazel_runner_daemon::query_graph::graph_query(
+                    &bazel_query,
+                    &format!("deps({}, 1)", p.to_string_lossy()),
+                )
+                .await;
+                eprintln!("{:#?}", dependencies_calculated);
+            }
+        }
+
+        Vec::default()
     }
 }
 
@@ -146,7 +231,7 @@ pub async fn base_main() -> Result<(), Box<dyn Error>> {
 
 pub async fn main(
     daemon_config: &DaemonConfig,
-    _bazel_binary_path: &PathBuf,
+    bazel_binary_path: &PathBuf,
     paths: &super::daemon_manager::DaemonPaths,
 ) -> Result<(), Box<dyn Error>> {
     super::setup_daemon_io(&daemon_config.daemon_communication_folder)?;
@@ -161,11 +246,19 @@ pub async fn main(
     let captured = Arc::clone(&shared_last_files);
     let captured_most_recent_call = most_recent_call.clone();
 
+    let target_cache = Arc::new(Mutex::new(TargetCache::default()));
+    let captured_target_cache = target_cache.clone();
+
+    let captured_daemon_config = Arc::new(daemon_config.clone());
+    let captured_bazel_binary_path = Arc::new(bazel_binary_path.clone());
     println!("Starting tarpc");
     start_tarpc_server(&paths.socket_path, move || DaemonServerInstance {
         shared_last_files: captured.clone(),
         executable_id: executable_id.clone(),
         most_recent_call: captured_most_recent_call.clone(),
+        target_cache: captured_target_cache.clone(),
+        daemon_config: captured_daemon_config.clone(),
+        bazel_binary_path: captured_bazel_binary_path.clone(),
     })
     .await?;
 

@@ -103,7 +103,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
         SubCommands::QueryGraph => {
             let bazel_query = bazelfe_core::jvm_indexer::bazel_query::from_binary_path(
-                opt.bazel_binary_path
+                &opt.bazel_binary_path
                     .expect("Should have a bazel binary path when running query."),
             );
 

@@ -30,6 +30,9 @@ pub enum SpawnFailure {
     #[error("Failed to do generic io operation")]
     IoError(#[from] std::io::Error),
 
+    #[error("Unable to find the WORKSPACE file, our current working directory was calculated out to be: `{0}`, try setting the REPO_ROOT env var")]
+    UnableToFindWorkspace(PathBuf),
+
     #[error("Failed to exec in child daemon process")]
     ExecvpError(#[from] exec::Error),
 }
@@ -72,6 +75,15 @@ where
         std::fs::create_dir_all(parent).map_err(|e| SpawnFailure::MakeDirFailed(e))?;
     }
 
+    let mut path_to_use = std::env::current_dir().expect("Should be able to determine the current dir");
+    if let Ok(root_path) = std::env::var("REPO_ROOT") {
+        path_to_use = PathBuf::from(root_path);
+    }
+
+    if !std::env::current_dir()?.join("WORKSPACE").exists() {
+        return Err(SpawnFailure::UnableToFindWorkspace(path_to_use));
+    }
+
     match fork::fork() {
         Ok(Fork::Parent(_)) => Ok(()),
         Ok(Fork::Child) => fork::setsid()
@@ -86,9 +98,7 @@ where
                         file.write_all(format!("{}", std::process::id()).as_bytes())?;
                         drop(file);
 
-                        if let Ok(root_path) = std::env::var("REPO_ROOT") {
-                            std::env::set_current_dir(root_path)?;
-                        }
+                        std::env::set_current_dir(path_to_use)?;
                         std::env::set_var("BAZEL_FE_ENABLE_DAEMON_MODE", "true");
                         let e = exec::Command::new(std::env::current_exe()?)
                             .args(child_process_args)
@@ -116,9 +126,38 @@ pub mod daemon_service {
     #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
     pub struct FileStatus(pub PathBuf, pub u128);
 
+    #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
+    pub enum Targets {
+        Test(TestTarget),
+        Build(BuildTarget),
+    }
+    impl Targets {
+        pub fn target_label(&self) -> &String {
+            match self {
+                Targets::Test(t) => &t.target_label,
+                Targets::Build(b) => &b.target_label,
+            }
+        }
+    }
+    #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
+    pub struct TestTarget {
+        pub target_label: String,
+        pub min_distance: u32,
+        pub from_files: Vec<PathBuf>,
+    }
+
+    #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
+    pub struct BuildTarget {
+        pub target_label: String,
+        pub min_distance: u32,
+        pub from_files: Vec<PathBuf>,
+    }
+
     #[tarpc::service]
     pub trait RunnerDaemon {
         async fn recently_changed_files() -> Vec<FileStatus>;
+
+        async fn recently_invalidated_targets(distance: u32) -> Vec<Targets>;
 
         async fn ping() -> super::ExecutableId;
     }

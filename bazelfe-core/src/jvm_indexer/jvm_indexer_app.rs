@@ -234,7 +234,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .collect();
 
     let bazel_query =
-        bazelfe_core::jvm_indexer::bazel_query::from_binary_path(opt.bazel_binary_path);
+        bazelfe_core::jvm_indexer::bazel_query::from_binary_path(&opt.bazel_binary_path);
 
     let bazel_deps_replacement_map: HashMap<String, String> = match &opt.bazel_deps_root {
         None => HashMap::default(),

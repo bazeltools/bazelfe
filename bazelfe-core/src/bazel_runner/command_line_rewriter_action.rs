@@ -37,14 +37,6 @@ pub async fn rewrite_command_line(
             let target_opt = find_first_non_flag_arg(iter);
 
             if target_opt.is_none() {
-                if let Some(daemon_cli) = daemon_client.as_ref() {
-                    eprintln!(
-                        "{:#?}",
-                        daemon_cli
-                            .recently_changed_files(tarpc::context::current())
-                            .await
-                    );
-                }
                 match &command_line_rewriter.test {
                     TestActionMode::EmptyTestToLocalRepo(cfg) => {
                         args.push(cfg.command_to_use.clone());
@@ -53,6 +45,59 @@ pub async fn rewrite_command_line(
                         Err(RewriteCommandLineError::UserErrorReport(super::UserReportError("No test target specified.\nUnlike other build tools, bazel requires you specify which test target to test.\nTo test the whole repo add //... to the end. But beware this could be slow!".to_owned())))?;
                     }
                     TestActionMode::Passthrough => {}
+                    TestActionMode::SuggestTestTarget(cfg) => {
+                        if let Some(daemon_cli) = daemon_client.as_ref() {
+                            let mut invalidated_targets = vec![];
+
+                            for distance in 0..(cfg.distance_to_expand + 1) {
+                                let recently_invalidated_targets = daemon_cli
+                                    .recently_invalidated_targets(
+                                        tarpc::context::current(),
+                                        distance,
+                                    )
+                                    .await;
+                                invalidated_targets.extend(
+                                    recently_invalidated_targets
+                                        .into_iter()
+                                        .map(|e| (distance, e)),
+                                );
+                            }
+                            if !invalidated_targets.is_empty() {
+                                use trim_margin::MarginTrimmable;
+
+                                invalidated_targets.sort_by_key(|e| e.0);
+                                use std::collections::HashSet;
+                                let mut seen_targets: HashSet<String> = HashSet::default();
+                                let mut buf = String::from("");
+                                invalidated_targets.into_iter().for_each(|(_, targets)| {
+                                    targets.iter().for_each(|target| {
+                                        if !seen_targets.contains(target.target_label()) {
+                                            seen_targets.insert(target.target_label().clone());
+                                            buf.push_str(&format!("|{}\n", target.target_label()));
+                                        }
+                                    });
+                                });
+
+                                Err(RewriteCommandLineError::UserErrorReport(
+                                    super::UserReportError(
+                                        format!(
+                                            r#"No test target specified.
+                                    | Suggestions: 
+                                    {}
+                                    |"#,
+                                            buf
+                                        )
+                                        .trim_margin()
+                                        .unwrap()
+                                        .to_owned(),
+                                    ),
+                                ))?;
+                            }
+                        } else {
+                            Err(RewriteCommandLineError::UserErrorReport(super::UserReportError(
+                                "Configured to suggest possible test targets to run, but no daemon is running".to_owned())))?;
+                        }
+                    }
                 }
             }
         }

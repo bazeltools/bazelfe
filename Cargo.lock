@@ -147,6 +147,7 @@ dependencies = [
  "toml",
  "tonic",
  "tower",
+ "trim-margin",
  "vergen",
  "walkdir",
  "zip",
@@ -2196,6 +2197,12 @@ dependencies = [
  "pin-project",
  "tracing",
 ]
+
+[[package]]
+name = "trim-margin"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "48117cceb8c7e70f435a873d11a2084ef79cd9e6e68ff66a2f27bb268bc0832b"
 
 [[package]]
 name = "try-lock"

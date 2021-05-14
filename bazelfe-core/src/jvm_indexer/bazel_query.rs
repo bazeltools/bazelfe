@@ -30,9 +30,9 @@ pub struct BazelQueryBinaryImpl {
     bazel_executable_path: PathBuf,
 }
 
-pub fn from_binary_path(pb: PathBuf) -> BazelQueryBinaryImpl {
+pub fn from_binary_path(pb: &PathBuf) -> BazelQueryBinaryImpl {
     BazelQueryBinaryImpl {
-        bazel_executable_path: pb,
+        bazel_executable_path: pb.clone(),
     }
 }
 

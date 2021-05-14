@@ -37,7 +37,7 @@ fn parse_current_repo_name() -> Option<String> {
     None
 }
 
-pub async fn graph_query<B: BazelQuery, Q: AsRef<str>>(bazel_query: &B, query: Q) -> ExecuteResult {
+pub async fn graph_query<B: BazelQuery, Q: AsRef<str>>(bazel_query: &B, query: Q) -> HashMap<String, HashSet<String>> {
     let res = bazel_query
         .execute(&vec![
             String::from("query"),
@@ -94,6 +94,5 @@ pub async fn graph_query<B: BazelQuery, Q: AsRef<str>>(bazel_query: &B, query: Q
         }
     }
 
-    eprintln!("{:#?}", result);
-    res
+ result
 }
