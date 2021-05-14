@@ -187,10 +187,13 @@ impl SharedLastFiles {
         }
     }
     pub async fn register_new_files(&self, paths: Vec<PathBuf>) -> () {
+        let current_path = std::env::current_dir().expect("Should be able to get the current dir");
         let mut lock = self.last_files_updated.lock().await;
         let t = SystemTime::now();
         for p in paths {
-            lock.insert(p, t);
+            if let Ok(relative_path) = p.strip_prefix(current_path.as_path) {
+                lock.insert(p, t);
+            }
         }
         let mut max_age = Duration::from_secs(3600);
         while lock.len() > 20 && max_age > Duration::from_secs(120) {
