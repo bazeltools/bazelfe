@@ -81,7 +81,7 @@ pub async fn rewrite_command_line(
                                 Err(RewriteCommandLineError::UserErrorReport(
                                     super::UserReportError(
                                         format!(
-                                            r#"No test target specified.
+                                            r#"|No test target specified.
                                     | Suggestions: 
                                     {}
                                     |"#,
