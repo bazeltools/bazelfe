@@ -192,7 +192,7 @@ impl SharedLastFiles {
         let t = SystemTime::now();
         for p in paths {
             if let Ok(relative_path) = p.strip_prefix(current_path.as_path()) {
-                lock.insert(relative_path, t);
+                lock.insert(relative_path.to_path_buf(), t);
             }
         }
         let mut max_age = Duration::from_secs(3600);
