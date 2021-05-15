@@ -16,9 +16,6 @@ gfhvnm
 asd
 
 
-asd
-
-sdf
 
 
 

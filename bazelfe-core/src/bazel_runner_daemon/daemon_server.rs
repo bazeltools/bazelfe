@@ -112,8 +112,7 @@ impl TargetState {
                         .insert(path.to_string_lossy().to_string(), cur_id);
                     if let Some(path) = target_as_path(k) {
                         eprintln!("Inserting {:#?}", path);
-                        self.label_string_to_id
-                            .insert(path.to_string_lossy().to_string(), cur_id);
+                        self.src_file_to_target.insert(path, cur_id);
                     }
                 }
             }
