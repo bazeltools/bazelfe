@@ -95,7 +95,7 @@ pub async fn graph_query<B: BazelQuery, Q: AsRef<str>>(
             .map(|e| e.replace("\"", ""))
             .map(|e| split_segment(&current_repo_name, &e));
         if let Some(lhs) = lhs {
-            for lhs in lhs.iter() {
+            for &lhs in lhs.iter() {
                 if let Some(rhs) = rhs {
                     for rhs in rhs.iter() {
                         if let Some(existing_rhs) = result.get_mut(rhs) {
