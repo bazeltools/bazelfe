@@ -123,7 +123,10 @@ impl TargetState {
                 if !self.target_to_rdeps.contains_key(&rdep_src) {
                     self.target_to_rdeps.insert(rdep_src, Default::default());
                 }
-                let mut t = self.target_to_rdeps.get_mut(&rdep_src);
+                let mut t = self
+                    .target_to_rdeps
+                    .get_mut(&rdep_src)
+                    .expect("We guaranteed its here.");
 
                 for rdep in rdeps.iter() {
                     let id: TargetId = *self
