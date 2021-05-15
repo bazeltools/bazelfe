@@ -78,6 +78,11 @@ impl TargetState {
             return Ok(());
         }
 
+        eprintln!(
+            "Checking for path: {:#?}, found... : {:#?}",
+            path, self.label_string_to_id
+        );
+
         let mut cur_path = Some(path.as_path());
         loop {
             if let Some(p) = cur_path {
@@ -108,7 +113,7 @@ impl TargetState {
                     }
                 }
             }
-            eprintln!("{:#?}", dependencies_calculated);
+            eprintln!("Dependencies... {:#?}", dependencies_calculated);
         }
 
         Ok(())
