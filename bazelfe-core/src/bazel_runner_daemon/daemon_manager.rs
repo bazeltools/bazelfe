@@ -103,6 +103,7 @@ async fn maybe_connect_to_server(
                 if executable_id == &remote_id {
                     return Ok(Some(cli));
                 } else {
+                    try_kill_server(&paths).await;
                     return Ok(None);
                 }
             }
