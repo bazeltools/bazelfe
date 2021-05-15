@@ -57,12 +57,12 @@ fn parse_regex<'de, D>(deserializer: D) -> Result<NotifyRegexes, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
-    let s: Vec<&str> = Deserialize::deserialize(deserializer)?;
+    let s: Vec<String> = Deserialize::deserialize(deserializer)?;
 
     let mut res: Vec<Regex> = Vec::default();
 
     for e in s {
-        let cur: Regex = Regex::new(e).map_err(serde::de::Error::custom)?;
+        let cur: Regex = Regex::new(&e).map_err(serde::de::Error::custom)?;
         res.push(cur);
     }
     Ok(NotifyRegexes(res))
