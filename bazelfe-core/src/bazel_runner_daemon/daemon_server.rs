@@ -37,7 +37,7 @@ pub struct TargetData {
     pub is_test: bool,
 }
 
-#[derive(Debug, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, PartialEq, Eq, Hash, Clone)]
 pub struct TargetId(u32);
 
 #[derive(Debug)]
