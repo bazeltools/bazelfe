@@ -338,8 +338,14 @@ pub async fn main(
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
         let current_v = most_recent_call.load(std::sync::atomic::Ordering::Release);
-        if current_v == last_call && Instant::now().duration_since(last_seen) > max_delay {
-            break;
+
+        
+        if current_v == last_call {
+            // If we haven't incremented since the last loop
+            // and we haven't incremented in max_delay time then exit
+            if Instant::now().duration_since(last_seen) > max_delay {
+                break;
+            }
         } else {
             last_call = current_v;
             last_seen = Instant::now();
