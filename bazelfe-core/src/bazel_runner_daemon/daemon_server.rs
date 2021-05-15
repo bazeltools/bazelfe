@@ -119,7 +119,7 @@ impl TargetState {
                     .label_string_to_id
                     .get(k)
                     .expect("Expected to find target");
-                if !self.target_to_rdeps.contains_key(rdep_src) {
+                if !self.target_to_rdeps.contains_key(&rdep_src) {
                     self.target_to_rdeps.insert(k, Default::default());
                 }
                 let mut t = self.target_to_rdeps.get_mut(k);
