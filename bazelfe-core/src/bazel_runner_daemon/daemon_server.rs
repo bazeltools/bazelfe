@@ -72,7 +72,7 @@ fn target_as_path(s: &String) -> Option<PathBuf> {
 impl TargetState {
     pub async fn hydrate_new_file_data(
         self: Arc<TargetState>,
-        bazel_query: Arc<dyn BazelQuery>,
+        bazel_query: Arc<Mutex<dyn BazelQuery>>,
         path: &PathBuf,
     ) -> Result<(), Box<dyn Error>> {
         if self.src_file_to_target.contains_key(path) {
@@ -98,8 +98,12 @@ impl TargetState {
         }
 
         if let Some(p) = cur_path {
+            let bazel_query = bazel_query.lock().await;
+            if self.src_file_to_target.contains_key(path) {
+                return Ok(());
+            }
             let dependencies_calculated = crate::bazel_runner_daemon::query_graph::graph_query(
-                bazel_query.as_ref(),
+                &*bazel_query,
                 &format!("deps({}, 1)", p.to_string_lossy()),
             )
             .await;
@@ -111,7 +115,6 @@ impl TargetState {
                     self.label_string_to_id
                         .insert(path.to_string_lossy().to_string(), cur_id);
                     if let Some(path) = target_as_path(k) {
-                        eprintln!("Inserting {:#?}", path);
                         self.src_file_to_target.insert(path, cur_id);
                     }
                 }
@@ -129,7 +132,7 @@ struct TargetCache {
     last_files_updated: Arc<Mutex<HashMap<PathBuf, SystemTime>>>,
     inotify_ignore_regexes: NotifyRegexes,
     pending_hydrations: Arc<AtomicUsize>,
-    bazel_query: Arc<dyn BazelQuery>,
+    bazel_query: Arc<Mutex<dyn BazelQuery>>,
 }
 
 impl TargetCache {
@@ -354,9 +357,9 @@ pub async fn main(
 ) -> Result<(), Box<dyn Error>> {
     super::setup_daemon_io(&daemon_config.daemon_communication_folder)?;
 
-    let bazel_query: Arc<dyn BazelQuery> = Arc::new(
+    let bazel_query: Arc<dyn BazelQuery> = Arc::new(Mutex::new(
         crate::jvm_indexer::bazel_query::from_binary_path(bazel_binary_path),
-    );
+    ));
 
     println!("Starting up bazelfe daemon");
     let executable_id = Arc::new(super::current_executable_id());
