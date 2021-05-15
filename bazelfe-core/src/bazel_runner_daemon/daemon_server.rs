@@ -61,7 +61,7 @@ impl Default for TargetState {
 }
 
 fn target_as_path(s: &String) -> Option<PathBuf> {
-    let pb = PathBuf::from(s.replace(":", "/"));
+    let pb = PathBuf::from(s.replace(":", "/").replace("//", ""));
     if pb.exists() {
         Some(pb)
     } else {
