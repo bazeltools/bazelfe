@@ -288,6 +288,8 @@ pub async fn main(
             for p in event.paths {
                 eprintln!("Path: {}", p.to_string_lossy());
             }
+
+            eprintln!("{:#?}", event);
             // eprintln!("{:#?}\nPaths:\n{:#?}", event.paths, event.paths);
             use notify::EventKind;
             let should_process = match &event.kind {
@@ -320,6 +322,8 @@ pub async fn main(
         })
         .unwrap();
 
+        watcher.configure(notify::Config::PreciseEvents(true)).unwrap();
+        
     // Add a path to be watched. All files and directories at that path and
     // below will be monitored for changes.
     eprintln!("Watching {:#?}", current_dir);
