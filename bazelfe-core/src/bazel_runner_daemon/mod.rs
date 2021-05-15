@@ -39,15 +39,12 @@ pub enum SpawnFailure {
 
 const OUTPUT_SUFFIXES: [&str; 2] = ["stdout", "stderr"];
 
-
-
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct DaemonPaths {
     pub logs_path: PathBuf,
     pub pid_path: PathBuf,
     pub socket_path: PathBuf,
 }
-
 
 fn make_paths<'a>(root: &'a PathBuf) -> impl Iterator<Item = PathBuf> + 'a {
     OUTPUT_SUFFIXES
@@ -85,7 +82,8 @@ where
         std::fs::create_dir_all(parent).map_err(|e| SpawnFailure::MakeDirFailed(e))?;
     }
 
-    let mut path_to_use = std::env::current_dir().expect("Should be able to determine the current dir");
+    let mut path_to_use =
+        std::env::current_dir().expect("Should be able to determine the current dir");
     if let Ok(root_path) = std::env::var("REPO_ROOT") {
         path_to_use = PathBuf::from(root_path);
     }
@@ -180,8 +178,6 @@ pub fn current_executable_id() -> ExecutableId {
         git_sha: String::from(env!("VERGEN_GIT_SHA")),
     }
 }
-
-
 
 pub(in crate::bazel_runner_daemon) fn read_pid(daemon_paths: &DaemonPaths) -> Option<i32> {
     use std::fs::File;

@@ -6,12 +6,14 @@ use tarpc::serde_transport as transport;
 use tarpc::server::Channel;
 use tokio::{sync::Mutex, task::JoinHandle};
 
-use crate::{bazel_runner_daemon::daemon_service::RunnerDaemon, config::daemon_config::NotifyRegexes};
 use crate::config::DaemonConfig;
+use crate::{
+    bazel_runner_daemon::daemon_service::RunnerDaemon, config::daemon_config::NotifyRegexes,
+};
+use std::time::Instant;
 use tokio::net::UnixListener;
 use tokio_serde::formats::Bincode;
 use tokio_util::codec::LengthDelimitedCodec;
-use std::time::Instant;
 
 #[derive(Debug, Clone)]
 struct Daemon {
@@ -38,7 +40,7 @@ struct TargetCache {
     target_to_deps: HashMap<TargetId, Vec<TargetId>>,
     target_id_to_details: HashMap<TargetId, TargetData>,
     label_string_to_id: HashMap<String, TargetId>,
-    max_id: usize
+    max_id: usize,
 }
 
 impl Default for TargetCache {
@@ -48,7 +50,7 @@ impl Default for TargetCache {
             target_to_deps: HashMap::default(),
             target_id_to_details: HashMap::default(),
             label_string_to_id: HashMap::default(),
-            max_id: 0
+            max_id: 0,
         }
     }
 }
@@ -98,8 +100,7 @@ impl super::daemon_service::RunnerDaemon for DaemonServerInstance {
         });
 
         let bazel_query =
-        crate::jvm_indexer::bazel_query::from_binary_path(self.bazel_binary_path.as_ref());
-
+            crate::jvm_indexer::bazel_query::from_binary_path(self.bazel_binary_path.as_ref());
 
         for path in paths_missing_owner {
             let mut cur_path = Some(path.0.as_path());
@@ -178,13 +179,13 @@ pub async fn main_from_config(config_path: &PathBuf) -> Result<(), Box<dyn Error
 #[derive(Debug, Clone)]
 struct SharedLastFiles {
     last_files_updated: Arc<Mutex<HashMap<PathBuf, SystemTime>>>,
-    inotify_ignore_regexes: NotifyRegexes
+    inotify_ignore_regexes: NotifyRegexes,
 }
 impl SharedLastFiles {
     pub fn new(daemon_config: &DaemonConfig) -> Self {
         Self {
             last_files_updated: Arc::new(Mutex::new(HashMap::default())),
-            inotify_ignore_regexes: daemon_config.inotify_ignore_regexes.clone()
+            inotify_ignore_regexes: daemon_config.inotify_ignore_regexes.clone(),
         }
     }
     pub async fn register_new_files(&self, paths: Vec<PathBuf>) -> () {
@@ -193,10 +194,16 @@ impl SharedLastFiles {
         let t = SystemTime::now();
         for p in paths {
             eprintln!("{:#?}", p);
-            if let Ok(relative_path) = p.canonicalize().unwrap_or(p).strip_prefix(current_path.as_path()) {
-                let is_ignored = self.inotify_ignore_regexes.0.iter().find(|&p| {
-                    p.is_match(relative_path.to_string_lossy().as_ref())
-                });
+            if let Ok(relative_path) = p
+                .canonicalize()
+                .unwrap_or(p)
+                .strip_prefix(current_path.as_path())
+            {
+                let is_ignored = self
+                    .inotify_ignore_regexes
+                    .0
+                    .iter()
+                    .find(|&p| p.is_match(relative_path.to_string_lossy().as_ref()));
                 if is_ignored.is_none() {
                     lock.insert(relative_path.to_path_buf(), t);
                 }
@@ -314,8 +321,10 @@ pub async fn main(
         })
         .unwrap();
 
-        watcher.configure(notify::Config::NoticeEvents(true)).unwrap();
-        
+    watcher
+        .configure(notify::Config::NoticeEvents(true))
+        .unwrap();
+
     // Add a path to be watched. All files and directories at that path and
     // below will be monitored for changes.
     eprintln!("Watching {:#?}", current_dir);
@@ -335,7 +344,6 @@ pub async fn main(
 
         let current_v = most_recent_call.load(std::sync::atomic::Ordering::Acquire);
 
-        
         if current_v == last_call {
             // If we haven't incremented since the last loop
             // and we haven't incremented in max_delay time then exit
@@ -353,14 +361,16 @@ pub async fn main(
             // Another process lauched and we didn't catch the conflict in the manager, we should die to avoid issues.
             let our_pid = std::process::id();
             if our_pid != p as u32 {
-                eprintln!("Quitting since our pid is {}, but pid file contains {}", our_pid, p);
+                eprintln!(
+                    "Quitting since our pid is {}, but pid file contains {}",
+                    our_pid, p
+                );
                 break;
             }
         } else {
             eprintln!("Quitting since cannot open pid file");
             break; // directory or file gone. Die.
         }
-
     }
 
     Ok(())

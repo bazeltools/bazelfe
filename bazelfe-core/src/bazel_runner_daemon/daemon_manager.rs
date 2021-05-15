@@ -47,7 +47,6 @@ async fn try_kill_server(paths: &DaemonPaths) -> () {
     }
 }
 
-
 mod signal_mgr {
     pub fn process_is_alive(pid: i32) -> bool {
         unsafe { libc::kill(pid, 0) == 0 }
