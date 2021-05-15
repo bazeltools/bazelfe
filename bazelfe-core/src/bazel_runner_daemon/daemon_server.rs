@@ -118,7 +118,8 @@ impl TargetState {
                 let rdep_src: TargetId = self
                     .label_string_to_id
                     .get(k)
-                    .expect("Expected to find target");
+                    .expect("Expected to find target")
+                    .as_ref();
                 if !self.target_to_rdeps.contains_key(&rdep_src) {
                     self.target_to_rdeps.insert(rdep_src, Default::default());
                 }
