@@ -343,7 +343,9 @@ pub async fn main(
         if current_v == last_call {
             // If we haven't incremented since the last loop
             // and we haven't incremented in max_delay time then exit
-            if Instant::now().duration_since(last_seen) > max_delay {
+            let now = Instant::now();
+            if now.duration_since(last_seen) > max_delay {
+                eprintln!("Quitting since its now {:#?} and we haven't seen an update since {:#?} which is more than {:#?}", now, last_seen, max_delay);
                 break;
             }
         } else {
@@ -353,10 +355,13 @@ pub async fn main(
         let pid = super::read_pid(&paths);
         if let Some(p) = pid {
             // Another process lauched and we didn't catch the conflict in the manager, we should die to avoid issues.
-            if std::process::id() != p as u32 {
+            let our_pid = std::process::id();
+            if our_pid != p as u32 {
+                eprintln!("Quitting since our pid is {}, but pid file contains {}", our_pid, p);
                 break;
             }
         } else {
+            eprintln!("Quitting since cannot open pid file");
             break; // directory or file gone. Die.
         }
 
