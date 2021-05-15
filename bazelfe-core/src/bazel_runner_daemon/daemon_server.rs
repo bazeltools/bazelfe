@@ -322,7 +322,7 @@ pub async fn main(
         })
         .unwrap();
 
-        watcher.configure(notify::Config::PreciseEvents(true)).unwrap();
+        watcher.configure(notify::Config::NoticeEvents(true)).unwrap();
         
     // Add a path to be watched. All files and directories at that path and
     // below will be monitored for changes.
