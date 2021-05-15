@@ -144,7 +144,7 @@ impl TargetCache {
                     .find(|&p| p.is_match(relative_path.to_string_lossy().as_ref()));
                 if is_ignored.is_none() {
                     let pb = relative_path.to_path_buf();
-                    self.hydrate_new_file_data(pb.clone());
+                    self.hydrate_new_file_data(pb.clone()).await;
                     lock.insert(relative_path.to_path_buf(), t);
                 }
             }
