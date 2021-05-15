@@ -79,6 +79,7 @@ pub async fn graph_query<B: BazelQuery, Q: AsRef<str>>(bazel_query: &B, query: Q
         let rhs = split_v.next().map(|e| e.replace("\"", ""));
         if let Some(lhs) = lhs {
             if let Some(rhs) = rhs {
+                eprintln!("Lhs: {}\nRhs{}\n", lhs, rhs);
                 if let Some(existing_rhs) = result.get_mut(&rhs) {
                     existing_rhs.insert(lhs.to_string());
                 } else {
