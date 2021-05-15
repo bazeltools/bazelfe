@@ -41,7 +41,6 @@ fn split_segment<'a>(current_repo_name: &Option<String>, segment: &'a str) -> Ve
     lazy_static! {
         static ref EXTERNAL_REPO_REGEX: Regex = Regex::new(r#"@([A-Za-z0-9_-]+)"#).unwrap();
     }
-    eprintln!("Going to try split {}", segment);
     segment
         .split("\\n")
         .filter(|e| {
@@ -49,7 +48,6 @@ fn split_segment<'a>(current_repo_name: &Option<String>, segment: &'a str) -> Ve
             if let Some(repo) = &current_repo_name {
                 for r in EXTERNAL_REPO_REGEX.captures_iter(e) {
                     if &r[1] != repo {
-                        eprintln!("Discarding {}", e);
                         line_ok = false;
                     }
                 }
@@ -60,7 +58,7 @@ fn split_segment<'a>(current_repo_name: &Option<String>, segment: &'a str) -> Ve
         .collect()
 }
 
-pub async fn graph_query<B: BazelQuery, Q: AsRef<str>>(
+pub async fn graph_query<B: BazelQuery + ?Sized, Q: AsRef<str>>(
     bazel_query: &B,
     query: Q,
 ) -> HashMap<String, HashSet<String>> {
@@ -96,10 +94,8 @@ pub async fn graph_query<B: BazelQuery, Q: AsRef<str>>(
             .map(|e| e.replace("\"", ""))
             .map(|e| split_segment(&current_repo_name, &e));
         if let Some(lhs) = lhs.as_ref() {
-            eprintln!("Lhs: {:#?}", lhs);
             for lhs in lhs.iter() {
                 if let Some(rhs) = rhs.as_ref() {
-                    eprintln!("rhs: {:#?}", rhs);
                     for rhs in rhs.iter() {
                         if let Some(existing_rhs) = result.get_mut(rhs) {
                             existing_rhs.insert(lhs.to_string());
@@ -117,8 +113,6 @@ pub async fn graph_query<B: BazelQuery, Q: AsRef<str>>(
             }
         }
     }
-    eprintln!("Res:\n{:#?}", res);
-    eprintln!("Result:\n{:#?}", result);
 
     result
 }

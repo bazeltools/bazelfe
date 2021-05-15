@@ -21,7 +21,7 @@ impl std::convert::From<std::io::Error> for ExecuteResult {
 pub type Result<T> = std::result::Result<T, ExecuteResult>;
 
 #[async_trait]
-pub trait BazelQuery {
+pub trait BazelQuery: std::fmt::Debug + Send + Sync {
     async fn execute(&self, args: &Vec<String>) -> ExecuteResult;
 }
 

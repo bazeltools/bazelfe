@@ -83,6 +83,7 @@ nix = "0.20.0"
 serde_json = "1.0.64"
 flume = "0.10.5"
 trim-margin = "0.1.0"
+dashmap = "4.0.2"
 
 [build-dependencies]
 vergen = "5.1.5"

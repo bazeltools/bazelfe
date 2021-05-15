@@ -113,6 +113,7 @@ dependencies = [
  "clap",
  "crossbeam-channel 0.4.4",
  "ctrlc",
+ "dashmap",
  "dynfmt",
  "exec",
  "flume",
@@ -417,6 +418,16 @@ checksum = "232295399409a8b7ae41276757b5a1cc21032848d42bff2352261f958b3ca29a"
 dependencies = [
  "nix",
  "winapi",
+]
+
+[[package]]
+name = "dashmap"
+version = "4.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e77a43b28d0668df09411cb0bc9a8c2adc40f9a048afe863e05fd43251e8e39c"
+dependencies = [
+ "cfg-if 1.0.0",
+ "num_cpus",
 ]
 
 [[package]]

@@ -1,6 +1,7 @@
-use std::time::SystemTime;
 use std::{collections::HashMap, path::PathBuf, sync::atomic::AtomicUsize, time::Duration};
+use std::{sync::atomic::Ordering, time::SystemTime};
 
+use dashmap::DashMap;
 use std::{error::Error, sync::Arc};
 use tarpc::serde_transport as transport;
 use tarpc::server::Channel;
@@ -35,32 +36,143 @@ pub struct TargetData {
 pub struct TargetId(u32);
 
 #[derive(Debug)]
-struct TargetCache {
-    src_file_to_target: HashMap<PathBuf, TargetId>,
-    target_to_deps: HashMap<TargetId, Vec<TargetId>>,
-    target_id_to_details: HashMap<TargetId, TargetData>,
-    label_string_to_id: HashMap<String, TargetId>,
-    max_id: usize,
+struct TargetState {
+    src_file_to_target: DashMap<PathBuf, TargetId>,
+    target_to_deps: DashMap<TargetId, Vec<TargetId>>,
+    target_id_to_details: DashMap<TargetId, TargetData>,
+    label_string_to_id: DashMap<String, TargetId>,
+    max_target_id: AtomicUsize,
 }
-
-impl Default for TargetCache {
+impl Default for TargetState {
     fn default() -> Self {
         Self {
-            src_file_to_target: HashMap::default(),
-            target_to_deps: HashMap::default(),
-            target_id_to_details: HashMap::default(),
-            label_string_to_id: HashMap::default(),
-            max_id: 0,
+            src_file_to_target: Default::default(),
+            target_to_deps: Default::default(),
+            target_id_to_details: Default::default(),
+            label_string_to_id: Default::default(),
+            max_target_id: AtomicUsize::new(0),
         }
+    }
+}
+
+impl TargetState {
+    pub async fn hydrate_new_file_data(
+        self: Arc<TargetState>,
+        bazel_query: Arc<dyn BazelQuery>,
+        path: &PathBuf,
+    ) -> Result<(), Box<dyn Error>> {
+        if self.src_file_to_target.contains_key(path) {
+            return Ok(());
+        }
+
+        let mut cur_path = Some(path.as_path());
+        loop {
+            if let Some(p) = cur_path {
+                if p.join("BUILD").exists() || p.join("WORKSPACE").exists() {
+                    break;
+                } else {
+                    cur_path = p.parent();
+                }
+            } else {
+                break;
+            };
+        }
+        if let Some(p) = cur_path {
+            let dependencies_calculated = crate::bazel_runner_daemon::query_graph::graph_query(
+                bazel_query.as_ref(),
+                &format!("deps({}, 1)", p.to_string_lossy()),
+            )
+            .await;
+            eprintln!("{:#?}", dependencies_calculated);
+        }
+
+        Ok(())
+    }
+}
+use crate::jvm_indexer::bazel_query::BazelQuery;
+#[derive(Debug)]
+struct TargetCache {
+    target_state: Arc<TargetState>,
+    last_files_updated: Arc<Mutex<HashMap<PathBuf, SystemTime>>>,
+    inotify_ignore_regexes: NotifyRegexes,
+    pending_hydrations: Arc<AtomicUsize>,
+    bazel_query: Arc<dyn BazelQuery>,
+}
+
+impl TargetCache {
+    pub fn new(daemon_config: &DaemonConfig, bazel_query: &Arc<dyn BazelQuery>) -> Self {
+        Self {
+            target_state: Default::default(),
+            last_files_updated: Default::default(),
+            inotify_ignore_regexes: daemon_config.inotify_ignore_regexes.clone(),
+            pending_hydrations: Arc::new(AtomicUsize::new(0)),
+            bazel_query: bazel_query.clone(),
+        }
+    }
+
+    async fn hydrate_new_file_data(&self, path: PathBuf) -> () {
+        self.pending_hydrations.fetch_add(1, Ordering::Release);
+
+        let pending_hydrations = self.pending_hydrations.clone();
+        let target_state = self.target_state.clone();
+        let bazel_query = self.bazel_query.clone();
+        tokio::task::spawn(async move {
+            if let Err(e) = target_state.hydrate_new_file_data(bazel_query, &path).await {
+                eprintln!(
+                    "Failed to hydrate {}, error:\n{:#?}",
+                    path.to_string_lossy(),
+                    e
+                );
+            }
+            pending_hydrations.fetch_sub(1, Ordering::Release);
+        });
+    }
+    pub async fn register_new_files(&self, paths: Vec<PathBuf>) -> () {
+        let current_path = std::env::current_dir().expect("Should be able to get the current dir");
+        let mut lock = self.last_files_updated.lock().await;
+        let t = SystemTime::now();
+        for p in paths {
+            if let Ok(relative_path) = p
+                .canonicalize()
+                .unwrap_or(p)
+                .strip_prefix(current_path.as_path())
+            {
+                let is_ignored = self
+                    .inotify_ignore_regexes
+                    .0
+                    .iter()
+                    .find(|&p| p.is_match(relative_path.to_string_lossy().as_ref()));
+                if is_ignored.is_none() {
+                    lock.insert(relative_path.to_path_buf(), t);
+                }
+            }
+        }
+        let mut max_age = Duration::from_secs(3600);
+        while lock.len() > 20 && max_age > Duration::from_secs(120) {
+            lock.retain(|_, v| t.duration_since(*v).unwrap() < max_age);
+            max_age /= 2;
+        }
+    }
+
+    pub async fn get_recent_files(&self) -> Vec<super::daemon_service::FileStatus> {
+        let lock = self.last_files_updated.lock().await;
+
+        lock.iter()
+            .map(|(k, v)| {
+                super::daemon_service::FileStatus(
+                    k.clone(),
+                    v.duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u128,
+                )
+            })
+            .collect()
     }
 }
 
 #[derive(Debug, Clone)]
 struct DaemonServerInstance {
-    pub shared_last_files: Arc<SharedLastFiles>,
     pub executable_id: Arc<super::ExecutableId>,
     pub most_recent_call: Arc<AtomicUsize>,
-    pub target_cache: Arc<Mutex<TargetCache>>,
+    pub target_cache: Arc<TargetCache>,
     pub daemon_config: Arc<DaemonConfig>,
     pub bazel_binary_path: Arc<PathBuf>,
 }
@@ -73,7 +185,7 @@ impl super::daemon_service::RunnerDaemon for DaemonServerInstance {
     ) -> Vec<super::daemon_service::FileStatus> {
         self.most_recent_call
             .fetch_add(1, std::sync::atomic::Ordering::Release);
-        self.shared_last_files.get_recent_files().await
+        self.target_cache.get_recent_files().await
     }
 
     async fn ping(self, _: tarpc::context::Context) -> super::ExecutableId {
@@ -90,40 +202,40 @@ impl super::daemon_service::RunnerDaemon for DaemonServerInstance {
         self.most_recent_call
             .fetch_add(1, std::sync::atomic::Ordering::Release);
 
-        let recent_files = self.shared_last_files.get_recent_files().await;
+        let recent_files = self.target_cache.get_recent_files().await;
 
-        let mut target_cache = self.target_cache.lock().await;
+        // let mut target_cache = self.target_cache.target_state.lock().await;
 
-        let paths_missing_owner = recent_files.iter().filter(|&f| {
-            let path = &f.0;
-            !target_cache.src_file_to_target.contains_key(path)
-        });
+        // let paths_missing_owner = recent_files.iter().filter(|&f| {
+        //     let path = &f.0;
+        //     !target_cache.src_file_to_target.contains_key(path)
+        // });
 
-        let bazel_query =
-            crate::jvm_indexer::bazel_query::from_binary_path(self.bazel_binary_path.as_ref());
+        // let bazel_query =
+        //     crate::jvm_indexer::bazel_query::from_binary_path(self.bazel_binary_path.as_ref());
 
-        for path in paths_missing_owner {
-            let mut cur_path = Some(path.0.as_path());
-            loop {
-                if let Some(p) = cur_path {
-                    if p.join("BUILD").exists() || p.join("WORKSPACE").exists() {
-                        break;
-                    } else {
-                        cur_path = p.parent();
-                    }
-                } else {
-                    break;
-                };
-            }
-            if let Some(p) = cur_path {
-                let dependencies_calculated = crate::bazel_runner_daemon::query_graph::graph_query(
-                    &bazel_query,
-                    &format!("deps({}, 1)", p.to_string_lossy()),
-                )
-                .await;
-                eprintln!("{:#?}", dependencies_calculated);
-            }
-        }
+        // for path in paths_missing_owner {
+        //     let mut cur_path = Some(path.0.as_path());
+        //     loop {
+        //         if let Some(p) = cur_path {
+        //             if p.join("BUILD").exists() || p.join("WORKSPACE").exists() {
+        //                 break;
+        //             } else {
+        //                 cur_path = p.parent();
+        //             }
+        //         } else {
+        //             break;
+        //         };
+        //     }
+        //     if let Some(p) = cur_path {
+        //         let dependencies_calculated = crate::bazel_runner_daemon::query_graph::graph_query(
+        //             &bazel_query,
+        //             &format!("deps({}, 1)", p.to_string_lossy()),
+        //         )
+        //         .await;
+        //         eprintln!("{:#?}", dependencies_calculated);
+        //     }
+        // }
 
         Vec::default()
     }
@@ -181,54 +293,7 @@ struct SharedLastFiles {
     last_files_updated: Arc<Mutex<HashMap<PathBuf, SystemTime>>>,
     inotify_ignore_regexes: NotifyRegexes,
 }
-impl SharedLastFiles {
-    pub fn new(daemon_config: &DaemonConfig) -> Self {
-        Self {
-            last_files_updated: Arc::new(Mutex::new(HashMap::default())),
-            inotify_ignore_regexes: daemon_config.inotify_ignore_regexes.clone(),
-        }
-    }
-    pub async fn register_new_files(&self, paths: Vec<PathBuf>) -> () {
-        let current_path = std::env::current_dir().expect("Should be able to get the current dir");
-        let mut lock = self.last_files_updated.lock().await;
-        let t = SystemTime::now();
-        for p in paths {
-            eprintln!("{:#?}", p);
-            if let Ok(relative_path) = p
-                .canonicalize()
-                .unwrap_or(p)
-                .strip_prefix(current_path.as_path())
-            {
-                let is_ignored = self
-                    .inotify_ignore_regexes
-                    .0
-                    .iter()
-                    .find(|&p| p.is_match(relative_path.to_string_lossy().as_ref()));
-                if is_ignored.is_none() {
-                    lock.insert(relative_path.to_path_buf(), t);
-                }
-            }
-        }
-        let mut max_age = Duration::from_secs(3600);
-        while lock.len() > 20 && max_age > Duration::from_secs(120) {
-            lock.retain(|_, v| t.duration_since(*v).unwrap() < max_age);
-            max_age /= 2;
-        }
-    }
-
-    pub async fn get_recent_files(&self) -> Vec<super::daemon_service::FileStatus> {
-        let lock = self.last_files_updated.lock().await;
-
-        lock.iter()
-            .map(|(k, v)| {
-                super::daemon_service::FileStatus(
-                    k.clone(),
-                    v.duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u128,
-                )
-            })
-            .collect()
-    }
-}
+impl SharedLastFiles {}
 use clap::Clap;
 #[derive(Clap, Debug)]
 #[clap(name = "basic")]
@@ -254,24 +319,25 @@ pub async fn main(
 ) -> Result<(), Box<dyn Error>> {
     super::setup_daemon_io(&daemon_config.daemon_communication_folder)?;
 
+    let bazel_query: Arc<dyn BazelQuery> = Arc::new(
+        crate::jvm_indexer::bazel_query::from_binary_path(bazel_binary_path),
+    );
+
     println!("Starting up bazelfe daemon");
     let executable_id = Arc::new(super::current_executable_id());
-    let shared_last_files = Arc::new(SharedLastFiles::new(daemon_config));
+    let target_cache = Arc::new(TargetCache::new(daemon_config, &bazel_query));
     let current_dir = std::env::current_dir().expect("Failed to determine current directory");
 
     let most_recent_call = Arc::new(AtomicUsize::new(0));
 
-    let captured = Arc::clone(&shared_last_files);
     let captured_most_recent_call = most_recent_call.clone();
 
-    let target_cache = Arc::new(Mutex::new(TargetCache::default()));
     let captured_target_cache = target_cache.clone();
 
     let captured_daemon_config = Arc::new(daemon_config.clone());
     let captured_bazel_binary_path = Arc::new(bazel_binary_path.clone());
     println!("Starting tarpc");
     start_tarpc_server(&paths.socket_path, move || DaemonServerInstance {
-        shared_last_files: captured.clone(),
         executable_id: executable_id.clone(),
         most_recent_call: captured_most_recent_call.clone(),
         target_cache: captured_target_cache.clone(),
@@ -285,7 +351,7 @@ pub async fn main(
     use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
     let (flume_tx, flume_rx) = flume::unbounded::<notify::Event>();
-    let copy_shared = Arc::clone(&shared_last_files);
+    let copy_shared = Arc::clone(&target_cache);
 
     println!("Starting tarpc");
     let _ = tokio::task::spawn(async move {
