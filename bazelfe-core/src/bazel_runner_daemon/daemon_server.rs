@@ -183,7 +183,7 @@ impl TargetState {
             }
             let dependencies_calculated = crate::bazel_runner_daemon::query_graph::graph_query(
                 bazel_query.as_ref(),
-                &format!("deps({}, 1)", p.to_string_lossy()),
+                &format!("deps({}:all, 1)", p.to_string_lossy()),
             )
             .await?;
 
