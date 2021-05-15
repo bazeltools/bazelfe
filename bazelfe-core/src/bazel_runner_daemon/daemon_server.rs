@@ -285,7 +285,7 @@ pub async fn main(
     println!("Starting tarpc");
     let _ = tokio::task::spawn(async move {
         while let Ok(event) = flume_rx.recv_async().await {
-            for p in event.paths {
+            for p in &event.paths {
                 eprintln!("Path: {}", p.to_string_lossy());
             }
 
