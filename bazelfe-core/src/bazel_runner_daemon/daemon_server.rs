@@ -70,13 +70,13 @@ impl super::daemon_service::RunnerDaemon for DaemonServerInstance {
         _: tarpc::context::Context,
     ) -> Vec<super::daemon_service::FileStatus> {
         self.most_recent_call
-            .fetch_add(1, std::sync::atomic::Ordering::Acquire);
+            .fetch_add(1, std::sync::atomic::Ordering::Release);
         self.shared_last_files.get_recent_files().await
     }
 
     async fn ping(self, _: tarpc::context::Context) -> super::ExecutableId {
         self.most_recent_call
-            .fetch_add(1, std::sync::atomic::Ordering::Acquire);
+            .fetch_add(1, std::sync::atomic::Ordering::Release);
         self.executable_id.as_ref().clone()
     }
 
@@ -86,7 +86,7 @@ impl super::daemon_service::RunnerDaemon for DaemonServerInstance {
         distance: u32,
     ) -> Vec<super::daemon_service::Targets> {
         self.most_recent_call
-            .fetch_add(1, std::sync::atomic::Ordering::Acquire);
+            .fetch_add(1, std::sync::atomic::Ordering::Release);
 
         let recent_files = self.shared_last_files.get_recent_files().await;
 
@@ -337,7 +337,7 @@ pub async fn main(
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
-        let current_v = most_recent_call.load(std::sync::atomic::Ordering::Release);
+        let current_v = most_recent_call.load(std::sync::atomic::Ordering::Acquire);
 
         
         if current_v == last_call {
