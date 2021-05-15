@@ -115,7 +115,7 @@ impl TargetState {
             }
 
             for (k, rdeps) in dependencies_calculated.iter() {
-                let rdep_src: TargetId = self
+                let rdep_src: TargetId = *self
                     .label_string_to_id
                     .get(k)
                     .expect("Expected to find target")
@@ -126,7 +126,7 @@ impl TargetState {
                 let mut t = self.target_to_rdeps.get_mut(&rdep_src);
 
                 for rdep in rdeps.iter() {
-                    let id: TargetId = self
+                    let id: TargetId = *self
                         .label_string_to_id
                         .get(rdep)
                         .expect("Expected to find target")
