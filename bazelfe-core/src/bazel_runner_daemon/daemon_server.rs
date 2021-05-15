@@ -195,7 +195,7 @@ impl SharedLastFiles {
         let t = SystemTime::now();
         for p in paths {
             eprintln!("{:#?}", p);
-            if let Ok(relative_path) = p.strip_prefix(current_path.as_path()) {
+            if let Ok(relative_path) = p.canonicalize().strip_prefix(current_path.as_path()) {
                 let is_ignored = self.inotify_ignore_regexes.0.iter().find(|&p| {
                     p.is_match(relative_path.to_string_lossy().as_ref())
                 });
@@ -285,12 +285,6 @@ pub async fn main(
     println!("Starting tarpc");
     let _ = tokio::task::spawn(async move {
         while let Ok(event) = flume_rx.recv_async().await {
-            for p in &event.paths {
-                eprintln!("Path: {}", p.to_string_lossy());
-            }
-
-            eprintln!("{:#?}", event);
-            // eprintln!("{:#?}\nPaths:\n{:#?}", event.paths, event.paths);
             use notify::EventKind;
             let should_process = match &event.kind {
                 EventKind::Any => true,
@@ -301,9 +295,9 @@ pub async fn main(
                 EventKind::Other => true,
             };
 
-            // if should_process {
-            //     copy_shared.register_new_files(event.paths).await;
-            // }
+            if should_process {
+                copy_shared.register_new_files(event.paths).await;
+            }
         }
     });
 
@@ -370,8 +364,6 @@ pub async fn main(
         }
 
     }
-
-    eprintln!("Daemon terminating after 60 seconds.");
 
     Ok(())
 }
