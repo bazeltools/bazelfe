@@ -130,20 +130,20 @@ impl TargetState {
                 // rule.rule_input
                 // rule.rule_output
 
-                if !self.target_to_rdeps.contains_key(&rdep_src) {
-                    self.target_to_rdeps.insert(rdep_src, Default::default());
-                }
-                let mut t = self
-                    .target_to_rdeps
-                    .get_mut(&rdep_src)
-                    .expect("We guaranteed its here.");
-
-                for rdep in rule.rule_output.iter() {
+                for rdep in rule.rule_input.iter() {
                     if let Some(id) = self.label_string_to_id.get(rdep) {
                         let id: TargetId = *id.value();
-                        t.insert(id);
+                        if !self.target_to_rdeps.contains_key(&id) {
+                            self.target_to_rdeps.insert(id, Default::default());
+                        }
+                        let mut t = self
+                            .target_to_rdeps
+                            .get_mut(&id)
+                            .expect("We guaranteed its here.");
+
+                        t.insert(rdep_src);
                     } else {
-                        eprintln!("Skipping: {}", rdep);
+                        eprintln!("For rule {}, skipping input: {}", rule.name, rdep);
                     }
                 }
             }
