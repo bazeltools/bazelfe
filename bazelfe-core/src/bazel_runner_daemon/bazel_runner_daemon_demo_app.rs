@@ -111,7 +111,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 &bazel_query,
                 "deps(//...)",
             )
-            .await;
+            .await?;
         }
         SubCommands::RunForkExecDaemon(daemon_args) => {
             bazelfe_core::bazel_runner_daemon::daemon_server::main_from_config(

@@ -1,3 +1,4 @@
+use bazelfe_protos::*;
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
@@ -30,11 +31,21 @@ struct Daemon {
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct Distance(pub u16);
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct TargetData {
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub enum TargetType {
+    Rule(RuleTarget),
+    Src(SrcFileTarget),
+}
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub struct RuleTarget {
     pub target_label: String,
     pub target_kind: String,
     pub is_test: bool,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub struct SrcFileTarget {
+    pub target_label: String,
 }
 
 #[derive(Debug, Copy, PartialEq, Eq, Hash, Clone)]
@@ -44,7 +55,7 @@ pub struct TargetId(u32);
 struct TargetState {
     src_file_to_target: DashMap<PathBuf, TargetId>,
     target_to_rdeps: DashMap<TargetId, HashSet<TargetId>>,
-    target_id_to_details: DashMap<TargetId, TargetData>,
+    target_id_to_details: DashMap<TargetId, TargetType>,
     label_string_to_id: DashMap<String, TargetId>,
     max_target_id: AtomicU32,
 }
@@ -69,38 +80,66 @@ fn target_as_path(s: &String) -> Option<PathBuf> {
     }
 }
 impl TargetState {
-    async fn ingest_new_deps(&self, dependencies_calculated: &HashMap<String, HashSet<String>>) {
-        for (k, _) in dependencies_calculated.iter() {
-            if !self.label_string_to_id.contains_key(k) {
-                let cur_id = TargetId(self.max_target_id.fetch_add(1, Ordering::AcqRel));
-                self.label_string_to_id.insert(k.clone(), cur_id);
-                if let Some(path) = target_as_path(k) {
+    async fn ingest_new_deps(&self, dependencies_calculated: &blaze_query::QueryResult) {
+        for target in dependencies_calculated.target.iter() {
+            if let Some(rule) = target.rule.as_ref() {
+                if !self.label_string_to_id.contains_key(&rule.name) {
+                    let cur_id = TargetId(self.max_target_id.fetch_add(1, Ordering::AcqRel));
+                    self.label_string_to_id.insert(rule.name.clone(), cur_id);
+                    let target_data = RuleTarget {
+                        target_label: rule.name.clone(),
+                        target_kind: rule.rule_class.clone(),
+                        is_test: rule.rule_class.ends_with("_test"),
+                    };
+                    self.target_id_to_details
+                        .insert(cur_id, TargetType::Rule(target_data));
+                }
+            }
+
+            if let Some(src_file) = target.source_file.as_ref() {
+                if let Some(path) = target_as_path(&src_file.name) {
+                    let cur_id = TargetId(self.max_target_id.fetch_add(1, Ordering::AcqRel));
                     self.src_file_to_target.insert(path, cur_id);
+
+                    let srcfile_data = SrcFileTarget {
+                        target_label: src_file.name.clone(),
+                    };
+                    self.target_id_to_details
+                        .insert(cur_id, TargetType::Src(srcfile_data));
                 }
             }
         }
 
-        for (k, rdeps) in dependencies_calculated.iter() {
-            let rdep_src: TargetId = *self
-                .label_string_to_id
-                .get(k)
-                .expect("Expected to find target")
-                .value();
-            if !self.target_to_rdeps.contains_key(&rdep_src) {
-                self.target_to_rdeps.insert(rdep_src, Default::default());
-            }
-            let mut t = self
-                .target_to_rdeps
-                .get_mut(&rdep_src)
-                .expect("We guaranteed its here.");
-
-            for rdep in rdeps.iter() {
-                let id: TargetId = *self
+        for target in dependencies_calculated.target.iter() {
+            if let Some(rule) = target.rule.as_ref() {
+                let rdep_src: TargetId = *self
                     .label_string_to_id
-                    .get(rdep)
+                    .get(&rule.name)
                     .expect("Expected to find target")
                     .value();
-                t.insert(id);
+
+                // for input in rule.rule_input {
+
+                // }
+                // rule.rule_input
+                // rule.rule_output
+
+                if !self.target_to_rdeps.contains_key(&rdep_src) {
+                    self.target_to_rdeps.insert(rdep_src, Default::default());
+                }
+                let mut t = self
+                    .target_to_rdeps
+                    .get_mut(&rdep_src)
+                    .expect("We guaranteed its here.");
+
+                for rdep in rule.rule_output.iter() {
+                    let id: TargetId = *self
+                        .label_string_to_id
+                        .get(rdep)
+                        .expect("Expected to find target")
+                        .value();
+                    t.insert(id);
+                }
             }
         }
     }
@@ -135,33 +174,35 @@ impl TargetState {
                 bazel_query.as_ref(),
                 &format!("deps({}, 1)", p.to_string_lossy()),
             )
-            .await;
+            .await?;
 
             self.ingest_new_deps(&dependencies_calculated).await;
 
-            for (k, _) in dependencies_calculated.iter() {
-                let rdep_src: TargetId = *self
-                    .label_string_to_id
-                    .get(k)
-                    .expect("Expected to find target")
-                    .value();
+            for target in dependencies_calculated.target.iter() {
+                if let Some(rule) = &target.rule {
+                    let rdep_src: TargetId = *self
+                        .label_string_to_id
+                        .get(&rule.name)
+                        .expect("Expected to find target")
+                        .value();
 
-                let need_query: bool = self
-                    .target_to_rdeps
-                    .get(&rdep_src)
-                    .map(|e| e.value().is_empty())
-                    .unwrap_or(true);
-                if need_query {
-                    let dependencies_calculated =
-                        crate::bazel_runner_daemon::query_graph::graph_query(
-                            bazel_query.as_ref(),
-                            &format!("rdeps(//..., {})", k),
-                        )
-                        .await;
+                    let need_query: bool = self
+                        .target_to_rdeps
+                        .get(&rdep_src)
+                        .map(|e| e.value().is_empty())
+                        .unwrap_or(true);
+                    if need_query {
+                        let dependencies_calculated =
+                            crate::bazel_runner_daemon::query_graph::graph_query(
+                                bazel_query.as_ref(),
+                                &format!("rdeps(//..., {})", &rule.name),
+                            )
+                            .await?;
 
-                    self.ingest_new_deps(&dependencies_calculated).await;
-                } else {
-                    eprintln!("{} doesn't need query", k);
+                        self.ingest_new_deps(&dependencies_calculated).await;
+                    } else {
+                        eprintln!("{} doesn't need query", rule.name);
+                    }
                 }
             }
         }
