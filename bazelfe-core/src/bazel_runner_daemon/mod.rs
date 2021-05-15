@@ -146,7 +146,7 @@ pub mod daemon_service {
                 Targets::Build(b) => &b.target_label,
             }
         }
-        pub fn is_test(&self) -> &String {
+        pub fn is_test(&self) -> bool {
             match self {
                 Targets::Test(_) => true,
                 Targets::Build(_) => false,
