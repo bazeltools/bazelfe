@@ -53,7 +53,8 @@ fn split_segment<'a>(current_repo_name: &Option<String>, segment: &'a str) -> Ve
                 }
             }
             line_ok
-        }).map(|e| e.to_string())
+        })
+        .map(|e| e.to_string())
         .collect()
 }
 
@@ -95,9 +96,9 @@ pub async fn graph_query<B: BazelQuery, Q: AsRef<str>>(
             .map(|e| e.replace("\"", ""))
             .map(|e| split_segment(&current_repo_name, &e));
         if let Some(lhs) = lhs.as_ref() {
-            for &lhs in lhs.iter() {
+            for lhs in lhs.iter() {
                 if let Some(rhs) = rhs.as_ref() {
-                    for &rhs in rhs.iter() {
+                    for rhs in rhs.iter() {
                         if let Some(existing_rhs) = result.get_mut(&rhs) {
                             existing_rhs.insert(lhs.to_string());
                         } else {
@@ -112,7 +113,7 @@ pub async fn graph_query<B: BazelQuery, Q: AsRef<str>>(
                     }
                 }
             }
-        } 
+        }
     }
     eprintln!("{:#?}", res);
     eprintln!("{:#?}", result);
