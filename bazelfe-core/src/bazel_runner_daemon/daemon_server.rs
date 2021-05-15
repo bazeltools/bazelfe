@@ -164,6 +164,7 @@ impl TargetState {
             }
         }
 
+        eprintln!("{:#?}", self);
         Ok(())
     }
 }
