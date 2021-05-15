@@ -41,6 +41,7 @@ fn split_segment<'a>(current_repo_name: &Option<String>, segment: &'a str) -> Ve
     lazy_static! {
         static ref EXTERNAL_REPO_REGEX: Regex = Regex::new(r#"@([A-Za-z0-9_-]+)"#).unwrap();
     }
+    eprintln!("Going to try split {}", segment);
     segment
         .lines()
         .filter(|e| {
