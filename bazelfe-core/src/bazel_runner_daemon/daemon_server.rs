@@ -105,6 +105,7 @@ impl TargetState {
             }
 
             if let Some(src_file) = target.source_file.as_ref() {
+                eprintln!("Looking at src file {:#?}", src_file);
                 if let Some(path) = target_as_path(&src_file.name) {
                     let cur_id = TargetId(self.max_target_id.fetch_add(1, Ordering::AcqRel));
                     self.src_file_to_target.insert(path, cur_id);
