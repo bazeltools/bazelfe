@@ -37,7 +37,7 @@ fn parse_current_repo_name() -> Option<String> {
     None
 }
 
-fn split_segment<'a>(current_repo_name: &Option<String>, segment: &'a str) -> Vec<&'a str> {
+fn split_segment<'a>(current_repo_name: &Option<String>, segment: &'a str) -> Vec<String> {
     lazy_static! {
         static ref EXTERNAL_REPO_REGEX: Regex = Regex::new(r#"@([A-Za-z0-9_-]+)"#).unwrap();
     }
@@ -53,7 +53,7 @@ fn split_segment<'a>(current_repo_name: &Option<String>, segment: &'a str) -> Ve
                 }
             }
             line_ok
-        })
+        }).map(|e| e.to_string())
         .collect()
 }
 
@@ -98,7 +98,7 @@ pub async fn graph_query<B: BazelQuery, Q: AsRef<str>>(
             for &lhs in lhs.iter() {
                 if let Some(rhs) = rhs {
                     for &rhs in rhs.iter() {
-                        if let Some(existing_rhs) = result.get_mut(rhs) {
+                        if let Some(existing_rhs) = result.get_mut(&rhs) {
                             existing_rhs.insert(lhs.to_string());
                         } else {
                             let mut hash_set = HashSet::default();
@@ -107,7 +107,7 @@ pub async fn graph_query<B: BazelQuery, Q: AsRef<str>>(
                         }
                     }
                 } else {
-                    if let None = result.get(lhs) {
+                    if let None = result.get(&lhs) {
                         result.insert(lhs.to_string(), Default::default());
                     }
                 }
