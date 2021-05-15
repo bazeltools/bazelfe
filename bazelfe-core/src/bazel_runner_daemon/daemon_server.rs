@@ -1,4 +1,9 @@
-use std::{collections::HashMap, path::PathBuf, sync::atomic::AtomicUsize, time::Duration};
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    sync::atomic::{AtomicU32, AtomicUsize},
+    time::Duration,
+};
 use std::{sync::atomic::Ordering, time::SystemTime};
 
 use dashmap::DashMap;
@@ -32,7 +37,7 @@ pub struct TargetData {
     pub is_test: bool,
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, PartialEq, Eq, Hash)]
 pub struct TargetId(u32);
 
 #[derive(Debug)]
@@ -41,7 +46,7 @@ struct TargetState {
     target_to_deps: DashMap<TargetId, Vec<TargetId>>,
     target_id_to_details: DashMap<TargetId, TargetData>,
     label_string_to_id: DashMap<String, TargetId>,
-    max_target_id: AtomicUsize,
+    max_target_id: AtomicU32,
 }
 impl Default for TargetState {
     fn default() -> Self {
@@ -50,11 +55,19 @@ impl Default for TargetState {
             target_to_deps: Default::default(),
             target_id_to_details: Default::default(),
             label_string_to_id: Default::default(),
-            max_target_id: AtomicUsize::new(0),
+            max_target_id: AtomicU32::new(0),
         }
     }
 }
 
+fn target_as_path(s: &String) -> Option<PathBuf> {
+    let pb = PathBuf::from(s.replace(":", "/"));
+    if pb.exists() {
+        Some(pb)
+    } else {
+        None
+    }
+}
 impl TargetState {
     pub async fn hydrate_new_file_data(
         self: Arc<TargetState>,
@@ -83,6 +96,18 @@ impl TargetState {
                 &format!("deps({}, 1)", p.to_string_lossy()),
             )
             .await;
+
+            for (k, rdeps) in dependencies_calculated.iter() {
+                if !self.label_string_to_id.contains_key(k) {
+                    let cur_id = TargetId(self.max_target_id.fetch_add(1, Ordering::AcqRel));
+                    self.label_string_to_id
+                        .insert(path.to_string_lossy().to_string(), cur_id);
+                    if let Some(path) = target_as_path(k) {
+                        self.label_string_to_id
+                            .insert(path.to_string_lossy().to_string(), cur_id);
+                    }
+                }
+            }
             eprintln!("{:#?}", dependencies_calculated);
         }
 
