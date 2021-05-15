@@ -84,8 +84,6 @@ pub async fn graph_query<B: BazelQuery, Q: AsRef<str>>(
         .filter(|e| e.starts_with("\""));
 
     for ln in updated {
-        eprintln!("Updated:\n{}", ln);
-
         let mut split_v = ln.split(" -> ");
         let lhs = split_v
             .next()
@@ -96,8 +94,10 @@ pub async fn graph_query<B: BazelQuery, Q: AsRef<str>>(
             .map(|e| e.replace("\"", ""))
             .map(|e| split_segment(&current_repo_name, &e));
         if let Some(lhs) = lhs.as_ref() {
+            eprintln!("Lhs: {:#?}", lhs);
             for lhs in lhs.iter() {
                 if let Some(rhs) = rhs.as_ref() {
+                    eprintln!("rhs: {:#?}", rhs);
                     for rhs in rhs.iter() {
                         if let Some(existing_rhs) = result.get_mut(rhs) {
                             existing_rhs.insert(lhs.to_string());
@@ -115,8 +115,8 @@ pub async fn graph_query<B: BazelQuery, Q: AsRef<str>>(
             }
         }
     }
-    eprintln!("{:#?}", res);
-    eprintln!("{:#?}", result);
+    eprintln!("Res:\n{:#?}", res);
+    eprintln!("Result:\n{:#?}", result);
 
     result
 }
