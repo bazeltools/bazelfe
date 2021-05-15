@@ -317,6 +317,7 @@ pub async fn main(
 
     // Add a path to be watched. All files and directories at that path and
     // below will be monitored for changes.
+    eprintln!("Watching {:#?}", current_dir);
     watcher
         .watch(current_dir, RecursiveMode::Recursive)
         .unwrap();

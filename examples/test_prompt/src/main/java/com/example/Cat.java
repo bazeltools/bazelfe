@@ -6,6 +6,5 @@ public class Cat {
 }
 
 
-asdasdasdasd
 
 
