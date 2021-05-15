@@ -71,9 +71,14 @@ pub async fn rewrite_command_line(
                                 let mut buf = String::from("");
                                 invalidated_targets.into_iter().for_each(|(_, targets)| {
                                     targets.iter().for_each(|target| {
-                                        if !seen_targets.contains(target.target_label()) {
-                                            seen_targets.insert(target.target_label().clone());
-                                            buf.push_str(&format!("\n|{}", target.target_label()));
+                                        if target.is_test() {
+                                            if !seen_targets.contains(target.target_label()) {
+                                                seen_targets.insert(target.target_label().clone());
+                                                buf.push_str(&format!(
+                                                    "\n|{}",
+                                                    target.target_label()
+                                                ));
+                                            }
                                         }
                                     });
                                 });
