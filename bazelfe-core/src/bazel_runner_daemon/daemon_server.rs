@@ -105,9 +105,7 @@ impl TargetState {
             for (k, _) in dependencies_calculated.iter() {
                 if !self.label_string_to_id.contains_key(k) {
                     let cur_id = TargetId(self.max_target_id.fetch_add(1, Ordering::AcqRel));
-                    eprintln!("Inserting {}", path.to_string_lossy().to_string());
-                    self.label_string_to_id
-                        .insert(path.to_string_lossy().to_string(), cur_id);
+                    self.label_string_to_id.insert(k.clone(), cur_id);
                     if let Some(path) = target_as_path(k) {
                         self.src_file_to_target.insert(path, cur_id);
                     }
