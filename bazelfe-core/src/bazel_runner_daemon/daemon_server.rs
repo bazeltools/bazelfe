@@ -115,17 +115,17 @@ impl TargetState {
             }
 
             for (k, rdeps) in dependencies_calculated.iter() {
-                let rdep_src = self
+                let rdep_src: TargetId = self
                     .label_string_to_id
                     .get(k)
                     .expect("Expected to find target");
                 if !self.target_to_rdeps.contains_key(&rdep_src) {
-                    self.target_to_rdeps.insert(&k, Default::default());
+                    self.target_to_rdeps.insert(rdep_src, Default::default());
                 }
-                let mut t = self.target_to_rdeps.get_mut(&k);
+                let mut t = self.target_to_rdeps.get_mut(&rdep_src);
 
                 for rdep in rdeps.iter() {
-                    let id = self
+                    let id: TargetId = self
                         .label_string_to_id
                         .get(rdep)
                         .expect("Expected to find target");
