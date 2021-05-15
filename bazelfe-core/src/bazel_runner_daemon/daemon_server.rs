@@ -195,7 +195,7 @@ impl SharedLastFiles {
         let t = SystemTime::now();
         for p in paths {
             eprintln!("{:#?}", p);
-            if let Ok(relative_path) = p.canonicalize().strip_prefix(current_path.as_path()) {
+            if let Ok(relative_path) = p.canonicalize().unwrap_or(p).strip_prefix(current_path.as_path()) {
                 let is_ignored = self.inotify_ignore_regexes.0.iter().find(|&p| {
                     p.is_match(relative_path.to_string_lossy().as_ref())
                 });
