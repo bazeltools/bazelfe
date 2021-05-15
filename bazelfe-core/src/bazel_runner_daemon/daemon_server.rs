@@ -120,9 +120,9 @@ impl TargetState {
                     .get(k)
                     .expect("Expected to find target");
                 if !self.target_to_rdeps.contains_key(&rdep_src) {
-                    self.target_to_rdeps.insert(k, Default::default());
+                    self.target_to_rdeps.insert(&k, Default::default());
                 }
-                let mut t = self.target_to_rdeps.get_mut(k);
+                let mut t = self.target_to_rdeps.get_mut(&k);
 
                 for rdep in rdeps.iter() {
                     let id = self
