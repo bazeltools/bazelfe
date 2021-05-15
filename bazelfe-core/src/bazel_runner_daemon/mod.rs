@@ -39,6 +39,16 @@ pub enum SpawnFailure {
 
 const OUTPUT_SUFFIXES: [&str; 2] = ["stdout", "stderr"];
 
+
+
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+pub struct DaemonPaths {
+    pub logs_path: PathBuf,
+    pub pid_path: PathBuf,
+    pub socket_path: PathBuf,
+}
+
+
 fn make_paths<'a>(root: &'a PathBuf) -> impl Iterator<Item = PathBuf> + 'a {
     OUTPUT_SUFFIXES
         .iter()
@@ -169,4 +179,21 @@ pub fn current_executable_id() -> ExecutableId {
         git_branch: String::from(env!("VERGEN_GIT_BRANCH")),
         git_sha: String::from(env!("VERGEN_GIT_SHA")),
     }
+}
+
+
+
+pub(in crate::bazel_runner_daemon) fn read_pid(daemon_paths: &DaemonPaths) -> Option<i32> {
+    use std::fs::File;
+    use std::io::prelude::*;
+
+    if let Ok(mut file) = File::open(&daemon_paths.pid_path) {
+        let mut contents = String::new();
+        if let Ok(_) = file.read_to_string(&mut contents) {
+            if let Ok(parsed) = contents.parse() {
+                return Some(parsed);
+            }
+        }
+    }
+    None
 }

@@ -4,12 +4,7 @@ use std::path::PathBuf;
 use crate::config::DaemonConfig;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct DaemonPaths {
-    pub logs_path: PathBuf,
-    pub pid_path: PathBuf,
-    pub socket_path: PathBuf,
-}
+use super::DaemonPaths;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct HydratedDaemonConfig {
@@ -47,25 +42,11 @@ async fn start_server(
 }
 
 async fn try_kill_server(paths: &DaemonPaths) -> () {
-    if let Some(pid) = read_pid(&paths) {
+    if let Some(pid) = super::read_pid(&paths) {
         signal_mgr::kill(pid)
     }
 }
 
-fn read_pid(daemon_paths: &DaemonPaths) -> Option<i32> {
-    use std::fs::File;
-    use std::io::prelude::*;
-
-    if let Ok(mut file) = File::open(&daemon_paths.pid_path) {
-        let mut contents = String::new();
-        if let Ok(_) = file.read_to_string(&mut contents) {
-            if let Ok(parsed) = contents.parse() {
-                return Some(parsed);
-            }
-        }
-    }
-    None
-}
 
 mod signal_mgr {
     pub fn process_is_alive(pid: i32) -> bool {
@@ -87,7 +68,7 @@ async fn maybe_connect_to_server(
         return Ok(None);
     }
 
-    if let Some(pid) = read_pid(&paths) {
+    if let Some(pid) = super::read_pid(&paths) {
         if !signal_mgr::process_is_alive(pid) {
             return Ok(None);
         }

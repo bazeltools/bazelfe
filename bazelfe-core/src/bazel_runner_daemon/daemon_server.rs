@@ -11,6 +11,7 @@ use crate::config::DaemonConfig;
 use tokio::net::UnixListener;
 use tokio_serde::formats::Bincode;
 use tokio_util::codec::LengthDelimitedCodec;
+use std::time::Instant;
 
 #[derive(Debug, Clone)]
 struct Daemon {
@@ -244,7 +245,7 @@ pub async fn base_main() -> Result<(), Box<dyn Error>> {
 pub async fn main(
     daemon_config: &DaemonConfig,
     bazel_binary_path: &PathBuf,
-    paths: &super::daemon_manager::DaemonPaths,
+    paths: &super::DaemonPaths,
 ) -> Result<(), Box<dyn Error>> {
     super::setup_daemon_io(&daemon_config.daemon_communication_folder)?;
 
@@ -328,16 +329,31 @@ pub async fn main(
 
     eprintln!("Daemon process is up! and serving on socket");
     let mut last_call = usize::MAX;
+    let mut last_seen = Instant::now();
+
+    let max_delay = Duration::from_secs(3600);
+
     println!("Looping to track activity.");
     loop {
-        tokio::time::sleep(tokio::time::Duration::from_secs(3600)).await;
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
         let current_v = most_recent_call.load(std::sync::atomic::Ordering::Release);
-        if current_v == last_call {
+        if current_v == last_call && Instant::now().duration_since(last_seen) > max_delay {
             break;
         } else {
             last_call = current_v;
+            last_seen = Instant::now();
         }
+        let pid = super::read_pid(&paths);
+        if let Some(p) = pid {
+            // Another process lauched and we didn't catch the conflict in the manager, we should die to avoid issues.
+            if std::process::id() != p as u32 {
+                break;
+            }
+        } else {
+            break; // directory or file gone. Die.
+        }
+
     }
 
     eprintln!("Daemon terminating after 60 seconds.");
