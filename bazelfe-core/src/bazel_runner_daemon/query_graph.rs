@@ -99,7 +99,7 @@ pub async fn graph_query<B: BazelQuery, Q: AsRef<str>>(
             for lhs in lhs.iter() {
                 if let Some(rhs) = rhs.as_ref() {
                     for rhs in rhs.iter() {
-                        if let Some(existing_rhs) = result.get_mut(&rhs) {
+                        if let Some(existing_rhs) = result.get_mut(rhs) {
                             existing_rhs.insert(lhs.to_string());
                         } else {
                             let mut hash_set = HashSet::default();
@@ -108,7 +108,7 @@ pub async fn graph_query<B: BazelQuery, Q: AsRef<str>>(
                         }
                     }
                 } else {
-                    if let None = result.get(&lhs) {
+                    if let None = result.get(lhs) {
                         result.insert(lhs.to_string(), Default::default());
                     }
                 }
