@@ -1,6 +1,22 @@
 use std::path::PathBuf;
 
-use serde::{Deserialize, Serialize};
+use regex::Regex;
+use serde::{Deserialize, Serialize, ser::SerializeSeq};
+
+#[derive(Debug, Clone)]
+pub struct NotifyRegexes(pub Vec<Regex>);
+impl PartialEq for NotifyRegexes {
+    fn eq(&self, other: &Self) -> bool {
+        let mut a: Vec<String> = self.0.iter().map(|e| e.to_string()).collect();
+        let mut b: Vec<String> = other.0.iter().map(|e| e.to_string()).collect();
+
+        a.sort();
+        b.sort();
+        a == b
+    }
+} 
+impl Eq for NotifyRegexes {
+}
 
 #[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Clone)]
 pub struct DaemonConfig {
@@ -8,6 +24,9 @@ pub struct DaemonConfig {
     pub enabled: bool,
     #[serde(default = "default_communication_folder")]
     pub daemon_communication_folder: PathBuf,
+
+    #[serde(default = "default_inotify_ignore", deserialize_with = "parse_regex", serialize_with = "serialize_regex")]
+    pub inotify_ignore_regexes: NotifyRegexes
 }
 
 impl Default for DaemonConfig {
@@ -19,6 +38,46 @@ impl Default for DaemonConfig {
 fn default_enabled() -> bool {
     false
 }
+
+
+fn serialize_regex<'de, S>(regexes: &NotifyRegexes, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    let mut s = serializer.serialize_seq(Some(regexes.0.len()))?;
+    for r in regexes.0.iter() {
+        s.serialize_element(&r.to_string())?;
+    }
+    s.end()
+}
+
+
+
+fn parse_regex<'de, D>(deserializer: D) -> Result<NotifyRegexes, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s: Vec<&str> = Deserialize::deserialize(deserializer)?;
+
+    let mut res: Vec<Regex> = Vec::default();
+
+    for e in s {
+        let cur: Regex = Regex::new(e).map_err(serde::de::Error::custom)?;
+        res.push(cur);
+    }
+    Ok(NotifyRegexes(res))
+}
+
+
+
+fn default_inotify_ignore() -> NotifyRegexes {
+    NotifyRegexes(
+        vec![
+            Regex::new("bazel-.*").expect("Constant known good regex")
+        ]
+    )
+}
+
 
 /// Default communication is a folder under tmp thats namespaced based on the CWD hashed.
 fn default_communication_folder() -> PathBuf {

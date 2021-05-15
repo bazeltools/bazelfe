@@ -6,7 +6,7 @@ use tarpc::serde_transport as transport;
 use tarpc::server::Channel;
 use tokio::{sync::Mutex, task::JoinHandle};
 
-use crate::bazel_runner_daemon::daemon_service::RunnerDaemon;
+use crate::{bazel_runner_daemon::daemon_service::RunnerDaemon, config::daemon_config::NotifyRegexes};
 use crate::config::DaemonConfig;
 use tokio::net::UnixListener;
 use tokio_serde::formats::Bincode;
@@ -179,11 +179,13 @@ pub async fn main_from_config(config_path: &PathBuf) -> Result<(), Box<dyn Error
 #[derive(Debug, Clone)]
 struct SharedLastFiles {
     last_files_updated: Arc<Mutex<HashMap<PathBuf, SystemTime>>>,
+    inotify_ignore_regexes: NotifyRegexes
 }
 impl SharedLastFiles {
-    pub fn new() -> Self {
+    pub fn new(daemon_config: &DaemonConfig) -> Self {
         Self {
             last_files_updated: Arc::new(Mutex::new(HashMap::default())),
+            inotify_ignore_regexes: daemon_config.inotify_ignore_regexes.clone()
         }
     }
     pub async fn register_new_files(&self, paths: Vec<PathBuf>) -> () {
@@ -192,7 +194,12 @@ impl SharedLastFiles {
         let t = SystemTime::now();
         for p in paths {
             if let Ok(relative_path) = p.strip_prefix(current_path.as_path()) {
-                lock.insert(relative_path.to_path_buf(), t);
+                let is_ignored = self.inotify_ignore_regexes.0.iter().find(|&p| {
+                    p.is_match(relative_path.to_string_lossy().as_ref())
+                });
+                if is_ignored.is_none() {
+                    lock.insert(relative_path.to_path_buf(), t);
+                }
             }
         }
         let mut max_age = Duration::from_secs(3600);
@@ -242,7 +249,7 @@ pub async fn main(
 
     println!("Starting up bazelfe daemon");
     let executable_id = Arc::new(super::current_executable_id());
-    let shared_last_files = Arc::new(SharedLastFiles::new());
+    let shared_last_files = Arc::new(SharedLastFiles::new(daemon_config));
     let current_dir = std::env::current_dir().expect("Failed to determine current directory");
 
     let most_recent_call = Arc::new(AtomicUsize::new(0));
