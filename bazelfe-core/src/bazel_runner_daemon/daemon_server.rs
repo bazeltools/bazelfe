@@ -133,7 +133,7 @@ impl TargetState {
                     .expect("We guaranteed its here.");
 
                 for rdep in rule.rule_output.iter() {
-                    if let Ok(id) = self.label_string_to_id.get(rdep) {
+                    if let Some(id) = self.label_string_to_id.get(rdep) {
                         let id: TargetId = *id.value();
                         t.insert(id);
                     }
