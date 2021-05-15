@@ -72,7 +72,7 @@ fn target_as_path(s: &String) -> Option<PathBuf> {
 impl TargetState {
     pub async fn hydrate_new_file_data(
         self: Arc<TargetState>,
-        bazel_query: Arc<Mutex<dyn BazelQuery>>,
+        bazel_query: Arc<Mutex<Box<dyn BazelQuery>>>,
         path: &PathBuf,
     ) -> Result<(), Box<dyn Error>> {
         if self.src_file_to_target.contains_key(path) {
@@ -103,7 +103,7 @@ impl TargetState {
                 return Ok(());
             }
             let dependencies_calculated = crate::bazel_runner_daemon::query_graph::graph_query(
-                &*bazel_query,
+                bazel_query.as_ref(),
                 &format!("deps({}, 1)", p.to_string_lossy()),
             )
             .await;
@@ -132,11 +132,14 @@ struct TargetCache {
     last_files_updated: Arc<Mutex<HashMap<PathBuf, SystemTime>>>,
     inotify_ignore_regexes: NotifyRegexes,
     pending_hydrations: Arc<AtomicUsize>,
-    bazel_query: Arc<Mutex<dyn BazelQuery>>,
+    bazel_query: Arc<Mutex<Box<dyn BazelQuery>>>,
 }
 
 impl TargetCache {
-    pub fn new(daemon_config: &DaemonConfig, bazel_query: &Arc<Mutex<dyn BazelQuery>>) -> Self {
+    pub fn new(
+        daemon_config: &DaemonConfig,
+        bazel_query: &Arc<Mutex<Box<dyn BazelQuery>>>,
+    ) -> Self {
         Self {
             target_state: Default::default(),
             last_files_updated: Default::default(),
@@ -357,9 +360,9 @@ pub async fn main(
 ) -> Result<(), Box<dyn Error>> {
     super::setup_daemon_io(&daemon_config.daemon_communication_folder)?;
 
-    let bazel_query: Arc<Mutex<dyn BazelQuery>> = Arc::new(Mutex::new(
+    let bazel_query: Arc<Mutex<Box<dyn BazelQuery>>> = Arc::new(Mutex::new(Box::new(
         crate::jvm_indexer::bazel_query::from_binary_path(bazel_binary_path),
-    ));
+    )));
 
     println!("Starting up bazelfe daemon");
     let executable_id = Arc::new(super::current_executable_id());
