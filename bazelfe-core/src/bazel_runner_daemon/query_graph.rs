@@ -73,8 +73,9 @@ pub async fn graph_query<B: BazelQuery, Q: AsRef<str>>(bazel_query: &B, query: Q
             line_ok
         });
 
-        eprintln!("Updated:\n{}", updated);
     for ln in updated {
+        eprintln!("Updated:\n{}", ln);
+
         let mut split_v = ln.split(" -> ");
         let lhs = split_v.next().map(|e| e.replace("\"", ""));
         let rhs = split_v.next().map(|e| e.replace("\"", ""));
