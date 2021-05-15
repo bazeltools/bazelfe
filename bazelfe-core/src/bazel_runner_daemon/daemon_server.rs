@@ -218,7 +218,6 @@ impl TargetState {
             }
         }
 
-        eprintln!("{:#?}", self);
         Ok(())
     }
 }
@@ -340,42 +339,72 @@ impl super::daemon_service::RunnerDaemon for DaemonServerInstance {
         self.most_recent_call
             .fetch_add(1, std::sync::atomic::Ordering::Release);
 
+        while self
+            .target_cache
+            .pending_hydrations
+            .load(std::sync::atomic::Ordering::Acquire)
+            > 0
+        {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
         let recent_files = self.target_cache.get_recent_files().await;
 
         // let mut target_cache = self.target_cache.target_state.lock().await;
 
-        // let paths_missing_owner = recent_files.iter().filter(|&f| {
-        //     let path = &f.0;
-        //     !target_cache.src_file_to_target.contains_key(path)
-        // });
+        let target_ids = recent_files.iter().filter_map(|f| {
+            let path = &f.0;
+            self.target_cache
+                .target_state
+                .src_file_to_target
+                .get(path)
+                .map(|e| *e.value())
+        });
 
-        // let bazel_query =
-        //     crate::jvm_indexer::bazel_query::from_binary_path(self.bazel_binary_path.as_ref());
+        let mut active_targets_ids: HashSet<TargetId> = target_ids.collect();
 
-        // for path in paths_missing_owner {
-        //     let mut cur_path = Some(path.0.as_path());
-        //     loop {
-        //         if let Some(p) = cur_path {
-        //             if p.join("BUILD").exists() || p.join("WORKSPACE").exists() {
-        //                 break;
-        //             } else {
-        //                 cur_path = p.parent();
-        //             }
-        //         } else {
-        //             break;
-        //         };
-        //     }
-        //     if let Some(p) = cur_path {
-        //         let dependencies_calculated = crate::bazel_runner_daemon::query_graph::graph_query(
-        //             &bazel_query,
-        //             &format!("deps({}, 1)", p.to_string_lossy()),
-        //         )
-        //         .await;
-        //         eprintln!("{:#?}", dependencies_calculated);
-        //     }
-        // }
+        for _ in 0..distance {
+            let mut next_targets: HashSet<TargetId> = HashSet::default();
 
-        Vec::default()
+            for e in active_targets_ids.iter() {
+                if let Some(rdeps) = self.target_cache.target_state.target_to_rdeps.get(e) {
+                    for rdep in rdeps.value() {
+                        next_targets.insert(*rdep);
+                    }
+                }
+            }
+            active_targets_ids = next_targets;
+        }
+
+        let mut result_targets = Vec::default();
+
+        for rt in active_targets_ids.into_iter() {
+            let target_data = self
+                .target_cache
+                .target_state
+                .target_id_to_details
+                .get(&rt)
+                .unwrap();
+            match target_data.value() {
+                TargetType::Rule(r) => {
+                    if r.is_test {
+                        result_targets.push(super::daemon_service::Targets::Test(
+                            super::daemon_service::TestTarget {
+                                target_label: r.target_label.clone(),
+                            },
+                        ));
+                    } else {
+                        result_targets.push(super::daemon_service::Targets::Build(
+                            super::daemon_service::BuildTarget {
+                                target_label: r.target_label.clone(),
+                            },
+                        ));
+                    }
+                }
+                TargetType::Src(_) => {}
+            }
+            // super::daemon_service::Targets::Build()
+        }
+        result_targets
     }
 }
 

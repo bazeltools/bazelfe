@@ -6,7 +6,6 @@ pub async fn graph_query<B: BazelQuery + ?Sized, Q: AsRef<str>>(
     bazel_query: &B,
     query: Q,
 ) -> Result<blaze_query::QueryResult, Box<dyn std::error::Error>> {
-    eprintln!("Running query: {}", query.as_ref());
     let res = bazel_query
         .execute(&vec![
             String::from("query"),

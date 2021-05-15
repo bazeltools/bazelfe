@@ -150,15 +150,11 @@ pub mod daemon_service {
     #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
     pub struct TestTarget {
         pub target_label: String,
-        pub min_distance: u32,
-        pub from_files: Vec<PathBuf>,
     }
 
     #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
     pub struct BuildTarget {
         pub target_label: String,
-        pub min_distance: u32,
-        pub from_files: Vec<PathBuf>,
     }
 
     #[tarpc::service]
