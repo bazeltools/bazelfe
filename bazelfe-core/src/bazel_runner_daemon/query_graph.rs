@@ -43,7 +43,7 @@ fn split_segment<'a>(current_repo_name: &Option<String>, segment: &'a str) -> Ve
     }
     eprintln!("Going to try split {}", segment);
     segment
-        .lines()
+        .split("\\n")
         .filter(|e| {
             let mut line_ok = true;
             if let Some(repo) = &current_repo_name {
