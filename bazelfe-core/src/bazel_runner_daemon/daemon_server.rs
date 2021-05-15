@@ -295,9 +295,9 @@ pub async fn main(
                 EventKind::Other => true,
             };
 
-            if should_process {
-                copy_shared.register_new_files(event.paths).await;
-            }
+            // if should_process {
+            //     copy_shared.register_new_files(event.paths).await;
+            // }
         }
     });
 
