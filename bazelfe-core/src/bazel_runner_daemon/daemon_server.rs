@@ -136,7 +136,7 @@ struct TargetCache {
 }
 
 impl TargetCache {
-    pub fn new(daemon_config: &DaemonConfig, bazel_query: &Arc<dyn BazelQuery>) -> Self {
+    pub fn new(daemon_config: &DaemonConfig, bazel_query: &Arc<Mutex<dyn BazelQuery>>) -> Self {
         Self {
             target_state: Default::default(),
             last_files_updated: Default::default(),
@@ -357,7 +357,7 @@ pub async fn main(
 ) -> Result<(), Box<dyn Error>> {
     super::setup_daemon_io(&daemon_config.daemon_communication_folder)?;
 
-    let bazel_query: Arc<dyn BazelQuery> = Arc::new(Mutex::new(
+    let bazel_query: Arc<Mutex<dyn BazelQuery>> = Arc::new(Mutex::new(
         crate::jvm_indexer::bazel_query::from_binary_path(bazel_binary_path),
     ));
 
