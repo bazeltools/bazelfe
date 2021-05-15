@@ -49,6 +49,7 @@ fn split_segment<'a>(current_repo_name: &Option<String>, segment: &'a str) -> Ve
             if let Some(repo) = &current_repo_name {
                 for r in EXTERNAL_REPO_REGEX.captures_iter(e) {
                     if &r[1] != repo {
+                        eprintln!("Discarding {}", e);
                         line_ok = false;
                     }
                 }
