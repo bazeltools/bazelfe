@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     path::PathBuf,
     sync::atomic::{AtomicU32, AtomicUsize},
     time::Duration,
@@ -37,13 +37,13 @@ pub struct TargetData {
     pub is_test: bool,
 }
 
-#[derive(Debug, Copy, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, Copy, PartialEq, Eq, Hash, Clone, Hash)]
 pub struct TargetId(u32);
 
 #[derive(Debug)]
 struct TargetState {
     src_file_to_target: DashMap<PathBuf, TargetId>,
-    target_to_deps: DashMap<TargetId, Vec<TargetId>>,
+    target_to_rdeps: DashMap<TargetId, HashSet<TargetId>>,
     target_id_to_details: DashMap<TargetId, TargetData>,
     label_string_to_id: DashMap<String, TargetId>,
     max_target_id: AtomicU32,
@@ -52,7 +52,7 @@ impl Default for TargetState {
     fn default() -> Self {
         Self {
             src_file_to_target: Default::default(),
-            target_to_deps: Default::default(),
+            target_to_rdeps: Default::default(),
             target_id_to_details: Default::default(),
             label_string_to_id: Default::default(),
             max_target_id: AtomicU32::new(0),
@@ -62,7 +62,6 @@ impl Default for TargetState {
 
 fn target_as_path(s: &String) -> Option<PathBuf> {
     let pb = PathBuf::from(s.replace(":", "/").replace("//", ""));
-    eprintln!("Pb is... {:#?}", pb);
     if pb.exists() {
         Some(pb)
     } else {
@@ -78,11 +77,6 @@ impl TargetState {
         if self.src_file_to_target.contains_key(path) {
             return Ok(());
         }
-
-        eprintln!(
-            "Checking for path: {:#?}, found... : {:#?}",
-            path, self.label_string_to_id
-        );
 
         let mut cur_path = Some(path.as_path());
         loop {
@@ -108,7 +102,7 @@ impl TargetState {
             )
             .await;
 
-            for (k, rdeps) in dependencies_calculated.iter() {
+            for (k, _) in dependencies_calculated.iter() {
                 if !self.label_string_to_id.contains_key(k) {
                     let cur_id = TargetId(self.max_target_id.fetch_add(1, Ordering::AcqRel));
                     eprintln!("Inserting {}", path.to_string_lossy().to_string());
@@ -119,6 +113,26 @@ impl TargetState {
                     }
                 }
             }
+
+            for (k, rdeps) in dependencies_calculated.iter() {
+                let rdep_src = self
+                    .label_string_to_id
+                    .get(k)
+                    .expect("Expected to find target");
+                if !self.target_to_rdeps.contains_key(rdep_src) {
+                    self.target_to_rdeps.insert(k, Default::default());
+                }
+                let mut t = self.target_to_rdeps.get_mut(k);
+
+                for rdep in rdeps.iter() {
+                    let id = self
+                        .label_string_to_id
+                        .get(rdep)
+                        .expect("Expected to find target");
+                    t.insert(id);
+                }
+            }
+
             eprintln!("Dependencies... {:#?}", dependencies_calculated);
         }
 

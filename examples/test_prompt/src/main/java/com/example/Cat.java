@@ -11,40 +11,6 @@ asdf
 
 
 
-asd
-gfhvnm
-asd
-asd
-asd
-
-
-asd
-
-asd
-
-
-
-
-
-
-
-
-asdsda
-
-
-
-
-
-
-sdf
-drftgasd
-sdfasdf
-sdf
-
-asdf
-asd
-
-
 
 asdf
 asdf
