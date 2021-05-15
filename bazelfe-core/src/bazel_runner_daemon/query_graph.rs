@@ -1,4 +1,6 @@
 use crate::jvm_indexer::bazel_query::BazelQuery;
+use ::prost::Message;
+use bazelfe_protos::*;
 use lazy_static::lazy_static;
 
 use regex::Regex;
@@ -67,52 +69,57 @@ pub async fn graph_query<B: BazelQuery + ?Sized, Q: AsRef<str>>(
             String::from("query"),
             String::from("--keep_going"),
             String::from("--output"),
-            String::from("graph"),
+            String::from("proto"),
             String::from(query.as_ref()),
         ])
         .await;
 
-    let mut result: HashMap<String, HashSet<String>> = Default::default();
+    let out = blaze_query::QueryResult::decode(&*res.stdout_raw).unwrap();
 
-    let current_repo_name = parse_current_repo_name();
+    eprintln!("{:#?}", out);
+    return HashMap::default();
 
-    let updated = res
-        .stdout
-        .lines()
-        .skip(2)
-        .map(|e| e.trim())
-        .filter(|e| e.starts_with("\""));
+    // let mut result: HashMap<String, HashSet<String>> = Default::default();
 
-    for ln in updated {
-        let mut split_v = ln.split(" -> ");
-        let lhs = split_v
-            .next()
-            .map(|e| e.replace("\"", ""))
-            .map(|e| split_segment(&current_repo_name, &e));
-        let rhs = split_v
-            .next()
-            .map(|e| e.replace("\"", ""))
-            .map(|e| split_segment(&current_repo_name, &e));
-        if let Some(lhs) = lhs.as_ref() {
-            for lhs in lhs.iter() {
-                if let Some(rhs) = rhs.as_ref() {
-                    for rhs in rhs.iter() {
-                        if let Some(existing_rhs) = result.get_mut(rhs) {
-                            existing_rhs.insert(lhs.to_string());
-                        } else {
-                            let mut hash_set = HashSet::default();
-                            hash_set.insert(lhs.to_string());
-                            result.insert(rhs.to_string(), hash_set);
-                        }
-                    }
-                } else {
-                    if let None = result.get(lhs) {
-                        result.insert(lhs.to_string(), Default::default());
-                    }
-                }
-            }
-        }
-    }
+    // let current_repo_name = parse_current_repo_name();
 
-    result
+    // let updated = res
+    //     .stdout
+    //     .lines()
+    //     .skip(2)
+    //     .map(|e| e.trim())
+    //     .filter(|e| e.starts_with("\""));
+
+    // for ln in updated {
+    //     let mut split_v = ln.split(" -> ");
+    //     let lhs = split_v
+    //         .next()
+    //         .map(|e| e.replace("\"", ""))
+    //         .map(|e| split_segment(&current_repo_name, &e));
+    //     let rhs = split_v
+    //         .next()
+    //         .map(|e| e.replace("\"", ""))
+    //         .map(|e| split_segment(&current_repo_name, &e));
+    //     if let Some(lhs) = lhs.as_ref() {
+    //         for lhs in lhs.iter() {
+    //             if let Some(rhs) = rhs.as_ref() {
+    //                 for rhs in rhs.iter() {
+    //                     if let Some(existing_rhs) = result.get_mut(rhs) {
+    //                         existing_rhs.insert(lhs.to_string());
+    //                     } else {
+    //                         let mut hash_set = HashSet::default();
+    //                         hash_set.insert(lhs.to_string());
+    //                         result.insert(rhs.to_string(), hash_set);
+    //                     }
+    //                 }
+    //             } else {
+    //                 if let None = result.get(lhs) {
+    //                     result.insert(lhs.to_string(), Default::default());
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
+
+    // result
 }

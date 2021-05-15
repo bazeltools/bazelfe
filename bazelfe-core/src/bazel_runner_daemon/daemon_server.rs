@@ -500,8 +500,12 @@ pub async fn main(
             // If we haven't incremented since the last loop
             // and we haven't incremented in max_delay time then exit
             let now = Instant::now();
-            if now.duration_since(last_seen) > max_delay {
-                eprintln!("Quitting since its now {:#?} and we haven't seen an update since {:#?} which is more than {:#?}", now, last_seen, max_delay);
+            let elapsed = now.duration_since(last_seen);
+            if elapsed > max_delay {
+                eprintln!(
+                    "Quitting since its been {:#?} which is more than {:#?}",
+                    elapsed, max_delay
+                );
                 break;
             }
         } else {

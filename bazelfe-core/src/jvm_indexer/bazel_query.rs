@@ -6,7 +6,9 @@ use tokio::process::Command;
 pub struct ExecuteResult {
     pub exit_code: i32,
     pub stdout: String,
+    pub stdout_raw: Vec<u8>,
     pub stderr: String,
+    pub stderr_raw: Vec<u8>,
 }
 
 impl std::convert::From<std::io::Error> for ExecuteResult {
@@ -15,6 +17,8 @@ impl std::convert::From<std::io::Error> for ExecuteResult {
             exit_code: -120,
             stderr: format!("{:?}", io_e).to_string(),
             stdout: String::from(""),
+            stdout_raw: Vec::default(),
+            stderr_raw: Vec::default(),
         }
     }
 }
@@ -58,6 +62,8 @@ impl BazelQueryBinaryImpl {
             exit_code: exit_code,
             stdout: BazelQueryBinaryImpl::decode_str(&command_result.stdout),
             stderr: BazelQueryBinaryImpl::decode_str(&command_result.stderr),
+            stderr_raw: command_result.stderr,
+            stdout_raw: command_result.stdout,
         }
     }
 }
