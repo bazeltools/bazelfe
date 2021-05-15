@@ -69,6 +69,41 @@ fn target_as_path(s: &String) -> Option<PathBuf> {
     }
 }
 impl TargetState {
+    async fn ingest_new_deps(&self, dependencies_calculated: &HashMap<String, HashSet<String>>) {
+        for (k, _) in dependencies_calculated.iter() {
+            if !self.label_string_to_id.contains_key(k) {
+                let cur_id = TargetId(self.max_target_id.fetch_add(1, Ordering::AcqRel));
+                self.label_string_to_id.insert(k.clone(), cur_id);
+                if let Some(path) = target_as_path(k) {
+                    self.src_file_to_target.insert(path, cur_id);
+                }
+            }
+        }
+
+        for (k, rdeps) in dependencies_calculated.iter() {
+            let rdep_src: TargetId = *self
+                .label_string_to_id
+                .get(k)
+                .expect("Expected to find target")
+                .value();
+            if !self.target_to_rdeps.contains_key(&rdep_src) {
+                self.target_to_rdeps.insert(rdep_src, Default::default());
+            }
+            let mut t = self
+                .target_to_rdeps
+                .get_mut(&rdep_src)
+                .expect("We guaranteed its here.");
+
+            for rdep in rdeps.iter() {
+                let id: TargetId = *self
+                    .label_string_to_id
+                    .get(rdep)
+                    .expect("Expected to find target")
+                    .value();
+                t.insert(id);
+            }
+        }
+    }
     pub async fn hydrate_new_file_data(
         self: Arc<TargetState>,
         bazel_query: Arc<Mutex<Box<dyn BazelQuery>>>,
@@ -102,41 +137,31 @@ impl TargetState {
             )
             .await;
 
-            for (k, _) in dependencies_calculated.iter() {
-                if !self.label_string_to_id.contains_key(k) {
-                    let cur_id = TargetId(self.max_target_id.fetch_add(1, Ordering::AcqRel));
-                    self.label_string_to_id.insert(k.clone(), cur_id);
-                    if let Some(path) = target_as_path(k) {
-                        self.src_file_to_target.insert(path, cur_id);
-                    }
-                }
-            }
+            self.ingest_new_deps(&dependencies_calculated).await;
 
-            for (k, rdeps) in dependencies_calculated.iter() {
+            for (k, _) in dependencies_calculated.iter() {
                 let rdep_src: TargetId = *self
                     .label_string_to_id
                     .get(k)
                     .expect("Expected to find target")
                     .value();
-                if !self.target_to_rdeps.contains_key(&rdep_src) {
-                    self.target_to_rdeps.insert(rdep_src, Default::default());
-                }
-                let mut t = self
-                    .target_to_rdeps
-                    .get_mut(&rdep_src)
-                    .expect("We guaranteed its here.");
 
-                for rdep in rdeps.iter() {
-                    let id: TargetId = *self
-                        .label_string_to_id
-                        .get(rdep)
-                        .expect("Expected to find target")
-                        .value();
-                    t.insert(id);
+                let need_query: bool = self
+                    .target_to_rdeps
+                    .get(&rdep_src)
+                    .map(|e| e.value().is_empty())
+                    .unwrap_or(true);
+                if need_query {
+                    let dependencies_calculated =
+                        crate::bazel_runner_daemon::query_graph::graph_query(
+                            bazel_query.as_ref(),
+                            &format!("rdeps({}, //...)", k),
+                        )
+                        .await;
+
+                    self.ingest_new_deps(&dependencies_calculated).await;
                 }
             }
-
-            eprintln!("Dependencies... {:#?}", dependencies_calculated);
         }
 
         Ok(())
