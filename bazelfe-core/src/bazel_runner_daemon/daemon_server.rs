@@ -106,6 +106,8 @@ impl TargetState {
                 if let Some(path) = target_as_path(&src_file.name) {
                     let cur_id = TargetId(self.max_target_id.fetch_add(1, Ordering::AcqRel));
                     self.src_file_to_target.insert(path, cur_id);
+                    self.label_string_to_id
+                        .insert(src_file.name.clone(), cur_id);
 
                     let srcfile_data = SrcFileTarget {
                         target_label: src_file.name.clone(),

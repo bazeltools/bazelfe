@@ -7,5 +7,3 @@ public class Cat {
 asd
 
 asdf
-
-asdasd
