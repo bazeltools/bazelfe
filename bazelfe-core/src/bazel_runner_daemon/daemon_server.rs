@@ -284,6 +284,7 @@ pub async fn main(
     println!("Starting tarpc");
     let _ = tokio::task::spawn(async move {
         while let Ok(event) = flume_rx.recv_async().await {
+            eprintln!("{:#?}", event);
             use notify::EventKind;
             let should_process = match &event.kind {
                 EventKind::Any => true,
