@@ -97,7 +97,7 @@ pub async fn graph_query<B: BazelQuery, Q: AsRef<str>>(
         if let Some(lhs) = lhs {
             for &lhs in lhs.iter() {
                 if let Some(rhs) = rhs {
-                    for rhs in rhs.iter() {
+                    for &rhs in rhs.iter() {
                         if let Some(existing_rhs) = result.get_mut(rhs) {
                             existing_rhs.insert(lhs.to_string());
                         } else {
