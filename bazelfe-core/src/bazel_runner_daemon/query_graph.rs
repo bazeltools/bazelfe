@@ -1,4 +1,4 @@
-use crate::jvm_indexer::bazel_query::{BazelQuery, ExecuteResult};
+use crate::jvm_indexer::bazel_query::{BazelQuery};
 use lazy_static::lazy_static;
 
 use regex::Regex;
@@ -93,6 +93,8 @@ pub async fn graph_query<B: BazelQuery, Q: AsRef<str>>(bazel_query: &B, query: Q
             }
         }
     }
+    eprintln!("{:#?}", res);
+    eprintln!("{:#?}", result);
 
  result
 }

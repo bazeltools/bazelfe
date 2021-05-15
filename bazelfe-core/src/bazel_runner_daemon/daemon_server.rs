@@ -101,7 +101,6 @@ impl super::daemon_service::RunnerDaemon for DaemonServerInstance {
         crate::jvm_indexer::bazel_query::from_binary_path(self.bazel_binary_path.as_ref());
 
 
-        eprintln!("{:#?}", paths_missing_owner);
         for path in paths_missing_owner {
             let mut cur_path = Some(path.0.as_path());
             loop {
@@ -115,7 +114,6 @@ impl super::daemon_service::RunnerDaemon for DaemonServerInstance {
                     break;
                 };
             }
-            eprintln!("path: {:#?}", cur_path);
             if let Some(p) = cur_path {
                 let dependencies_calculated = crate::bazel_runner_daemon::query_graph::graph_query(
                     &bazel_query,
