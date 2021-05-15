@@ -160,6 +160,8 @@ impl TargetState {
                         .await;
 
                     self.ingest_new_deps(&dependencies_calculated).await;
+                } else {
+                    eprintln!("{} doesn't need query", k);
                 }
             }
         }
