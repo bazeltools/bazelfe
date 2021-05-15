@@ -136,6 +136,8 @@ impl TargetState {
                     if let Some(id) = self.label_string_to_id.get(rdep) {
                         let id: TargetId = *id.value();
                         t.insert(id);
+                    } else {
+                        eprintln!("Skipping: {}", rdep);
                     }
                 }
             }
