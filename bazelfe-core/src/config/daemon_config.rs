@@ -104,7 +104,8 @@ mod tests {
             command_line_rewriter,
             DaemonConfig {
                 enabled: false,
-                daemon_communication_folder: default_communication_folder()
+                daemon_communication_folder: default_communication_folder(),
+                inotify_ignore_regexes: default_inotify_ignore()
             }
         );
     }
@@ -122,7 +123,8 @@ mod tests {
             command_line_rewriter,
             DaemonConfig {
                 enabled: false,
-                daemon_communication_folder: PathBuf::from("/tmp/foo")
+                daemon_communication_folder: PathBuf::from("/tmp/foo"),
+                inotify_ignore_regexes: default_inotify_ignore()
             }
         );
     }
@@ -139,7 +141,8 @@ mod tests {
             command_line_rewriter,
             DaemonConfig {
                 enabled: false,
-                daemon_communication_folder: default_communication_folder()
+                daemon_communication_folder: default_communication_folder(),
+                inotify_ignore_regexes: default_inotify_ignore()
             }
         );
     }
