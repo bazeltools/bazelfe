@@ -99,6 +99,8 @@ impl TargetState {
                     for rdep in rule.rule_output.iter() {
                         self.label_string_to_id.insert(rdep.clone(), cur_id);
                     }
+                } else {
+                    eprintln!("Skipping {}", rule.name);
                 }
             }
 
