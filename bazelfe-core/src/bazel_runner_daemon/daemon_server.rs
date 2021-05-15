@@ -85,7 +85,7 @@ impl TargetState {
             if let Some(rule) = target.rule.as_ref() {
                 if !self.label_string_to_id.contains_key(&rule.name) {
                     let cur_id = TargetId(self.max_target_id.fetch_add(1, Ordering::AcqRel));
-                    self.label_string_to_id.insert(rule.name.clone(), cur_id);
+
                     let target_data = RuleTarget {
                         target_label: rule.name.clone(),
                         target_kind: rule.rule_class.clone(),
@@ -93,6 +93,12 @@ impl TargetState {
                     };
                     self.target_id_to_details
                         .insert(cur_id, TargetType::Rule(target_data));
+
+                    self.label_string_to_id.insert(rule.name.clone(), cur_id);
+
+                    for rdep in rule.rule_output.iter() {
+                        self.label_string_to_id.insert(rdep.clone(), cur_id);
+                    }
                 }
             }
 
