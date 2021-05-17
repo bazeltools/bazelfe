@@ -45,6 +45,12 @@ name = "bazel-runner-daemon-demo-app"
 path = "src/bazel_runner_daemon/bazel_runner_daemon_demo_app.rs"
 
 
+[[bin]]
+name = "generate-bazel-command-line"
+path = "src/bazel_command_line_parser/generate_bazel_command_line_app.rs"
+
+
+
 [dependencies]
 async-channel = "1.6.1"
 async-stream = "0.3.0"

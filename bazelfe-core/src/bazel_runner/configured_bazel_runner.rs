@@ -137,6 +137,12 @@ pub struct ConfiguredBazelRunner<
     process_build_failures: Arc<ProcessBazelFailures<T, U>>,
 }
 
+pub struct RunCompleteState {
+    pub attempts: u16,
+    pub total_actions_taken: u32,
+    pub final_exit_code: i32,
+    pub running_total: ProcessorActivity,
+}
 impl<
         T: buildozer_driver::Buildozer,
         U: crate::hydrated_stream_processors::process_bazel_failures::CommandLineRunner,
@@ -161,14 +167,8 @@ impl<
             process_build_failures,
         }
     }
-    pub async fn run(mut self) -> Result<i32, Box<dyn std::error::Error>> {
-        super::command_line_rewriter_action::rewrite_command_line(
-            &mut self.passthrough_args,
-            &self.config.command_line_rewriter,
-            &self.runner_daemon,
-        )
-        .await?;
 
+    pub async fn run_command_line(&self) -> Result<RunCompleteState, Box<dyn std::error::Error>> {
         let mut attempts: u16 = 0;
 
         let mut running_total = ProcessorActivity::default();
@@ -191,21 +191,49 @@ impl<
                 break;
             }
         }
+        Ok(RunCompleteState {
+            attempts,
+            total_actions_taken,
+            final_exit_code,
+            running_total,
+        })
+    }
+
+    pub async fn run(mut self) -> Result<i32, Box<dyn std::error::Error>> {
+        super::command_line_rewriter_action::rewrite_command_line(
+            &mut self.passthrough_args,
+            &self.config.command_line_rewriter,
+            &self.runner_daemon,
+        )
+        .await?;
+
+        // if super::auto_test_action::maybe_auto_test_mode(
+        //     &mut self
+        // ).await? {
+        //     return Ok(0);
+        // };
+        let res_data = self.run_command_line().await?;
+        let disable_action_stories_on_success = self.config.disable_action_stories_on_success;
 
         // we should be very quiet if the build is successful/we added nothing.
-        if total_actions_taken > 0 && !(final_exit_code == 0 && disable_action_stories_on_success) {
+        if res_data.total_actions_taken > 0
+            && !(res_data.final_exit_code == 0 && disable_action_stories_on_success)
+        {
             eprintln!("--------------------Bazel Runner Report--------------------");
 
-            if running_total.target_story_actions.len() > 0 {
-                if final_exit_code != 0 {
+            if res_data.running_total.target_story_actions.len() > 0 {
+                if res_data.final_exit_code != 0 {
                     eprintln!(
                     "\nBuild still failed. Active stories about failed targets/what we've tried:"
                 );
                 } else {
                     eprintln!("\nBuild succeeded, but documenting actions we took(some may have failed, but the build completed ok.):\n");
                 }
-                let mut v: Vec<(String, Vec<TargetStory>)> =
-                    running_total.target_story_actions.into_iter().collect();
+                let mut v: Vec<(String, Vec<TargetStory>)> = res_data
+                    .running_total
+                    .target_story_actions
+                    .into_iter()
+                    .collect();
                 v.sort_by_key(|k| k.0.clone());
                 for (label, mut story_entries) in v.into_iter() {
                     eprintln!("Target: {}", label);
@@ -238,16 +266,16 @@ impl<
                     }
                 }
             }
-            eprintln!("Bazel exit code: {}", final_exit_code);
-            eprintln!("Bazel build attempts: {}", attempts);
-            eprintln!("Actions taken: {}", running_total.actions_taken);
+            eprintln!("Bazel exit code: {}", res_data.final_exit_code);
+            eprintln!("Bazel build attempts: {}", res_data.attempts);
+            eprintln!("Actions taken: {}", res_data.running_total.actions_taken);
             eprintln!(
                 "Jvm fragments (classes/packages) added to index: {}",
-                running_total.jvm_segments_indexed
+                res_data.running_total.jvm_segments_indexed
             );
             eprintln!("------------------------------------------------------------\n");
         }
 
-        Ok(final_exit_code)
+        Ok(res_data.final_exit_code)
     }
 }
