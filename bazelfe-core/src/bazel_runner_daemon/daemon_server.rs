@@ -305,7 +305,10 @@ impl TargetCache {
                     let pb = relative_path.to_path_buf();
 
                     if pb.is_file() || (pb.is_dir() && event_kind.is_create()) {
-                        eprintln!("Noting activity: {:#?} --> {:?}\n", pb, event_kind, paths);
+                        eprintln!(
+                            "Noting activity: {:#?} --> {:?}\n{:#?}",
+                            pb, event_kind, paths
+                        );
                         self.hydrate_new_file_data(pb.clone()).await;
                         lock.insert(relative_path.to_path_buf(), (ts, now_instant));
                     }
