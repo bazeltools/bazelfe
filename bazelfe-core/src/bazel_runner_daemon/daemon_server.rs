@@ -324,7 +324,7 @@ impl TargetCache {
                 continue;
             }
 
-            let real_metadata = if let Ok(m) = std::fs::symlink_metadata(real_path) {
+            let real_metadata = if let Ok(m) = std::fs::symlink_metadata(&real_path) {
                 m
             } else {
                 continue;
