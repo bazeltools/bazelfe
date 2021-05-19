@@ -40,99 +40,103 @@ pub async fn maybe_auto_test_mode<
         let max_distance = 3;
         let mut dirty_files: Vec<FileStatus> = Vec::default();
 
-        loop {
+        'outer_loop: loop {
             let recent_changed_files: Vec<FileStatus> = daemon_cli
                 .wait_for_files(tarpc::context::current(), invalid_since_when)
                 .await?;
             if !recent_changed_files.is_empty() {
-                invalid_since_when = recent_changed_files.iter().map(|e| e.1 + 1).max().unwrap();
-                dirty_files.extend(recent_changed_files);
-                let changed_targets = daemon_cli
-                    .targets_from_files(
-                        tarpc::context::current(),
-                        dirty_files.clone(),
-                        cur_distance,
-                    )
-                    .await?;
+                'inner_loop: loop {
+                    invalid_since_when =
+                        recent_changed_files.iter().map(|e| e.1 + 1).max().unwrap();
+                    dirty_files.extend(recent_changed_files);
+                    let changed_targets = daemon_cli
+                        .targets_from_files(
+                            tarpc::context::current(),
+                            dirty_files.clone(),
+                            cur_distance,
+                        )
+                        .await?;
 
-                if !changed_targets.is_empty() {
-                    configured_bazel_runner.bazel_command_line.action = Some(
-                        crate::bazel_command_line_parser::Action::BuiltIn(BuiltInAction::Build),
-                    );
-                    configured_bazel_runner
-                        .bazel_command_line
-                        .remaining_args
-                        .clear();
-
-                    for t in changed_targets.iter() {
+                    if !changed_targets.is_empty() {
+                        configured_bazel_runner.bazel_command_line.action = Some(
+                            crate::bazel_command_line_parser::Action::BuiltIn(BuiltInAction::Build),
+                        );
                         configured_bazel_runner
                             .bazel_command_line
                             .remaining_args
-                            .push(t.target_label().clone());
-                    }
+                            .clear();
 
-                    eprintln!(
-                        "Building... {}",
-                        configured_bazel_runner
-                            .bazel_command_line
-                            .remaining_args
-                            .join(", ")
-                    );
-                    let result = configured_bazel_runner.run_command_line().await?;
-                    if result.final_exit_code != 0 {
-                        continue;
-                    }
-
-                    // Now try tests
-
-                    configured_bazel_runner
-                        .bazel_command_line
-                        .remaining_args
-                        .clear();
-
-                    for t in changed_targets.iter() {
-                        if t.is_test() {
+                        for t in changed_targets.iter() {
                             configured_bazel_runner
                                 .bazel_command_line
                                 .remaining_args
                                 .push(t.target_label().clone());
                         }
-                    }
-
-                    if !configured_bazel_runner
-                        .bazel_command_line
-                        .remaining_args
-                        .is_empty()
-                    {
-                        configured_bazel_runner.bazel_command_line.action = Some(
-                            crate::bazel_command_line_parser::Action::BuiltIn(BuiltInAction::Test),
-                        );
 
                         eprintln!(
-                            "Testing... {}",
+                            "Building... {}",
                             configured_bazel_runner
                                 .bazel_command_line
                                 .remaining_args
                                 .join(", ")
                         );
-
                         let result = configured_bazel_runner.run_command_line().await?;
                         if result.final_exit_code != 0 {
-                            continue;
+                            continue 'outer_loop;
                         }
-                    }
 
-                    eprintln!(
+                        // Now try tests
+
+                        configured_bazel_runner
+                            .bazel_command_line
+                            .remaining_args
+                            .clear();
+
+                        for t in changed_targets.iter() {
+                            if t.is_test() {
+                                configured_bazel_runner
+                                    .bazel_command_line
+                                    .remaining_args
+                                    .push(t.target_label().clone());
+                            }
+                        }
+
+                        if !configured_bazel_runner
+                            .bazel_command_line
+                            .remaining_args
+                            .is_empty()
+                        {
+                            configured_bazel_runner.bazel_command_line.action =
+                                Some(crate::bazel_command_line_parser::Action::BuiltIn(
+                                    BuiltInAction::Test,
+                                ));
+
+                            eprintln!(
+                                "Testing... {}",
+                                configured_bazel_runner
+                                    .bazel_command_line
+                                    .remaining_args
+                                    .join(", ")
+                            );
+
+                            let result = configured_bazel_runner.run_command_line().await?;
+                            if result.final_exit_code != 0 {
+                                continue 'outer_loop;
+                            }
+                        }
+
+                        eprintln!(
                         "Operating at distance {}, all targets built and tested that were eligble.",
                         cur_distance
                     );
+                    }
+                    if cur_distance >= max_distance {
+                        cur_distance = 1;
+                        dirty_files.clear();
+                    } else {
+                        cur_distance += 1;
+                    }
                 }
-            }
-            if cur_distance >= max_distance {
-                cur_distance = 1;
-                dirty_files.clear();
-            } else {
-                cur_distance += 1;
             }
         }
     }
