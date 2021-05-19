@@ -44,16 +44,81 @@ pub async fn maybe_auto_test_mode<
         }?;
 
         let mut invalid_since_when: u128 = current_ms_since_epoch() - 20000;
-        // let mut cur_distance = 0;
-        // let max_distance = 6;
+        let mut cur_distance = 1;
+        let max_distance = 1;
+        let mut dirty_files: Vec<FileStatus> = Vec::default();
+
         loop {
             let recent_changed_files: Vec<FileStatus> = daemon_cli
                 .wait_for_files(tarpc::context::current(), invalid_since_when)
                 .await?;
             if !recent_changed_files.is_empty() {
+                invalid_since_when = recent_changed_files.iter().map(|e| e.1).max().unwrap();
+                dirty_files.extend(recent_changed_files);
                 let changed_targets = daemon_cli
-                    .targets_from_files(tarpc::context::current(), recent_changed_files.clone(), 1)
+                    .targets_from_files(
+                        tarpc::context::current(),
+                        dirty_files.clone(),
+                        cur_distance,
+                    )
                     .await?;
+
+                configured_bazel_runner.bazel_command_line.action = Some(
+                    crate::bazel_command_line_parser::Action::BuiltIn(BuiltInAction::Build),
+                );
+                configured_bazel_runner
+                    .bazel_command_line
+                    .remaining_args
+                    .clear();
+
+                for t in changed_targets.iter() {
+                    configured_bazel_runner
+                        .bazel_command_line
+                        .remaining_args
+                        .push(t.target_label().clone());
+                }
+
+                let result = configured_bazel_runner.run_command_line().await?;
+                if result.final_exit_code != 0 {
+                    continue;
+                }
+
+                // Now try tests
+
+                configured_bazel_runner
+                    .bazel_command_line
+                    .remaining_args
+                    .clear();
+
+                for t in changed_targets.iter() {
+                    if t.is_test() {
+                        configured_bazel_runner
+                            .bazel_command_line
+                            .remaining_args
+                            .push(t.target_label().clone());
+                    }
+                }
+
+                if !configured_bazel_runner
+                    .bazel_command_line
+                    .remaining_args
+                    .is_empty()
+                {
+                    configured_bazel_runner.bazel_command_line.action = Some(
+                        crate::bazel_command_line_parser::Action::BuiltIn(BuiltInAction::Build),
+                    );
+
+                    let result = configured_bazel_runner.run_command_line().await?;
+                    if result.final_exit_code != 0 {
+                        continue;
+                    }
+                }
+                if cur_distance >= max_distance {
+                    cur_distance = 1;
+                    dirty_files.clear();
+                } else {
+                    cur_distance += 1;
+                }
                 eprintln!("Changed targets : {:#?}", &changed_targets);
                 return Ok(true);
             }
