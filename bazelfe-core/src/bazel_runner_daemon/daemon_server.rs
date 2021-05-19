@@ -289,6 +289,7 @@ impl TargetCache {
         let current_path = std::env::current_dir().expect("Should be able to get the current dir");
         let mut lock = self.last_files_updated.lock().await;
         let ts = monotonic_current_time();
+        eprintln!("Registering activity @ {:#?} for paths: {:#?}", ts, paths);
         let now_instant = Instant::now();
         for p in paths.clone() {
             let file_name = if let Some(file_name) = p.file_name() {
@@ -343,6 +344,7 @@ impl TargetCache {
             if real_path.exists() && real_metadata.file_type() == src_metadata.file_type() {
                 {
                     self.hydrate_new_file_data(real_path.clone()).await;
+                    eprintln!("Inserting {:#?} for paths: {:#?}", real_path, ts);
                     lock.insert(real_path.to_path_buf(), (ts, now_instant));
                 }
             }
@@ -389,7 +391,6 @@ impl TargetCache {
     pub async fn get_recent_files(&self, instant: u128) -> Vec<super::daemon_service::FileStatus> {
         let lock = self.last_files_updated.lock().await;
 
-        eprintln!("Query recent files: from instant {}", instant);
         lock.iter()
             .filter_map(|(k, (v, _))| {
                 if *v > instant {
