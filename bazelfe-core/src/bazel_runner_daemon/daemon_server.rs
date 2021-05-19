@@ -349,7 +349,7 @@ impl TargetCache {
         let lock = self.last_files_updated.lock().await;
 
         lock.iter()
-            .filter_map(|(k, v)| {
+            .filter_map(|(k, (v, _))| {
                 if *v > instant {
                     Some(super::daemon_service::FileStatus(k.clone(), *v))
                 } else {
