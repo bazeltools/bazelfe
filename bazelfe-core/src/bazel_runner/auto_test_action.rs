@@ -52,9 +52,10 @@ pub async fn maybe_auto_test_mode<
                 .await?;
             if !recent_changed_files.is_empty() {
                 let changed_targets = daemon_cli
-                    .targets_from_files(tarpc::context::current(), recent_changed_files.clone(), 0)
+                    .targets_from_files(tarpc::context::current(), recent_changed_files.clone(), 1)
                     .await?;
                 eprintln!("Changed targets : {:#?}", &changed_targets);
+                return Ok(true);
             }
         }
     }
