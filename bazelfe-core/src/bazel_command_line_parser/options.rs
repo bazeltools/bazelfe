@@ -2800,3 +2800,29 @@ impl FromStr for BuiltInAction {
         }
     }
 }
+impl core::fmt::Display for BuiltInAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BuiltInAction::AnalyzeProfile => Ok(write!(f, "analyze-profile")?),
+            BuiltInAction::Aquery => Ok(write!(f, "aquery")?),
+            BuiltInAction::Build => Ok(write!(f, "build")?),
+            BuiltInAction::CanonicalizeFlags => Ok(write!(f, "canonicalize-flags")?),
+            BuiltInAction::Clean => Ok(write!(f, "clean")?),
+            BuiltInAction::Coverage => Ok(write!(f, "coverage")?),
+            BuiltInAction::Cquery => Ok(write!(f, "cquery")?),
+            BuiltInAction::Dump => Ok(write!(f, "dump")?),
+            BuiltInAction::Fetch => Ok(write!(f, "fetch")?),
+            BuiltInAction::Help => Ok(write!(f, "help")?),
+            BuiltInAction::Info => Ok(write!(f, "info")?),
+            BuiltInAction::License => Ok(write!(f, "license")?),
+            BuiltInAction::MobileInstall => Ok(write!(f, "mobile-install")?),
+            BuiltInAction::PrintAction => Ok(write!(f, "print_action")?),
+            BuiltInAction::Query => Ok(write!(f, "query")?),
+            BuiltInAction::Run => Ok(write!(f, "run")?),
+            BuiltInAction::Shutdown => Ok(write!(f, "shutdown")?),
+            BuiltInAction::Sync => Ok(write!(f, "sync")?),
+            BuiltInAction::Test => Ok(write!(f, "test")?),
+            BuiltInAction::Version => Ok(write!(f, "version")?),
+        }
+    }
+}

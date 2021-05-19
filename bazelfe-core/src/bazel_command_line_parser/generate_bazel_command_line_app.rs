@@ -305,5 +305,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
     file.write_all(b"    }\n")?;
     file.write_all(b"}\n")?;
 
+    file.write_all(b"impl core::fmt::Display for BuiltInAction {\n")?;
+    file.write_all(b"\n")?;
+
+    file.write_all(b"    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {\n")?;
+    file.write_all(b"        match self {\n")?;
+    for action in actions.iter() {
+        let action_title = convert_raw_action_to_enum_name(action);
+        file.write_all(
+            format!(
+                "            BuiltInAction::{}  => Ok(write!(f, \"{}\")?),\n",
+                action_title, action,
+            )
+            .as_bytes(),
+        )?;
+    }
+    file.write_all(b"        }\n")?;
+    file.write_all(b"    }\n")?;
+    file.write_all(b"}\n")?;
+
     Ok(())
 }

@@ -9,6 +9,21 @@ pub enum BazelOption {
     OptionWithArg(String, String),
 }
 impl BazelOption {
+    pub fn to_arg(&self) -> Vec<String> {
+        match self {
+            BazelOption::BooleanOption(nme, arg) => {
+                if *arg {
+                    vec![format!("--{}", nme)]
+                } else {
+                    vec![format!("--no{}", nme)]
+                }
+            }
+            BazelOption::OptionWithArg(nme, arg) => {
+                vec![format!("--{}", nme), arg.to_string()]
+            }
+        }
+    }
+
     pub fn option_with_arg(name: String, arg: String) -> BazelOption {
         let mut min_pos = i32::MAX;
         let mut max_pos = -1;
@@ -92,6 +107,11 @@ pub enum CommandLineParsingError {
     // #[error("Unclassified or otherwise unknown error occured: `{0}`")]
     // Unknown(Box<dyn std::error::Error>),
 }
+#[derive(Error, Debug)]
+pub enum ArgNormalizationError {
+    #[error("Internal args cannot be passed to bazel sanely so are forbidden from this api, command line arg had: {0:?}")]
+    HasInternalArg(CustomAction),
+}
 
 pub struct ParsedCommandLine {
     pub bazel_binary: PathBuf,
@@ -99,6 +119,34 @@ pub struct ParsedCommandLine {
     pub action: Option<Action>,
     pub action_options: Vec<BazelOption>,
     pub remaining_args: Vec<String>,
+}
+impl ParsedCommandLine {
+    pub fn all_args_normalized(&self) -> Result<Vec<String>, ArgNormalizationError> {
+        let mut result = Vec::default();
+
+        result.extend(self.startup_options.iter().map(|e| e.to_arg()).flatten());
+
+        if let Some(action) = &self.action {
+            match action {
+                Action::BuiltIn(b) => {
+                    result.push(b.to_string());
+
+                    result.extend(self.action_options.iter().map(|e| e.to_arg()).flatten());
+
+                    if !self.remaining_args.is_empty() {
+                        result.push(String::from("--"));
+                        result.extend(self.remaining_args.iter().cloned());
+                    }
+                }
+                Action::Custom(c) => {
+                    return Err(ArgNormalizationError::HasInternalArg(c.clone()));
+                }
+            }
+        } else {
+            result.extend(self.remaining_args.iter().cloned());
+        }
+        Ok(result)
+    }
 }
 
 fn extract_set_of_flags<'a, I: Iterator<Item = &'a String>>(
@@ -352,6 +400,22 @@ mod tests {
         let remaining_expected: Vec<String> = vec!["--foo".to_string(), "bar".to_string()];
 
         assert_eq!(result.remaining_args, remaining_expected);
+
+        let expected_args: Vec<String> = vec![
+            "--host_jvm_args".to_string(),
+            "foobarbaz".to_string(),
+            "--output_base".to_string(),
+            "/tmp/foo build".to_string(),
+            "test".to_string(),
+            "--keep_going".to_string(),
+            "--".to_string(),
+            "--foo".to_string(),
+            "bar".to_string(),
+        ];
+        assert_eq!(
+            result.all_args_normalized().expect("Can reproduce args"),
+            expected_args
+        );
     }
 
     #[tokio::test]
@@ -374,6 +438,13 @@ mod tests {
         let remaining_expected: Vec<String> = vec!["test".to_string()];
 
         assert_eq!(result.remaining_args, remaining_expected);
+
+        let expected_args: Vec<String> =
+            vec!["help".to_string(), "--".to_string(), "test".to_string()];
+        assert_eq!(
+            result.all_args_normalized().expect("Can reproduce args"),
+            expected_args
+        );
     }
 
     #[tokio::test]
@@ -403,6 +474,17 @@ mod tests {
             vec!["foo/...".to_string(), "-foo/contrib/...".to_string()];
 
         assert_eq!(result.remaining_args, remaining_expected);
+
+        let expected_args: Vec<String> = vec![
+            "build".to_string(),
+            "--".to_string(),
+            "foo/...".to_string(),
+            "-foo/contrib/...".to_string(),
+        ];
+        assert_eq!(
+            result.all_args_normalized().expect("Can reproduce args"),
+            expected_args
+        );
     }
 
     #[tokio::test]
@@ -437,5 +519,21 @@ mod tests {
         let remaining_expected: Vec<String> = vec!["bar".to_string(), "--foo".to_string()];
 
         assert_eq!(result.remaining_args, remaining_expected);
+
+        let expected_args: Vec<String> = vec![
+            "--host_jvm_args".to_string(),
+            "foobarbaz".to_string(),
+            "--output_base".to_string(),
+            "/tmp/foo build".to_string(),
+            "test".to_string(),
+            "--keep_going".to_string(),
+            "--".to_string(),
+            "bar".to_string(),
+            "--foo".to_string(),
+        ];
+        assert_eq!(
+            result.all_args_normalized().expect("Can reproduce args"),
+            expected_args
+        );
     }
 }
