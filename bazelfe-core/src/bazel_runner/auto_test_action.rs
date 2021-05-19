@@ -37,7 +37,7 @@ pub async fn maybe_auto_test_mode<
 
         let mut invalid_since_when: u128 = 0;
         let mut cur_distance = 1;
-        let max_distance = 1;
+        let max_distance = 3;
         let mut dirty_files: Vec<FileStatus> = Vec::default();
 
         loop {
