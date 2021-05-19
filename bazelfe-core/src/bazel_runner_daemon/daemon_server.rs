@@ -235,7 +235,7 @@ use crate::jvm_indexer::bazel_query::BazelQuery;
 #[derive(Debug)]
 struct TargetCache {
     target_state: Arc<TargetState>,
-    last_files_updated: Arc<Mutex<HashMap<PathBuf, u128>>>,
+    last_files_updated: Arc<Mutex<HashMap<PathBuf, (u128, Instant)>>>,
     inotify_ignore_regexes: NotifyRegexes,
     pending_hydrations: Arc<AtomicUsize>,
     bazel_query: Arc<Mutex<Box<dyn BazelQuery>>>,
@@ -284,7 +284,8 @@ impl TargetCache {
     pub async fn register_new_files(&self, paths: Vec<PathBuf>) -> () {
         let current_path = std::env::current_dir().expect("Should be able to get the current dir");
         let mut lock = self.last_files_updated.lock().await;
-        let t = monotonic_current_time();
+        let ts = monotonic_current_time();
+        let now_instant = Instant::now();
         for p in paths {
             if let Ok(relative_path) = p
                 .canonicalize()
@@ -297,19 +298,21 @@ impl TargetCache {
                     .iter()
                     .find(|&p| p.is_match(relative_path.to_string_lossy().as_ref()));
                 if is_ignored.is_none() {
+                    eprintln!("relative_path: {:#?}", relative_path);
+
                     let pb = relative_path.to_path_buf();
                     self.hydrate_new_file_data(pb.clone()).await;
-                    lock.insert(relative_path.to_path_buf(), t);
+                    lock.insert(relative_path.to_path_buf(), (ts, now_instant));
                 }
             }
         }
-        let ts = monotonic_current_time();
         *self.last_update_ts.lock().await = ts;
         let _ = self.inotify_sender.send(ts);
 
         let mut max_age = Duration::from_secs(3600);
+
         while lock.len() > 20 && max_age > Duration::from_secs(120) {
-            lock.retain(|_, v| t - *v < max_age.as_millis());
+            lock.retain(|_, v| now_instant - v.1 < max_age);
             max_age /= 2;
         }
     }
@@ -613,8 +616,6 @@ pub async fn main(
         Watcher::new_immediate(move |res: notify::Result<notify::Event>| {
             match res {
                 Ok(event) => {
-                    eprintln!("event: {:#?}", event);
-
                     if let Err(e) = flume_tx.send(event) {
                         eprintln!("Failed to enqueue inotify event: {:#?}", e);
                     }
