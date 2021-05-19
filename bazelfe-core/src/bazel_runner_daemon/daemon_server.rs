@@ -291,27 +291,54 @@ impl TargetCache {
         let ts = monotonic_current_time();
         let now_instant = Instant::now();
         for p in paths.clone() {
-            if let Ok(relative_path) = p
+            let file_name = if let Some(file_name) = p.file_name() {
+                file_name.to_os_string()
+            } else {
+                continue;
+            };
+
+            let parent = if let Some(file_name) = p.parent() {
+                file_name.to_path_buf()
+            } else {
+                continue;
+            };
+
+            let parent_relative = if let Ok(relative_path) = parent
                 .canonicalize()
                 .unwrap_or(p)
                 .strip_prefix(current_path.as_path())
             {
-                let is_ignored = self
-                    .inotify_ignore_regexes
-                    .0
-                    .iter()
-                    .find(|&p| p.is_match(relative_path.to_string_lossy().as_ref()));
-                if is_ignored.is_none() {
-                    let pb = relative_path.to_path_buf();
+                relative_path.to_path_buf()
+            } else {
+                continue;
+            };
 
-                    if pb.is_file() || (pb.is_dir() && event_kind.is_create()) {
-                        eprintln!(
-                            "Noting activity: {:#?} --> {:?}\n{:#?}",
-                            pb, event_kind, paths
-                        );
-                        self.hydrate_new_file_data(pb.clone()).await;
-                        lock.insert(relative_path.to_path_buf(), (ts, now_instant));
-                    }
+            let is_ignored = self
+                .inotify_ignore_regexes
+                .0
+                .iter()
+                .find(|&p| p.is_match(relative_path.to_string_lossy().as_ref()));
+            if is_ignored.is_some() {
+                continue;
+            }
+
+            let real_path = parent_relative.join(file_name);
+            let real_metadata = if let Ok(m) = std::fs::symlink_metadata(real_path) {
+                m
+            } else {
+                continue;
+            };
+
+            let src_metadata = if let Ok(m) = std::fs::symlink_metadata(p) {
+                m
+            } else {
+                continue;
+            };
+
+            if real_path.exists() && real_metadata.file_type() == src_metadata.file_type() {
+                {
+                    self.hydrate_new_file_data(pb.clone()).await;
+                    lock.insert(real_path.to_path_buf(), (ts, now_instant));
                 }
             }
         }
