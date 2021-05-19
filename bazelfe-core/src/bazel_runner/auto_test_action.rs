@@ -111,12 +111,12 @@ pub async fn maybe_auto_test_mode<
                     "Operating at distance {}, all targets built and tested that were eligble.",
                     cur_distance
                 );
-                if cur_distance >= max_distance {
-                    cur_distance = 1;
-                    dirty_files.clear();
-                } else {
-                    cur_distance += 1;
-                }
+            }
+            if cur_distance >= max_distance {
+                cur_distance = 1;
+                dirty_files.clear();
+            } else {
+                cur_distance += 1;
             }
         }
     }
