@@ -45,10 +45,10 @@ pub async fn maybe_auto_test_mode<
                 .wait_for_files(tarpc::context::current(), invalid_since_when)
                 .await?;
             if !recent_changed_files.is_empty() {
+                invalid_since_when = recent_changed_files.iter().map(|e| e.1 + 1).max().unwrap();
+                dirty_files.extend(recent_changed_files);
+
                 'inner_loop: loop {
-                    invalid_since_when =
-                        recent_changed_files.iter().map(|e| e.1 + 1).max().unwrap();
-                    dirty_files.extend(recent_changed_files);
                     let changed_targets = daemon_cli
                         .targets_from_files(
                             tarpc::context::current(),
