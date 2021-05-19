@@ -336,6 +336,10 @@ impl TargetCache {
                 continue;
             };
 
+            // Modifying a directory isn't interesting.
+            if event_kind.is_modify() && real_metadata.is_dir() {
+                continue;
+            }
             if real_path.exists() && real_metadata.file_type() == src_metadata.file_type() {
                 {
                     self.hydrate_new_file_data(real_path.clone()).await;
@@ -385,6 +389,7 @@ impl TargetCache {
     pub async fn get_recent_files(&self, instant: u128) -> Vec<super::daemon_service::FileStatus> {
         let lock = self.last_files_updated.lock().await;
 
+        eprintln!("Query recent files: from instant {}", instant);
         lock.iter()
             .filter_map(|(k, (v, _))| {
                 if *v > instant {
