@@ -259,7 +259,7 @@ impl TargetCache {
             bazel_query: bazel_query.clone(),
             inotify_receiver: Arc::new(inotify_receiver),
             inotify_sender: Arc::new(inotify_event_occured),
-            last_update_ts: Arc::new(Mutex::new(monotonic_current_time() - 20000)),
+            last_update_ts: Arc::new(Mutex::new(monotonic_current_time())),
         }
     }
 
