@@ -305,7 +305,7 @@ impl TargetCache {
 
             let parent_relative = if let Ok(relative_path) = parent
                 .canonicalize()
-                .unwrap_or(p)
+                .unwrap_or(p.clone())
                 .strip_prefix(current_path.as_path())
             {
                 relative_path.to_path_buf()
