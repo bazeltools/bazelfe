@@ -45,7 +45,6 @@ pub async fn maybe_auto_test_mode<
                 .wait_for_files(tarpc::context::current(), invalid_since_when)
                 .await?;
             if !recent_changed_files.is_empty() {
-                eprintln!("Changed: {:#?}", recent_changed_files);
                 invalid_since_when = recent_changed_files.iter().map(|e| e.1 + 1).max().unwrap();
                 dirty_files.extend(recent_changed_files);
                 let changed_targets = daemon_cli
@@ -72,8 +71,11 @@ pub async fn maybe_auto_test_mode<
                 }
 
                 eprintln!(
-                    "Building... {:#?}",
-                    configured_bazel_runner.bazel_command_line.remaining_args
+                    "Building... {}",
+                    configured_bazel_runner
+                        .bazel_command_line
+                        .remaining_args
+                        .join(", ")
                 );
                 let result = configured_bazel_runner.run_command_line().await?;
                 if result.final_exit_code != 0 {
@@ -106,8 +108,11 @@ pub async fn maybe_auto_test_mode<
                     );
 
                     eprintln!(
-                        "Testing... {:#?}",
-                        configured_bazel_runner.bazel_command_line.remaining_args
+                        "Testing... {}",
+                        configured_bazel_runner
+                            .bazel_command_line
+                            .remaining_args
+                            .join(", ")
                     );
 
                     let result = configured_bazel_runner.run_command_line().await?;
