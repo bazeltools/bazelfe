@@ -138,14 +138,21 @@ pub async fn execute_bazel_output_control<S: Into<String> + Clone>(
     let mut child_stdout = child.stdout.take().expect("Child didn't have a stdout");
 
     let stdout = tokio::spawn(async move {
-        let mut bytes_read = 1;
         let mut buffer = [0; 1024];
         let mut stdout = tokio::io::stdout();
 
-        while bytes_read > 0 {
-            bytes_read = child_stdout.read(&mut buffer[..]).await.unwrap();
-            if show_output {
-                stdout.write_all(&buffer[0..bytes_read]).await.unwrap();
+        loop {
+            if let Ok(bytes_read) = child_stdout.read(&mut buffer[..]).await {
+                if bytes_read == 0 {
+                    break;
+                }
+                if show_output {
+                    if let Err(_) = stdout.write_all(&buffer[0..bytes_read]).await {
+                        break;
+                    }
+                }
+            } else {
+                break;
             }
         }
     });
@@ -153,13 +160,20 @@ pub async fn execute_bazel_output_control<S: Into<String> + Clone>(
     let mut child_stderr = child.stderr.take().expect("Child didn't have a stderr");
 
     let stderr = tokio::spawn(async move {
-        let mut bytes_read = 1;
         let mut buffer = [0; 1024];
         let mut stderr = tokio::io::stderr();
-        while bytes_read > 0 {
-            bytes_read = child_stderr.read(&mut buffer[..]).await.unwrap();
-            if show_output {
-                stderr.write_all(&buffer[0..bytes_read]).await.unwrap();
+        loop {
+            if let Ok(bytes_read) = child_stderr.read(&mut buffer[..]).await {
+                if bytes_read == 0 {
+                    break;
+                }
+                if show_output {
+                    if let Err(_) = stderr.write_all(&buffer[0..bytes_read]).await {
+                        break;
+                    }
+                }
+            } else {
+                break;
             }
         }
     });
