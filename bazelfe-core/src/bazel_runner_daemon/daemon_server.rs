@@ -1,4 +1,5 @@
 use bazelfe_protos::*;
+use std::sync::atomic::Ordering;
 use std::{
     collections::{HashMap, HashSet},
     ops::{Add, Sub},
@@ -6,7 +7,6 @@ use std::{
     sync::atomic::{AtomicU32, AtomicUsize},
     time::Duration,
 };
-use std::{sync::atomic::Ordering, time::SystemTime};
 
 use dashmap::DashMap;
 use std::{error::Error, sync::Arc};
@@ -72,11 +72,14 @@ impl Default for TargetState {
     }
 }
 
-fn current_ms_since_epoch() -> u128 {
-    SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis() as u128
+// If data arrives too quickly, we may start reporting times in the future!
+static mut CURRENT_TIME: u128 = 0;
+fn monotonic_current_time() -> u128 {
+    let ret = unsafe { CURRENT_TIME };
+    unsafe {
+        CURRENT_TIME += 1;
+    }
+    return ret;
 }
 fn target_as_path(s: &String) -> Option<PathBuf> {
     let pb = PathBuf::from(s.replace(":", "/").replace("//", ""));
@@ -232,7 +235,7 @@ use crate::jvm_indexer::bazel_query::BazelQuery;
 #[derive(Debug)]
 struct TargetCache {
     target_state: Arc<TargetState>,
-    last_files_updated: Arc<Mutex<HashMap<PathBuf, SystemTime>>>,
+    last_files_updated: Arc<Mutex<HashMap<PathBuf, u128>>>,
     inotify_ignore_regexes: NotifyRegexes,
     pending_hydrations: Arc<AtomicUsize>,
     bazel_query: Arc<Mutex<Box<dyn BazelQuery>>>,
@@ -256,7 +259,7 @@ impl TargetCache {
             bazel_query: bazel_query.clone(),
             inotify_receiver: Arc::new(inotify_receiver),
             inotify_sender: Arc::new(inotify_event_occured),
-            last_update_ts: Arc::new(Mutex::new(current_ms_since_epoch() - 20000)),
+            last_update_ts: Arc::new(Mutex::new(monotonic_current_time() - 20000)),
         }
     }
 
@@ -281,7 +284,7 @@ impl TargetCache {
     pub async fn register_new_files(&self, paths: Vec<PathBuf>) -> () {
         let current_path = std::env::current_dir().expect("Should be able to get the current dir");
         let mut lock = self.last_files_updated.lock().await;
-        let t = SystemTime::now();
+        let t = monotonic_current_time();
         for p in paths {
             if let Ok(relative_path) = p
                 .canonicalize()
@@ -300,27 +303,24 @@ impl TargetCache {
                 }
             }
         }
-        let ts = current_ms_since_epoch();
+        let ts = monotonic_current_time();
         *self.last_update_ts.lock().await = ts;
         let _ = self.inotify_sender.send(ts);
 
         let mut max_age = Duration::from_secs(3600);
         while lock.len() > 20 && max_age > Duration::from_secs(120) {
-            lock.retain(|_, v| t.duration_since(*v).unwrap() < max_age);
+            lock.retain(|_, v| t - *v < max_age.as_millis());
             max_age /= 2;
         }
     }
 
-    pub async fn wait_for_files(
-        &self,
-        since_unix_timestamp_ms: u128,
-    ) -> Vec<super::daemon_service::FileStatus> {
+    pub async fn wait_for_files(&self, instant: u128) -> Vec<super::daemon_service::FileStatus> {
         let start_time = Instant::now();
         let max_wait = Duration::from_millis(20);
 
         loop {
-            if *self.last_update_ts.lock().await > since_unix_timestamp_ms {
-                return self.get_recent_files(since_unix_timestamp_ms).await;
+            if *self.last_update_ts.lock().await > instant {
+                return self.get_recent_files(instant).await;
             }
 
             if Instant::now().sub(start_time) > max_wait {
@@ -331,8 +331,8 @@ impl TargetCache {
                 .recv_deadline(start_time.add(max_wait))
             {
                 Ok(v) => {
-                    if v > since_unix_timestamp_ms {
-                        return self.get_recent_files(since_unix_timestamp_ms).await;
+                    if v > instant {
+                        return self.get_recent_files(instant).await;
                     }
                 }
                 Err(_) => {
@@ -342,17 +342,13 @@ impl TargetCache {
         }
     }
 
-    pub async fn get_recent_files(
-        &self,
-        since_unix_timestamp_ms: u128,
-    ) -> Vec<super::daemon_service::FileStatus> {
+    pub async fn get_recent_files(&self, instant: u128) -> Vec<super::daemon_service::FileStatus> {
         let lock = self.last_files_updated.lock().await;
 
         lock.iter()
             .filter_map(|(k, v)| {
-                let since = v.duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u128;
-                if since > since_unix_timestamp_ms {
-                    Some(super::daemon_service::FileStatus(k.clone(), since))
+                if *v > instant {
+                    Some(super::daemon_service::FileStatus(k.clone(), *v))
                 } else {
                     None
                 }
@@ -375,25 +371,21 @@ impl super::daemon_service::RunnerDaemon for DaemonServerInstance {
     async fn wait_for_files(
         self,
         _: tarpc::context::Context,
-        since_unix_timestamp_ms: u128,
+        instant: u128,
     ) -> Vec<super::daemon_service::FileStatus> {
         self.most_recent_call
             .fetch_add(1, std::sync::atomic::Ordering::Release);
-        self.target_cache
-            .wait_for_files(since_unix_timestamp_ms)
-            .await
+        self.target_cache.wait_for_files(instant).await
     }
 
     async fn recently_changed_files(
         self,
         _: tarpc::context::Context,
-        since_unix_timestamp_ms: u128,
+        instant: u128,
     ) -> Vec<super::daemon_service::FileStatus> {
         self.most_recent_call
             .fetch_add(1, std::sync::atomic::Ordering::Release);
-        self.target_cache
-            .get_recent_files(since_unix_timestamp_ms)
-            .await
+        self.target_cache.get_recent_files(instant).await
     }
 
     async fn ping(self, _: tarpc::context::Context) -> super::ExecutableId {
@@ -533,7 +525,7 @@ pub async fn main_from_config(config_path: &PathBuf) -> Result<(), Box<dyn Error
 
 #[derive(Debug, Clone)]
 struct SharedLastFiles {
-    last_files_updated: Arc<Mutex<HashMap<PathBuf, SystemTime>>>,
+    last_files_updated: Arc<Mutex<HashMap<PathBuf, u128>>>,
     inotify_ignore_regexes: NotifyRegexes,
 }
 impl SharedLastFiles {}

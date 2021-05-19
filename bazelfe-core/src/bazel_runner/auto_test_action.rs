@@ -1,6 +1,4 @@
-use std::time::SystemTime;
-
-use crate::bazel_command_line_parser::{BuiltInAction, ParsedCommandLine};
+use crate::bazel_command_line_parser::BuiltInAction;
 use crate::{
     bazel_command_line_parser::CustomAction, bazel_runner_daemon::daemon_service::FileStatus,
     buildozer_driver,
@@ -15,12 +13,6 @@ pub enum AutoTestActionError {
 }
 
 use super::configured_bazel_runner::ConfiguredBazelRunner;
-fn current_ms_since_epoch() -> u128 {
-    SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis() as u128
-}
 
 pub async fn maybe_auto_test_mode<
     T: buildozer_driver::Buildozer,
@@ -43,7 +35,7 @@ pub async fn maybe_auto_test_mode<
             Err(AutoTestActionError::NoDaemon)
         }?;
 
-        let mut invalid_since_when: u128 = current_ms_since_epoch() - 20000;
+        let mut invalid_since_when: u128 = 0;
         let mut cur_distance = 1;
         let max_distance = 1;
         let mut dirty_files: Vec<FileStatus> = Vec::default();
@@ -53,7 +45,7 @@ pub async fn maybe_auto_test_mode<
                 .wait_for_files(tarpc::context::current(), invalid_since_when)
                 .await?;
             if !recent_changed_files.is_empty() {
-                invalid_since_when = recent_changed_files.iter().map(|e| e.1).max().unwrap();
+                invalid_since_when = recent_changed_files.iter().map(|e| e.1 + 1).max().unwrap();
                 dirty_files.extend(recent_changed_files);
                 let changed_targets = daemon_cli
                     .targets_from_files(
@@ -113,6 +105,11 @@ pub async fn maybe_auto_test_mode<
                         continue;
                     }
                 }
+
+                eprintln!(
+                    "Operating at distance {}, all targets built and tested that were eligble.",
+                    cur_distance
+                );
                 if cur_distance >= max_distance {
                     cur_distance = 1;
                     dirty_files.clear();
