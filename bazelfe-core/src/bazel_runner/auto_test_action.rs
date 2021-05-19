@@ -104,7 +104,7 @@ pub async fn maybe_auto_test_mode<
                     .is_empty()
                 {
                     configured_bazel_runner.bazel_command_line.action = Some(
-                        crate::bazel_command_line_parser::Action::BuiltIn(BuiltInAction::Build),
+                        crate::bazel_command_line_parser::Action::BuiltIn(BuiltInAction::Test),
                     );
 
                     eprintln!(
