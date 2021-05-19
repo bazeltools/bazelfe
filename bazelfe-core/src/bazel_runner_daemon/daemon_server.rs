@@ -613,6 +613,8 @@ pub async fn main(
         Watcher::new_immediate(move |res: notify::Result<notify::Event>| {
             match res {
                 Ok(event) => {
+                    eprintln!("event: {:#?}", event);
+
                     if let Err(e) = flume_tx.send(event) {
                         eprintln!("Failed to enqueue inotify event: {:#?}", e);
                     }

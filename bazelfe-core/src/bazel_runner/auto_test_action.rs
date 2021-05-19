@@ -46,7 +46,6 @@ pub async fn maybe_auto_test_mode<
                 .await?;
             if !recent_changed_files.is_empty() {
                 invalid_since_when = recent_changed_files.iter().map(|e| e.1 + 1).max().unwrap();
-                eprintln!("{:#?}", recent_changed_files);
                 dirty_files.extend(recent_changed_files);
                 let changed_targets = daemon_cli
                     .targets_from_files(
