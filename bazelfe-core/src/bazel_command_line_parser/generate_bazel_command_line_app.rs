@@ -239,10 +239,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     file.write_all(b"\n")?;
 
     file.write_all(b"lazy_static! {\n")?;
-    file.write_all(b"    pub static ref ACTION_TO_OPTIONS: std::collections::HashMap<&'static str, Vec<usize>> = {\n")?;
+    file.write_all(b"    pub static ref ACTION_TO_OPTIONS: std::collections::HashMap<BuiltInAction, Vec<usize>> = {\n")?;
     file.write_all(b"        let mut map = std::collections::HashMap::new();\n")?;
 
     for action in actions.iter() {
+        let action_title = convert_raw_action_to_enum_name(action);
+
         let options = options_per_action
             .get(action)
             .expect("Should have options for this action");
@@ -258,7 +260,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
             str_buf = format!("{}{},", str_buf, u);
         }
         file.write_all(
-            format!("        map.insert(\"{}\", vec![{}]);\n", action, str_buf).as_bytes(),
+            format!(
+                "        map.insert(BuiltInAction::{}, vec![{}]);\n",
+                action_title, str_buf
+            )
+            .as_bytes(),
         )?;
     }
     file.write_all(b"        map\n")?;
@@ -267,7 +273,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     file.write_all(b"\n")?;
     file.write_all(b"\n")?;
 
-    file.write_all(b"#[derive(Debug, Clone)]\n")?;
+    file.write_all(b"#[derive(Debug, Clone, PartialEq, Eq, Hash)]\n")?;
     file.write_all(b"pub enum BuiltInAction {\n")?;
 
     for action in actions.iter() {

@@ -33,15 +33,47 @@ impl BazelOption {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CustomAction {
     AutoTest,
 }
+impl CustomAction {
+    pub fn action_for_options(&self) -> BuiltInAction {
+        match self {
+            CustomAction::AutoTest => BuiltInAction::Test,
+        }
+    }
+}
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
     BuiltIn(BuiltInAction),
     Custom(CustomAction),
+}
+
+impl Action {
+    pub fn action_for_options(&self) -> BuiltInAction {
+        match self {
+            Action::BuiltIn(b) => b.clone(),
+            Action::Custom(c) => c.action_for_options(),
+        }
+    }
+}
+
+use std::str::FromStr;
+impl FromStr for Action {
+    type Err = ();
+
+    fn from_str(input: &str) -> Result<Action, Self::Err> {
+        if let Some(builtin) = input.parse::<BuiltInAction>().ok() {
+            return Ok(Action::BuiltIn(builtin));
+        }
+
+        match input {
+            "autotest" => Ok(Action::Custom(CustomAction::AutoTest)),
+            _ => Err(()),
+        }
+    }
 }
 
 use thiserror::Error;
@@ -64,7 +96,8 @@ pub enum CommandLineParsingError {
 pub struct ParsedCommandLine {
     pub bazel_binary: PathBuf,
     pub startup_options: Vec<BazelOption>,
-    pub action: Option<String>,
+    pub action: Option<Action>,
+    pub action_options: Vec<BazelOption>,
     pub remaining_args: Vec<String>,
 }
 
@@ -73,7 +106,7 @@ fn extract_set_of_flags<'a, I: Iterator<Item = &'a String>>(
     flags: &Vec<BazelOption>,
 ) -> Result<Vec<BazelOption>, CommandLineParsingError> {
     let mut result: Vec<BazelOption> = Vec::default();
-    loop {
+    'outer_loop: loop {
         let peek_str = iter.peek().cloned();
         if let Some(nxt) = peek_str {
             let mut trimmed = nxt.trim();
@@ -101,7 +134,7 @@ fn extract_set_of_flags<'a, I: Iterator<Item = &'a String>>(
                     if let Some(boolean) = boolean_option_found {
                         result.push(boolean);
                         iter.next();
-                        continue;
+                        continue 'outer_loop;
                     }
                 }
 
@@ -111,7 +144,7 @@ fn extract_set_of_flags<'a, I: Iterator<Item = &'a String>>(
                             if nme.as_str() == trimmed {
                                 result.push(BazelOption::BooleanOption(nme.to_string(), true));
                                 iter.next();
-                                continue;
+                                continue 'outer_loop;
                             }
                         }
                         BazelOption::OptionWithArg(nme, _) => {
@@ -122,7 +155,7 @@ fn extract_set_of_flags<'a, I: Iterator<Item = &'a String>>(
                                         v.to_string(),
                                     ));
                                     iter.next();
-                                    continue;
+                                    continue 'outer_loop;
                                 } else {
                                     iter.next();
                                     if let Some(p) = iter.peek() {
@@ -131,7 +164,7 @@ fn extract_set_of_flags<'a, I: Iterator<Item = &'a String>>(
                                             p.to_string(),
                                         ));
                                         iter.next();
-                                        continue;
+                                        continue 'outer_loop;
                                     } else {
                                         return Err(CommandLineParsingError::MissingArgToOption(
                                             nme.clone(),
@@ -142,12 +175,12 @@ fn extract_set_of_flags<'a, I: Iterator<Item = &'a String>>(
                         }
                     }
                 }
-                break;
+                break 'outer_loop;
             } else {
-                break;
+                break 'outer_loop;
             }
         } else {
-            break;
+            break 'outer_loop;
         }
     }
     Ok(result)
@@ -163,9 +196,57 @@ pub fn parse_bazel_command_line(
         return Err(CommandLineParsingError::MissingBazelPath);
     };
 
-    extract_set_of_flags(&mut command_line_iter, &options::STARTUP_OPTIONS)?;
+    let startup_options = extract_set_of_flags(&mut command_line_iter, &options::STARTUP_OPTIONS)?;
 
-    todo!()
+    let action: Option<Action> = command_line_iter.peek().and_then(|cmd| cmd.parse().ok());
+
+    if let Some(action) = action.as_ref() {
+        command_line_iter.next();
+        let options: Vec<BazelOption> = options::ACTION_TO_OPTIONS
+            .get(&action.action_for_options())
+            .expect("Should be impossible not to find options")
+            .iter()
+            .map(|&o| options::ALL_ACTION_OPTIONS[o].clone())
+            .collect();
+        let mut action_options = Vec::default();
+        let mut action_args = Vec::default();
+        'outer: loop {
+            'inner: while let Some(&opt) = command_line_iter.peek() {
+                if opt == "--" {
+                    command_line_iter.next();
+                    break 'outer;
+                }
+                if opt.starts_with("--") {
+                    break 'inner;
+                }
+                action_args.push(opt.clone());
+                command_line_iter.next();
+            }
+            let cur_options = extract_set_of_flags(&mut command_line_iter, &options)?;
+
+            if cur_options.is_empty() {
+                break 'outer;
+            } else {
+                action_options.extend(cur_options.into_iter());
+            }
+        }
+        action_args.extend(command_line_iter.cloned());
+        Ok(ParsedCommandLine {
+            bazel_binary: bazel_path,
+            startup_options: startup_options,
+            action: Some(action.clone()),
+            action_options: action_options,
+            remaining_args: action_args,
+        })
+    } else {
+        Ok(ParsedCommandLine {
+            bazel_binary: bazel_path,
+            startup_options: startup_options,
+            action: None,
+            action_options: Vec::default(),
+            remaining_args: command_line_iter.cloned().collect(),
+        })
+    }
 }
 
 #[cfg(test)]
@@ -209,5 +290,152 @@ mod tests {
             vec!["test".to_string(), "--foo".to_string(), "bar".to_string()];
 
         assert_eq!(remaining, remaining_expected);
+    }
+
+    #[tokio::test]
+    async fn test_more_args() {
+        let passthrough_command_line = vec![
+            "--host_jvm_args=\"foobarbaz\"".to_string(),
+            "--output_base=/tmp/foo build".to_string(),
+            "test".to_string(),
+            "--foo".to_string(),
+            "bar".to_string(),
+        ];
+
+        let mut iter = passthrough_command_line.iter().peekable();
+        let result = extract_set_of_flags(&mut iter, &options::STARTUP_OPTIONS)
+            .expect("Should be able to parse the cmd line");
+
+        let expected: Vec<BazelOption> = vec![
+            BazelOption::OptionWithArg(String::from("host_jvm_args"), String::from("foobarbaz")),
+            BazelOption::OptionWithArg(String::from("output_base"), String::from("/tmp/foo build")),
+        ];
+
+        assert_eq!(result, expected);
+
+        let remaining: Vec<String> = iter.cloned().collect();
+        let remaining_expected: Vec<String> =
+            vec!["test".to_string(), "--foo".to_string(), "bar".to_string()];
+
+        assert_eq!(remaining, remaining_expected);
+    }
+
+    #[tokio::test]
+    async fn parse_bazel_command_line_1() {
+        let passthrough_command_line = vec![
+            "bazel".to_string(),
+            "--host_jvm_args=\"foobarbaz\"".to_string(),
+            "--output_base=/tmp/foo build".to_string(),
+            "test".to_string(),
+            "--keep_going".to_string(),
+            "--foo".to_string(),
+            "bar".to_string(),
+        ];
+
+        let result = parse_bazel_command_line(&passthrough_command_line)
+            .expect("Should be able to parse the cmd line");
+
+        let expected_startup_options: Vec<BazelOption> = vec![
+            BazelOption::OptionWithArg(String::from("host_jvm_args"), String::from("foobarbaz")),
+            BazelOption::OptionWithArg(String::from("output_base"), String::from("/tmp/foo build")),
+        ];
+
+        assert_eq!(result.startup_options, expected_startup_options);
+
+        assert_eq!(result.action, Some(Action::BuiltIn(BuiltInAction::Test)));
+
+        let expected_action_args: Vec<BazelOption> =
+            vec![BazelOption::BooleanOption(String::from("keep_going"), true)];
+
+        assert_eq!(result.action_options, expected_action_args);
+
+        let remaining_expected: Vec<String> = vec!["--foo".to_string(), "bar".to_string()];
+
+        assert_eq!(result.remaining_args, remaining_expected);
+    }
+
+    #[tokio::test]
+    async fn parse_bazel_command_line_2() {
+        let passthrough_command_line =
+            vec!["bazel".to_string(), "help".to_string(), "test".to_string()];
+
+        let result = parse_bazel_command_line(&passthrough_command_line)
+            .expect("Should be able to parse the cmd line");
+
+        let expected_startup_options: Vec<BazelOption> = vec![];
+
+        assert_eq!(result.startup_options, expected_startup_options);
+
+        assert_eq!(result.action, Some(Action::BuiltIn(BuiltInAction::Help)));
+
+        let expected_action_options: Vec<BazelOption> = vec![];
+        assert_eq!(result.action_options, expected_action_options);
+
+        let remaining_expected: Vec<String> = vec!["test".to_string()];
+
+        assert_eq!(result.remaining_args, remaining_expected);
+    }
+
+    #[tokio::test]
+    async fn parse_bazel_command_line_3() {
+        let passthrough_command_line = vec![
+            "bazel".to_string(),
+            "build".to_string(),
+            "--".to_string(),
+            "foo/...".to_string(),
+            "-foo/contrib/...".to_string(),
+        ];
+
+        let result = parse_bazel_command_line(&passthrough_command_line)
+            .expect("Should be able to parse the cmd line");
+
+        let expected_startup_options: Vec<BazelOption> = vec![];
+
+        assert_eq!(result.startup_options, expected_startup_options);
+
+        assert_eq!(result.action, Some(Action::BuiltIn(BuiltInAction::Build)));
+
+        let expected_action_options: Vec<BazelOption> = vec![];
+
+        assert_eq!(result.action_options, expected_action_options);
+
+        let remaining_expected: Vec<String> =
+            vec!["foo/...".to_string(), "-foo/contrib/...".to_string()];
+
+        assert_eq!(result.remaining_args, remaining_expected);
+    }
+
+    #[tokio::test]
+    async fn parse_bazel_command_line_4() {
+        let passthrough_command_line = vec![
+            "bazel".to_string(),
+            "--host_jvm_args=\"foobarbaz\"".to_string(),
+            "--output_base=/tmp/foo build".to_string(),
+            "test".to_string(),
+            "bar".to_string(),
+            "--keep_going".to_string(),
+            "--foo".to_string(),
+        ];
+
+        let result = parse_bazel_command_line(&passthrough_command_line)
+            .expect("Should be able to parse the cmd line");
+
+        let expected_startup_options: Vec<BazelOption> = vec![
+            BazelOption::OptionWithArg(String::from("host_jvm_args"), String::from("foobarbaz")),
+            BazelOption::OptionWithArg(String::from("output_base"), String::from("/tmp/foo build")),
+        ];
+
+        assert_eq!(result.startup_options, expected_startup_options);
+
+        assert_eq!(result.action, Some(Action::BuiltIn(BuiltInAction::Test)));
+
+        let expected_action_options: Vec<BazelOption> =
+            vec![BazelOption::BooleanOption(String::from("keep_going"), true)];
+
+        assert_eq!(result.action_options, expected_action_options);
+
+        let remaining_expected: Vec<String> = vec!["bar".to_string(), "--foo".to_string()];
+
+        assert_eq!(result.remaining_args, remaining_expected);
     }
 }
