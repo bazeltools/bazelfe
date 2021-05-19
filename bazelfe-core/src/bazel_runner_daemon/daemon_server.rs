@@ -673,7 +673,7 @@ pub async fn main(
         .unwrap();
 
     watcher
-        .configure(notify::Config::NoticeEvents(true))
+        .configure(notify::Config::PreciseEvents(true))
         .unwrap();
 
     // Add a path to be watched. All files and directories at that path and
