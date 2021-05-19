@@ -639,16 +639,13 @@ pub async fn main(
             use notify::EventKind;
             let should_process = match &event.kind {
                 EventKind::Any => true,
-                EventKind::Access(access_type) => 
-                {match access_type {
-                    notify::event::AccessKind::Close(mode) => {
-                        mode match {
-                            notify::event::AccessMode::Write => true,
-                            _ => false
-                        }
+                EventKind::Access(access_type) => match access_type {
+                    notify::event::AccessKind::Close(m) => match m {
+                        notify::event::AccessMode::Write => true,
+                        _ => false,
                     },
-                _ => false
-                }}
+                    _ => false,
+                },
                 EventKind::Create(_) => true,
                 EventKind::Modify(_) => true,
                 EventKind::Remove(_) => true,
