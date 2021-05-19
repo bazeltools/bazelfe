@@ -37,13 +37,6 @@ pub fn register_ctrlc_handler() {
 
 fn add_custom_args(bazel_command_line: &mut ParsedCommandLine, srv_port: u16) -> () {
     bazel_command_line.add_action_option_if_unset(
-        crate::bazel_command_line_parser::BazelOption::BooleanOption(
-            String::from("bes_timeout"),
-            true,
-        ),
-    );
-
-    bazel_command_line.add_action_option_if_unset(
         crate::bazel_command_line_parser::BazelOption::OptionWithArg(
             String::from("bes_timeout"),
             String::from("300000ms"),

@@ -239,8 +239,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     builder.init();
 
-    let bazel_binary_path: String = (&opt.bazel_binary_path.to_str().unwrap()).to_string();
-
     let target_blacklist = (&opt.blacklist_targets_from_index)
         .clone()
         .unwrap_or_default();
