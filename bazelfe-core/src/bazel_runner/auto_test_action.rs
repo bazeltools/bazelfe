@@ -133,6 +133,7 @@ pub async fn maybe_auto_test_mode<
                     if cur_distance >= max_distance {
                         cur_distance = 1;
                         dirty_files.clear();
+                        break 'inner_loop;
                     } else {
                         cur_distance += 1;
                     }
