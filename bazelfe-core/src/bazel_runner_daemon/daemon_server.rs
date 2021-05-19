@@ -281,7 +281,11 @@ impl TargetCache {
         });
     }
 
-    pub async fn register_new_files(&self, paths: Vec<PathBuf>) -> () {
+    pub async fn register_new_files(
+        &self,
+        paths: Vec<PathBuf>,
+        event_kind: notify::EventKind,
+    ) -> () {
         let current_path = std::env::current_dir().expect("Should be able to get the current dir");
         let mut lock = self.last_files_updated.lock().await;
         let ts = monotonic_current_time();
@@ -301,8 +305,11 @@ impl TargetCache {
                     eprintln!("relative_path: {:#?}", relative_path);
 
                     let pb = relative_path.to_path_buf();
-                    self.hydrate_new_file_data(pb.clone()).await;
-                    lock.insert(relative_path.to_path_buf(), (ts, now_instant));
+
+                    if pb.is_file() || (pb.is_dir() && event_kind.is_create()) {
+                        self.hydrate_new_file_data(pb.clone()).await;
+                        lock.insert(relative_path.to_path_buf(), (ts, now_instant));
+                    }
                 }
             }
         }
@@ -606,7 +613,9 @@ pub async fn main(
             };
 
             if should_process {
-                copy_shared.register_new_files(event.paths).await;
+                copy_shared
+                    .register_new_files(event.paths, event.kind.clone())
+                    .await;
             }
         }
     });
