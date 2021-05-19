@@ -313,16 +313,17 @@ impl TargetCache {
                 continue;
             };
 
+            let real_path = parent_relative.join(file_name);
+
             let is_ignored = self
                 .inotify_ignore_regexes
                 .0
                 .iter()
-                .find(|&p| p.is_match(relative_path.to_string_lossy().as_ref()));
+                .find(|&p| p.is_match(real_path.to_string_lossy().as_ref()));
             if is_ignored.is_some() {
                 continue;
             }
 
-            let real_path = parent_relative.join(file_name);
             let real_metadata = if let Ok(m) = std::fs::symlink_metadata(real_path) {
                 m
             } else {
