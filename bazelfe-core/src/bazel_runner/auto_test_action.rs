@@ -71,6 +71,10 @@ pub async fn maybe_auto_test_mode<
                         .push(t.target_label().clone());
                 }
 
+                eprintln!(
+                    "Building... {:#?}",
+                    configured_bazel_runner.bazel_command_line.remaining_args
+                );
                 let result = configured_bazel_runner.run_command_line().await?;
                 if result.final_exit_code != 0 {
                     continue;
@@ -99,6 +103,11 @@ pub async fn maybe_auto_test_mode<
                 {
                     configured_bazel_runner.bazel_command_line.action = Some(
                         crate::bazel_command_line_parser::Action::BuiltIn(BuiltInAction::Build),
+                    );
+
+                    eprintln!(
+                        "Testing... {:#?}",
+                        configured_bazel_runner.bazel_command_line.remaining_args
                     );
 
                     let result = configured_bazel_runner.run_command_line().await?;
