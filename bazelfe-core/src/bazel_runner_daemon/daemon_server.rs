@@ -1,6 +1,7 @@
 use bazelfe_protos::*;
 use std::{
     collections::{HashMap, HashSet},
+    ops::{Add, Sub},
     path::PathBuf,
     sync::atomic::{AtomicU32, AtomicUsize},
     time::Duration,
@@ -71,6 +72,12 @@ impl Default for TargetState {
     }
 }
 
+fn current_ms_since_epoch() -> u128 {
+    SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u128
+}
 fn target_as_path(s: &String) -> Option<PathBuf> {
     let pb = PathBuf::from(s.replace(":", "/").replace("//", ""));
     if pb.exists() {
@@ -229,6 +236,9 @@ struct TargetCache {
     inotify_ignore_regexes: NotifyRegexes,
     pending_hydrations: Arc<AtomicUsize>,
     bazel_query: Arc<Mutex<Box<dyn BazelQuery>>>,
+    inotify_receiver: Arc<flume::Receiver<u128>>,
+    inotify_sender: Arc<flume::Sender<u128>>,
+    last_update_ts: Arc<Mutex<u128>>,
 }
 
 impl TargetCache {
@@ -236,12 +246,17 @@ impl TargetCache {
         daemon_config: &DaemonConfig,
         bazel_query: &Arc<Mutex<Box<dyn BazelQuery>>>,
     ) -> Self {
+        let (inotify_event_occured, inotify_receiver) = flume::unbounded::<u128>();
+
         Self {
             target_state: Default::default(),
             last_files_updated: Default::default(),
             inotify_ignore_regexes: daemon_config.inotify_ignore_regexes.clone(),
             pending_hydrations: Arc::new(AtomicUsize::new(0)),
             bazel_query: bazel_query.clone(),
+            inotify_receiver: Arc::new(inotify_receiver),
+            inotify_sender: Arc::new(inotify_event_occured),
+            last_update_ts: Arc::new(Mutex::new(current_ms_since_epoch() - 20000)),
         }
     }
 
@@ -262,6 +277,7 @@ impl TargetCache {
             pending_hydrations.fetch_sub(1, Ordering::Release);
         });
     }
+
     pub async fn register_new_files(&self, paths: Vec<PathBuf>) -> () {
         let current_path = std::env::current_dir().expect("Should be able to get the current dir");
         let mut lock = self.last_files_updated.lock().await;
@@ -284,6 +300,10 @@ impl TargetCache {
                 }
             }
         }
+        let ts = current_ms_since_epoch();
+        *self.last_update_ts.lock().await = ts;
+        let _ = self.inotify_sender.send(ts);
+
         let mut max_age = Duration::from_secs(3600);
         while lock.len() > 20 && max_age > Duration::from_secs(120) {
             lock.retain(|_, v| t.duration_since(*v).unwrap() < max_age);
@@ -291,15 +311,51 @@ impl TargetCache {
         }
     }
 
-    pub async fn get_recent_files(&self) -> Vec<super::daemon_service::FileStatus> {
+    pub async fn wait_for_files(
+        &self,
+        since_unix_timestamp_ms: u128,
+    ) -> Vec<super::daemon_service::FileStatus> {
+        let start_time = Instant::now();
+        let max_wait = Duration::from_millis(20);
+
+        loop {
+            if *self.last_update_ts.lock().await > since_unix_timestamp_ms {
+                return self.get_recent_files(since_unix_timestamp_ms).await;
+            }
+
+            if Instant::now().sub(start_time) > max_wait {
+                return Vec::default();
+            }
+            match self
+                .inotify_receiver
+                .recv_deadline(start_time.add(max_wait))
+            {
+                Ok(v) => {
+                    if v > since_unix_timestamp_ms {
+                        return self.get_recent_files(since_unix_timestamp_ms).await;
+                    }
+                }
+                Err(_) => {
+                    return Vec::default();
+                }
+            }
+        }
+    }
+
+    pub async fn get_recent_files(
+        &self,
+        since_unix_timestamp_ms: u128,
+    ) -> Vec<super::daemon_service::FileStatus> {
         let lock = self.last_files_updated.lock().await;
 
         lock.iter()
-            .map(|(k, v)| {
-                super::daemon_service::FileStatus(
-                    k.clone(),
-                    v.duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u128,
-                )
+            .filter_map(|(k, v)| {
+                let since = v.duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u128;
+                if since > since_unix_timestamp_ms {
+                    Some(super::daemon_service::FileStatus(k.clone(), since))
+                } else {
+                    None
+                }
             })
             .collect()
     }
@@ -316,13 +372,28 @@ struct DaemonServerInstance {
 
 #[tarpc::server]
 impl super::daemon_service::RunnerDaemon for DaemonServerInstance {
-    async fn recently_changed_files(
+    async fn wait_for_files(
         self,
         _: tarpc::context::Context,
+        since_unix_timestamp_ms: u128,
     ) -> Vec<super::daemon_service::FileStatus> {
         self.most_recent_call
             .fetch_add(1, std::sync::atomic::Ordering::Release);
-        self.target_cache.get_recent_files().await
+        self.target_cache
+            .wait_for_files(since_unix_timestamp_ms)
+            .await
+    }
+
+    async fn recently_changed_files(
+        self,
+        _: tarpc::context::Context,
+        since_unix_timestamp_ms: u128,
+    ) -> Vec<super::daemon_service::FileStatus> {
+        self.most_recent_call
+            .fetch_add(1, std::sync::atomic::Ordering::Release);
+        self.target_cache
+            .get_recent_files(since_unix_timestamp_ms)
+            .await
     }
 
     async fn ping(self, _: tarpc::context::Context) -> super::ExecutableId {
@@ -333,12 +404,22 @@ impl super::daemon_service::RunnerDaemon for DaemonServerInstance {
 
     async fn recently_invalidated_targets(
         self,
-        _: tarpc::context::Context,
+        ctx: tarpc::context::Context,
         distance: u32,
     ) -> Vec<super::daemon_service::Targets> {
         self.most_recent_call
             .fetch_add(1, std::sync::atomic::Ordering::Release);
 
+        let recent_files = self.target_cache.get_recent_files(0).await;
+        self.targets_from_files(ctx, recent_files, distance).await
+    }
+
+    async fn targets_from_files(
+        self,
+        _: tarpc::context::Context,
+        files: Vec<super::daemon_service::FileStatus>,
+        distance: u32,
+    ) -> Vec<super::daemon_service::Targets> {
         while self
             .target_cache
             .pending_hydrations
@@ -347,11 +428,7 @@ impl super::daemon_service::RunnerDaemon for DaemonServerInstance {
         {
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
-        let recent_files = self.target_cache.get_recent_files().await;
-
-        // let mut target_cache = self.target_cache.target_state.lock().await;
-
-        let target_ids = recent_files.iter().filter_map(|f| {
+        let target_ids = files.iter().filter_map(|f| {
             let path = &f.0;
             self.target_cache
                 .target_state
@@ -402,7 +479,6 @@ impl super::daemon_service::RunnerDaemon for DaemonServerInstance {
                 }
                 TargetType::Src(_) => {}
             }
-            // super::daemon_service::Targets::Build()
         }
         result_targets
     }
@@ -492,6 +568,7 @@ pub async fn main(
 
     println!("Starting up bazelfe daemon");
     let executable_id = Arc::new(super::current_executable_id());
+
     let target_cache = Arc::new(TargetCache::new(daemon_config, &bazel_query));
     let current_dir = std::env::current_dir().expect("Failed to determine current directory");
 

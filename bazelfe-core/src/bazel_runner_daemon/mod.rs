@@ -131,7 +131,7 @@ pub mod daemon_service {
     use serde::{Deserialize, Serialize};
     use std::path::PathBuf;
 
-    #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
+    #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
     pub struct FileStatus(pub PathBuf, pub u128);
 
     #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
@@ -165,7 +165,9 @@ pub mod daemon_service {
 
     #[tarpc::service]
     pub trait RunnerDaemon {
-        async fn recently_changed_files() -> Vec<FileStatus>;
+        async fn recently_changed_files(since_unix_timestamp_ms: u128) -> Vec<FileStatus>;
+        async fn wait_for_files(since_unix_timestamp_ms: u128) -> Vec<FileStatus>;
+        async fn targets_from_files(files: Vec<FileStatus>, distance: u32) -> Vec<Targets>;
 
         async fn recently_invalidated_targets(distance: u32) -> Vec<Targets>;
 

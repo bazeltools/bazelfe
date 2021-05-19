@@ -139,10 +139,10 @@ pub struct ConfiguredBazelRunner<
 > {
     config: Arc<Config>,
     configured_bazel: ConfiguredBazel,
-    runner_daemon: Option<crate::bazel_runner_daemon::daemon_service::RunnerDaemonClient>,
+    pub runner_daemon: Option<crate::bazel_runner_daemon::daemon_service::RunnerDaemonClient>,
     _index_table: crate::index_table::IndexTable,
     _aes: EventStreamListener,
-    bazel_command_line: ParsedCommandLine,
+    pub bazel_command_line: ParsedCommandLine,
     process_build_failures: Arc<ProcessBazelFailures<T, U>>,
 }
 
@@ -216,11 +216,9 @@ impl<
         )
         .await?;
 
-        // if super::auto_test_action::maybe_auto_test_mode(
-        //     &mut self
-        // ).await? {
-        //     return Ok(0);
-        // };
+        if super::auto_test_action::maybe_auto_test_mode(&mut self).await? {
+            return Ok(0);
+        };
         let res_data = self.run_command_line().await?;
         let disable_action_stories_on_success = self.config.disable_action_stories_on_success;
 
