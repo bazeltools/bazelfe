@@ -7,7 +7,7 @@ public class CatTest {
   @Test
   public void testName() throws Exception {
     Cat cat = new Cat();
-    assertEquals("Should have the right cat name", "Furry2", cat.name);  asdasdasd
+    assertEquals("Should have the right cat name", "Furry", cat.name);
   }
 
 }
