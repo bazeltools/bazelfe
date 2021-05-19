@@ -55,76 +55,78 @@ pub async fn maybe_auto_test_mode<
                     )
                     .await?;
 
-                configured_bazel_runner.bazel_command_line.action = Some(
-                    crate::bazel_command_line_parser::Action::BuiltIn(BuiltInAction::Build),
-                );
-                configured_bazel_runner
-                    .bazel_command_line
-                    .remaining_args
-                    .clear();
-
-                for t in changed_targets.iter() {
+                if !changed_targets.is_empty() {
+                    configured_bazel_runner.bazel_command_line.action = Some(
+                        crate::bazel_command_line_parser::Action::BuiltIn(BuiltInAction::Build),
+                    );
                     configured_bazel_runner
                         .bazel_command_line
                         .remaining_args
-                        .push(t.target_label().clone());
-                }
+                        .clear();
 
-                eprintln!(
-                    "Building... {}",
-                    configured_bazel_runner
-                        .bazel_command_line
-                        .remaining_args
-                        .join(", ")
-                );
-                let result = configured_bazel_runner.run_command_line().await?;
-                if result.final_exit_code != 0 {
-                    continue;
-                }
-
-                // Now try tests
-
-                configured_bazel_runner
-                    .bazel_command_line
-                    .remaining_args
-                    .clear();
-
-                for t in changed_targets.iter() {
-                    if t.is_test() {
+                    for t in changed_targets.iter() {
                         configured_bazel_runner
                             .bazel_command_line
                             .remaining_args
                             .push(t.target_label().clone());
                     }
-                }
-
-                if !configured_bazel_runner
-                    .bazel_command_line
-                    .remaining_args
-                    .is_empty()
-                {
-                    configured_bazel_runner.bazel_command_line.action = Some(
-                        crate::bazel_command_line_parser::Action::BuiltIn(BuiltInAction::Test),
-                    );
 
                     eprintln!(
-                        "Testing... {}",
+                        "Building... {}",
                         configured_bazel_runner
                             .bazel_command_line
                             .remaining_args
                             .join(", ")
                     );
-
                     let result = configured_bazel_runner.run_command_line().await?;
                     if result.final_exit_code != 0 {
                         continue;
                     }
-                }
 
-                eprintln!(
-                    "Operating at distance {}, all targets built and tested that were eligble.",
-                    cur_distance
-                );
+                    // Now try tests
+
+                    configured_bazel_runner
+                        .bazel_command_line
+                        .remaining_args
+                        .clear();
+
+                    for t in changed_targets.iter() {
+                        if t.is_test() {
+                            configured_bazel_runner
+                                .bazel_command_line
+                                .remaining_args
+                                .push(t.target_label().clone());
+                        }
+                    }
+
+                    if !configured_bazel_runner
+                        .bazel_command_line
+                        .remaining_args
+                        .is_empty()
+                    {
+                        configured_bazel_runner.bazel_command_line.action = Some(
+                            crate::bazel_command_line_parser::Action::BuiltIn(BuiltInAction::Test),
+                        );
+
+                        eprintln!(
+                            "Testing... {}",
+                            configured_bazel_runner
+                                .bazel_command_line
+                                .remaining_args
+                                .join(", ")
+                        );
+
+                        let result = configured_bazel_runner.run_command_line().await?;
+                        if result.final_exit_code != 0 {
+                            continue;
+                        }
+                    }
+
+                    eprintln!(
+                        "Operating at distance {}, all targets built and tested that were eligble.",
+                        cur_distance
+                    );
+                }
             }
             if cur_distance >= max_distance {
                 cur_distance = 1;
