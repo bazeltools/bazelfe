@@ -659,6 +659,7 @@ pub async fn main(
     println!("Starting inotify watcher");
     let mut watcher: RecommendedWatcher =
         Watcher::new_immediate(move |res: notify::Result<notify::Event>| {
+            eprintln!("{:#?}", res);
             match res {
                 Ok(event) => {
                     eprintln!("{:#?}", event);
