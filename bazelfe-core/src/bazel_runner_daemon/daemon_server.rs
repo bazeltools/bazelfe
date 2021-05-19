@@ -518,6 +518,10 @@ impl super::daemon_service::RunnerDaemon for DaemonServerInstance {
         }
         result_targets
     }
+
+    async fn request_instant(self, _: tarpc::context::Context) -> u128 {
+        monotonic_current_time()
+    }
 }
 
 async fn start_tarpc_server<F>(

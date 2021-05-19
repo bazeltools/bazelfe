@@ -45,7 +45,6 @@ pub async fn maybe_auto_test_mode<
                 .wait_for_files(tarpc::context::current(), invalid_since_when)
                 .await?;
             if !recent_changed_files.is_empty() {
-                invalid_since_when = recent_changed_files.iter().map(|e| e.1 + 1).max().unwrap();
                 dirty_files.extend(recent_changed_files);
 
                 'inner_loop: loop {
@@ -73,6 +72,11 @@ pub async fn maybe_auto_test_mode<
                                 .push(t.target_label().clone());
                         }
 
+                        if cur_distance == 1 {
+                            invalid_since_when = daemon_cli
+                                .request_instant(tarpc::context::current())
+                                .await?;
+                        }
                         eprintln!(
                             "Building... {}",
                             configured_bazel_runner

@@ -165,6 +165,7 @@ pub mod daemon_service {
 
     #[tarpc::service]
     pub trait RunnerDaemon {
+        async fn request_instant() -> u128;
         async fn recently_changed_files(instant: u128) -> Vec<FileStatus>;
         async fn wait_for_files(instant: u128) -> Vec<FileStatus>;
         async fn targets_from_files(files: Vec<FileStatus>, distance: u32) -> Vec<Targets>;
