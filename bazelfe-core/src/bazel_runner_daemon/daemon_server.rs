@@ -338,7 +338,7 @@ impl TargetCache {
 
             if real_path.exists() && real_metadata.file_type() == src_metadata.file_type() {
                 {
-                    self.hydrate_new_file_data(pb.clone()).await;
+                    self.hydrate_new_file_data(real_path.clone()).await;
                     lock.insert(real_path.to_path_buf(), (ts, now_instant));
                 }
             }
