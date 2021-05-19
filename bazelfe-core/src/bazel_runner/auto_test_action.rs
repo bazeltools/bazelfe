@@ -119,8 +119,6 @@ pub async fn maybe_auto_test_mode<
                 } else {
                     cur_distance += 1;
                 }
-                eprintln!("Changed targets : {:#?}", &changed_targets);
-                return Ok(true);
             }
         }
     }
