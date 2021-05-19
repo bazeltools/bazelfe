@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 use std::ffi::OsString;
 
-use bazelfe_core::bazel_runner;
 use bazelfe_core::config::Config;
+use bazelfe_core::{bazel_command_line_parser::parse_bazel_command_line, bazel_runner};
 
 use std::sync::Arc;
 
@@ -58,6 +58,34 @@ async fn load_config_file(opt: &Opt) -> Result<Config, Box<dyn std::error::Error
         Ok(Config::default())
     }
 }
+
+fn passthrough_to_bazel(opt: Opt) -> () {
+    let application: OsString = opt
+        .passthrough_args
+        .first()
+        .map(|a| {
+            let a: String = a.clone().into();
+            a
+        })
+        .expect("Should have had at least one arg the bazel process itself.")
+        .into();
+
+    let remaining_args: Vec<OsString> = opt
+        .passthrough_args
+        .iter()
+        .skip(1)
+        .map(|str_ref| {
+            let a: String = str_ref.clone().into();
+            let a: OsString = a.into();
+            a
+        })
+        .collect();
+
+    let resp = ::exec::Command::new(application)
+        .args(&remaining_args)
+        .exec();
+    panic!("Should be unreachable: {:#?}", resp);
+}
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Ok(_) = std::env::var("BAZEL_FE_ENABLE_DAEMON_MODE") {
@@ -66,39 +94,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let opt = Opt::parse();
 
-    // If someone is using a bes backend we need to nope out so we don't conflict.
-    // This also means our other tools can call in using our same utilities
-    // with this already set to make this app passthrough
-    if opt
-        .passthrough_args
-        .contains(&String::from("--bes_backend"))
-    {
-        let application: OsString = opt
-            .passthrough_args
-            .first()
-            .map(|a| {
-                let a: String = a.clone().into();
-                a
-            })
-            .expect("Should have had at least one arg the bazel process itself.")
-            .into();
+    // TODO IN HERE,
+    // fixed actions we intercept
+    // bail of a bes_backend is already configured.
+    let parsed_command_line = match parse_bazel_command_line(&opt.passthrough_args) {
+        Ok(parsed_command_line) => {
+            if parsed_command_line.is_action_option_set("bes_backend") {
+                // Likely tooling is setting this, quietly exec bazel.
+                // since we can't invoke our usual behaviors if this is the case.
+                // Need to figure out some way to signal this occured probably to the dev productivity team somewhere.
+                return Ok(passthrough_to_bazel(opt));
+            }
+            parsed_command_line
+        }
+        Err(cmd_line_parsing_failed) => {
+            match cmd_line_parsing_failed {
+                bazelfe_core::bazel_command_line_parser::CommandLineParsingError::MissingBazelPath => {
+                    eprintln!("Missing bazel path, invalid command line arg supplied");
+                    std::process::exit(-1);
+                }
+                bazelfe_core::bazel_command_line_parser::CommandLineParsingError::MissingArgToOption(o) => {
+                        eprintln!("Arg parsing from bazelfe doesn't understand the args, missing an option to {}", o);
+                        eprintln!("Will just invoke bazel and abort.");
+                        return Ok(passthrough_to_bazel(opt));
+                }
+            }
+        }
+    };
 
-        let remaining_args: Vec<OsString> = opt
-            .passthrough_args
-            .iter()
-            .skip(1)
-            .map(|str_ref| {
-                let a: String = str_ref.clone().into();
-                let a: OsString = a.into();
-                a
-            })
-            .collect();
-
-        let resp = ::exec::Command::new(application)
-            .args(&remaining_args)
-            .exec();
-        panic!("Should be unreachable: {:#?}", resp);
-    }
     let mut builder = pretty_env_logger::formatted_timed_builder();
     builder.format_timestamp_nanos();
     builder.target(pretty_env_logger::env_logger::Target::Stderr);
@@ -129,7 +152,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = Arc::new(config);
     let bazel_runner = bazel_runner::bazel_runner::BazelRunner {
         config: Arc::clone(&config),
-        passthrough_args: opt.passthrough_args.clone(),
+        bazel_command_line: parsed_command_line,
     };
 
     match bazel_runner.run().await {

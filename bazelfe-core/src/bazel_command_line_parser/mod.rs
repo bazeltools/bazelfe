@@ -8,7 +8,14 @@ pub enum BazelOption {
     BooleanOption(String, bool),
     OptionWithArg(String, String),
 }
+
 impl BazelOption {
+    pub fn name(&self) -> &String {
+        match self {
+            BazelOption::BooleanOption(nme, _) => nme,
+            BazelOption::OptionWithArg(nme, _) => nme,
+        }
+    }
     pub fn to_arg(&self) -> Vec<String> {
         match self {
             BazelOption::BooleanOption(nme, arg) => {
@@ -113,6 +120,7 @@ pub enum ArgNormalizationError {
     HasInternalArg(CustomAction),
 }
 
+#[derive(Debug, Clone)]
 pub struct ParsedCommandLine {
     pub bazel_binary: PathBuf,
     pub startup_options: Vec<BazelOption>,
@@ -146,6 +154,36 @@ impl ParsedCommandLine {
             result.extend(self.remaining_args.iter().cloned());
         }
         Ok(result)
+    }
+
+    pub fn add_action_option_if_unset(&mut self, option: BazelOption) -> bool {
+        if let Some(_) = self
+            .action_options
+            .iter()
+            .find(|e| e.name() == option.name())
+        {
+            false
+        } else {
+            self.action_options.push(option);
+            true
+        }
+    }
+
+    pub fn is_action_option_set(&self, opt: &str) -> bool {
+        self.action_options
+            .iter()
+            .find(|e| e.name() == opt)
+            .is_some()
+    }
+
+    pub fn set_action(&mut self, action: Option<Action>) -> Option<Action> {
+        let prev = self.action.take();
+        if action.is_none() {
+            self.action_options.clear();
+        }
+        self.action = action;
+
+        prev
     }
 }
 

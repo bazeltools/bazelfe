@@ -16,6 +16,8 @@ mod processor_activity;
 mod user_report_error;
 pub use user_report_error::UserReportError;
 
+use crate::bazel_command_line_parser::ParsedCommandLine;
+
 pub fn register_ctrlc_handler() {
     ctrlc::set_handler(move || {
         let current_sub_process_pid: u32 = SUB_PROCESS_PID.load(Ordering::SeqCst);
@@ -33,57 +35,55 @@ pub fn register_ctrlc_handler() {
     .expect("Error setting Ctrl-C handler");
 }
 
-fn update_command<S: Into<String> + Clone>(
-    command: &Vec<S>,
-    srv_port: u16,
-) -> Option<Vec<OsString>> {
-    let lst_str: Vec<String> = command.iter().skip(1).map(|e| e.clone().into()).collect();
+fn add_custom_args(bazel_command_line: &mut ParsedCommandLine, srv_port: u16) -> () {
+    bazel_command_line.add_action_option_if_unset(
+        crate::bazel_command_line_parser::BazelOption::BooleanOption(
+            String::from("bes_timeout"),
+            true,
+        ),
+    );
 
-    let mut idx = 0;
-    let mut do_continue = true;
-    while idx < lst_str.len() && do_continue {
-        if !lst_str[idx].starts_with("--") {
-            do_continue = false
-        } else {
-            idx += 1
-        }
-    }
+    bazel_command_line.add_action_option_if_unset(
+        crate::bazel_command_line_parser::BazelOption::OptionWithArg(
+            String::from("bes_timeout"),
+            String::from("300000ms"),
+        ),
+    );
 
-    if do_continue == true {
-        return None;
-    }
+    bazel_command_line.add_action_option_if_unset(
+        crate::bazel_command_line_parser::BazelOption::BooleanOption(
+            String::from("legacy_important_outputs"),
+            false,
+        ),
+    );
 
-    let command_element: &str = &lst_str[idx].to_lowercase();
+    bazel_command_line.add_action_option_if_unset(
+        crate::bazel_command_line_parser::BazelOption::OptionWithArg(
+            String::from("experimental_build_event_upload_strategy"),
+            String::from("local"),
+        ),
+    );
 
-    match command_element {
-        "build" => (),
-        "test" => (),
-        _ => return None,
-    };
+    bazel_command_line.add_action_option_if_unset(
+        crate::bazel_command_line_parser::BazelOption::BooleanOption(
+            String::from("build_event_text_file_path_conversion"),
+            true,
+        ),
+    );
 
-    let (pre_cmd, cmd_including_post) = lst_str.split_at(idx);
-    let (cmd, post_command) = cmd_including_post.split_at(1);
+    bazel_command_line.add_action_option_if_unset(
+        crate::bazel_command_line_parser::BazelOption::OptionWithArg(
+            String::from("color"),
+            String::from("yes"),
+        ),
+    );
 
-    let bes_section = vec![
-        cmd[0].clone(),
-        String::from("--build_event_publish_all_actions"),
-        String::from("--bes_timeout=30000ms"),
-        String::from("--nolegacy_important_outputs"),
-        String::from("--experimental_build_event_upload_strategy=local"),
-        String::from("--build_event_text_file_path_conversion"),
-        String::from("--color"),
-        String::from("yes"),
-        String::from("--bes_backend"),
-        String::from(format!("grpc://127.0.0.1:{}", srv_port)),
-    ];
-
-    Some(
-        vec![pre_cmd.iter(), bes_section.iter(), post_command.iter()]
-            .into_iter()
-            .flat_map(|e| e)
-            .map(|e| e.into())
-            .collect(),
-    )
+    bazel_command_line.add_action_option_if_unset(
+        crate::bazel_command_line_parser::BazelOption::OptionWithArg(
+            String::from("bes_backend"),
+            format!("grpc://127.0.0.1:{}", srv_port),
+        ),
+    );
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -91,44 +91,33 @@ pub struct ExecuteResult {
     pub exit_code: i32,
     pub errors_corrected: u32,
 }
-pub async fn execute_bazel<S: Into<String> + Clone>(
-    command: Vec<S>,
+pub async fn execute_bazel(
+    bazel_command_line: &ParsedCommandLine,
     bes_port: u16,
-) -> ExecuteResult {
-    execute_bazel_output_control(command, bes_port, true).await
+) -> Result<ExecuteResult, Box<dyn std::error::Error>> {
+    execute_bazel_output_control(bazel_command_line, bes_port, true).await
 }
 
-pub async fn execute_bazel_output_control<S: Into<String> + Clone>(
-    command: Vec<S>,
+pub async fn execute_bazel_output_control(
+    bazel_command_line: &ParsedCommandLine,
     bes_port: u16,
     show_output: bool,
-) -> ExecuteResult {
-    let application: OsString = command
-        .first()
-        .map(|a| {
-            let a: String = a.clone().into();
-            a
-        })
-        .expect("Should have had at least one arg the bazel process itself.")
-        .into();
+) -> Result<ExecuteResult, Box<dyn std::error::Error>> {
+    let mut bazel_command_line = bazel_command_line.clone();
 
-    let updated_command = match update_command(&command, bes_port) {
-        Some(e) => e,
-        None => command
-            .iter()
-            .skip(1)
-            .map(|str_ref| {
-                let a: String = str_ref.clone().into();
-                let a: OsString = a.into();
-                a
-            })
-            .collect(),
-    };
+    add_custom_args(&mut bazel_command_line, bes_port);
 
-    debug!("{:?} {:?}", application, updated_command);
-    let mut cmd = Command::new(application);
+    debug!("{:#?}", bazel_command_line);
 
-    cmd.args(&updated_command)
+    let args: Vec<OsString> = bazel_command_line
+        .all_args_normalized()?
+        .into_iter()
+        .map(|e| e.into())
+        .collect();
+
+    let mut cmd = Command::new(bazel_command_line.bazel_binary);
+
+    cmd.args(&args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
@@ -187,8 +176,8 @@ pub async fn execute_bazel_output_control<S: Into<String> + Clone>(
 
     SUB_PROCESS_PID.store(0, Ordering::SeqCst);
 
-    ExecuteResult {
+    Ok(ExecuteResult {
         exit_code: result.code().unwrap_or_else(|| -1),
         errors_corrected: 0,
-    }
+    })
 }

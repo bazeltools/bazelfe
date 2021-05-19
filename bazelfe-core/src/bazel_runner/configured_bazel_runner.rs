@@ -1,8 +1,11 @@
 use std::collections::HashMap;
 
-use crate::build_events::build_event_server::BuildEventAction;
 use crate::build_events::hydrated_stream::HydratedInfo;
 use crate::buildozer_driver;
+use crate::{
+    bazel_command_line_parser::ParsedCommandLine,
+    build_events::build_event_server::BuildEventAction,
+};
 
 use crate::{
     bazel_runner,
@@ -43,9 +46,15 @@ impl ConfiguredBazel {
 
     async fn spawn_bazel_attempt(
         &self,
-        passthrough_args: &Vec<String>,
-    ) -> (ProcessorActivity, bazel_runner::ExecuteResult) {
-        spawn_bazel_attempt(&self.sender_arc, &self.aes, self.bes_port, passthrough_args).await
+        bazel_command_line: &ParsedCommandLine,
+    ) -> Result<(ProcessorActivity, bazel_runner::ExecuteResult), Box<dyn std::error::Error>> {
+        spawn_bazel_attempt(
+            &self.sender_arc,
+            &self.aes,
+            self.bes_port,
+            bazel_command_line,
+        )
+        .await
     }
 }
 
@@ -55,8 +64,8 @@ async fn spawn_bazel_attempt(
     >,
     aes: &EventStreamListener,
     bes_port: u16,
-    passthrough_args: &Vec<String>,
-) -> (ProcessorActivity, bazel_runner::ExecuteResult) {
+    bazel_command_line: &ParsedCommandLine,
+) -> Result<(ProcessorActivity, bazel_runner::ExecuteResult), Box<dyn std::error::Error>> {
     let (tx, rx) = async_channel::unbounded();
     let _ = {
         let mut locked = sender_arc.lock().await;
@@ -112,7 +121,7 @@ async fn spawn_bazel_attempt(
         });
     });
 
-    let res = bazel_runner::execute_bazel(passthrough_args.clone(), bes_port).await;
+    let res = bazel_runner::execute_bazel(&bazel_command_line, bes_port).await?;
 
     let _ = {
         let mut locked = sender_arc.lock().await;
@@ -121,7 +130,7 @@ async fn spawn_bazel_attempt(
 
     recv_task.await.unwrap();
     let r = results_data.write().await.take().unwrap();
-    (r, res)
+    Ok((r, res))
 }
 
 pub struct ConfiguredBazelRunner<
@@ -133,7 +142,7 @@ pub struct ConfiguredBazelRunner<
     runner_daemon: Option<crate::bazel_runner_daemon::daemon_service::RunnerDaemonClient>,
     _index_table: crate::index_table::IndexTable,
     _aes: EventStreamListener,
-    passthrough_args: Vec<String>,
+    bazel_command_line: ParsedCommandLine,
     process_build_failures: Arc<ProcessBazelFailures<T, U>>,
 }
 
@@ -154,7 +163,7 @@ impl<
         runner_daemon: Option<crate::bazel_runner_daemon::daemon_service::RunnerDaemonClient>,
         index_table: crate::index_table::IndexTable,
         aes: EventStreamListener,
-        passthrough_args: Vec<String>,
+        bazel_command_line: ParsedCommandLine,
         process_build_failures: Arc<ProcessBazelFailures<T, U>>,
     ) -> Self {
         Self {
@@ -163,7 +172,7 @@ impl<
             runner_daemon,
             _index_table: index_table,
             _aes: aes,
-            passthrough_args,
+            bazel_command_line,
             process_build_failures,
         }
     }
@@ -181,8 +190,8 @@ impl<
 
             let (processor_activity, bazel_result) = self
                 .configured_bazel
-                .spawn_bazel_attempt(&self.passthrough_args)
-                .await;
+                .spawn_bazel_attempt(&self.bazel_command_line)
+                .await?;
             let actions_taken = processor_activity.actions_taken;
             total_actions_taken += actions_taken;
             running_total.merge(processor_activity, disable_action_stories_on_success);
@@ -201,7 +210,7 @@ impl<
 
     pub async fn run(mut self) -> Result<i32, Box<dyn std::error::Error>> {
         super::command_line_rewriter_action::rewrite_command_line(
-            &mut self.passthrough_args,
+            &mut self.bazel_command_line,
             &self.config.command_line_rewriter,
             &self.runner_daemon,
         )

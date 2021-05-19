@@ -4,7 +4,7 @@ use tonic::transport::Server;
 
 use bazelfe_protos::*;
 
-use crate::buildozer_driver;
+use crate::{bazel_command_line_parser::ParsedCommandLine, buildozer_driver};
 
 use crate::config::Config;
 use crate::{
@@ -51,7 +51,7 @@ impl From<Box<dyn std::error::Error>> for BazelRunnerError {
 
 pub struct BazelRunner {
     pub config: Arc<Config>,
-    pub passthrough_args: Vec<String>,
+    pub bazel_command_line: ParsedCommandLine,
 }
 
 impl BazelRunner {
@@ -127,11 +127,7 @@ impl BazelRunner {
 
         let runner_daemon = crate::bazel_runner_daemon::daemon_manager::connect_to_server(
             &self.config.daemon_config,
-            &self
-                .passthrough_args
-                .get(0)
-                .expect("Should have a bazel binary")
-                .into(),
+            &self.bazel_command_line.bazel_binary.clone(),
         )
         .await?;
 
@@ -144,7 +140,7 @@ impl BazelRunner {
             runner_daemon,
             index_table.clone(),
             aes,
-            self.passthrough_args.clone(),
+            self.bazel_command_line.clone(),
             process_build_failures,
         );
 
