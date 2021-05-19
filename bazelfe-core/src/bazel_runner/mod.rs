@@ -165,8 +165,11 @@ pub async fn execute_bazel_output_control<S: Into<String> + Clone>(
     });
     let result = child.wait().await.expect("The command wasn't running");
 
-    stderr.await.unwrap();
-    stdout.await.unwrap();
+    // These tasks can/will fail when a chained process or otherwise can close the input/output pipe.
+    // e.g. bazel help test | head -n 5
+    // would cause stdout to fail here.
+    let _ = stderr.await;
+    let _ = stdout.await;
 
     SUB_PROCESS_PID.store(0, Ordering::SeqCst);
 
