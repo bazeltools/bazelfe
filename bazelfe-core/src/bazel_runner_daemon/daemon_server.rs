@@ -290,7 +290,7 @@ impl TargetCache {
         let mut lock = self.last_files_updated.lock().await;
         let ts = monotonic_current_time();
         let now_instant = Instant::now();
-        for p in paths {
+        for p in paths.clone() {
             if let Ok(relative_path) = p
                 .canonicalize()
                 .unwrap_or(p)
@@ -305,7 +305,7 @@ impl TargetCache {
                     let pb = relative_path.to_path_buf();
 
                     if pb.is_file() || (pb.is_dir() && event_kind.is_create()) {
-                        eprintln!("Noting activity: {:#?} --> {:?}", pb, event_kind);
+                        eprintln!("Noting activity: {:#?} --> {:?}\n", pb, event_kind, paths);
                         self.hydrate_new_file_data(pb.clone()).await;
                         lock.insert(relative_path.to_path_buf(), (ts, now_instant));
                     }
