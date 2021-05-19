@@ -302,11 +302,10 @@ impl TargetCache {
                     .iter()
                     .find(|&p| p.is_match(relative_path.to_string_lossy().as_ref()));
                 if is_ignored.is_none() {
-                    eprintln!("relative_path: {:#?}", relative_path);
-
                     let pb = relative_path.to_path_buf();
 
                     if pb.is_file() || (pb.is_dir() && event_kind.is_create()) {
+                        eprintln!("Noting activity: {:#?} --> {:?}", pb, event_kind);
                         self.hydrate_new_file_data(pb.clone()).await;
                         lock.insert(relative_path.to_path_buf(), (ts, now_instant));
                     }
