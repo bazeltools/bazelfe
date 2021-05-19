@@ -118,6 +118,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         eprintln!("Will just invoke bazel and abort.");
                         return Ok(passthrough_to_bazel(opt));
                 }
+                bazelfe_core::bazel_command_line_parser::CommandLineParsingError::UnknownArgument(o) => {
+                    eprintln!("We got an option we didn't know how to parse, to avoid doing something unexpected, we will just invoke bazel.\nGot: {}", o);
+                    return Ok(passthrough_to_bazel(opt));
+                }
             }
         }
     };

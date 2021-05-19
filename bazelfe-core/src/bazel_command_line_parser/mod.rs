@@ -102,17 +102,14 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum CommandLineParsingError {
-    // #[error("Reporting user error: `{0}`")]
-    // UserErrorReport(super::UserReportError),
-    // #[error(transparent)]
-    // CommandLineRewriterActionError(command_line_rewriter_action::RewriteCommandLineError),
     #[error("Command line invalid, path to bazel executable missing. ")]
     MissingBazelPath,
 
+    #[error("Unknown argument {0}")]
+    UnknownArgument(String),
+
     #[error("Missing the arg to option {0} when parsing command line")]
     MissingArgToOption(String),
-    // #[error("Unclassified or otherwise unknown error occured: `{0}`")]
-    // Unknown(Box<dyn std::error::Error>),
 }
 #[derive(Error, Debug)]
 pub enum ArgNormalizationError {
@@ -120,7 +117,7 @@ pub enum ArgNormalizationError {
     HasInternalArg(CustomAction),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ParsedCommandLine {
     pub bazel_binary: PathBuf,
     pub startup_options: Vec<BazelOption>,
@@ -261,7 +258,9 @@ fn extract_set_of_flags<'a, I: Iterator<Item = &'a String>>(
                         }
                     }
                 }
-                break 'outer_loop;
+
+                // We found no matching option
+                return Err(CommandLineParsingError::UnknownArgument(nxt.to_string()));
             } else {
                 break 'outer_loop;
             }
@@ -414,7 +413,6 @@ mod tests {
             "--output_base=/tmp/foo build".to_string(),
             "test".to_string(),
             "--keep_going".to_string(),
-            "--foo".to_string(),
             "bar".to_string(),
         ];
 
@@ -435,7 +433,7 @@ mod tests {
 
         assert_eq!(result.action_options, expected_action_args);
 
-        let remaining_expected: Vec<String> = vec!["--foo".to_string(), "bar".to_string()];
+        let remaining_expected: Vec<String> = vec!["bar".to_string()];
 
         assert_eq!(result.remaining_args, remaining_expected);
 
@@ -447,7 +445,6 @@ mod tests {
             "test".to_string(),
             "--keep_going".to_string(),
             "--".to_string(),
-            "--foo".to_string(),
             "bar".to_string(),
         ];
         assert_eq!(
@@ -534,7 +531,6 @@ mod tests {
             "test".to_string(),
             "bar".to_string(),
             "--keep_going".to_string(),
-            "--foo".to_string(),
         ];
 
         let result = parse_bazel_command_line(&passthrough_command_line)
@@ -554,7 +550,7 @@ mod tests {
 
         assert_eq!(result.action_options, expected_action_options);
 
-        let remaining_expected: Vec<String> = vec!["bar".to_string(), "--foo".to_string()];
+        let remaining_expected: Vec<String> = vec!["bar".to_string()];
 
         assert_eq!(result.remaining_args, remaining_expected);
 
@@ -567,11 +563,70 @@ mod tests {
             "--keep_going".to_string(),
             "--".to_string(),
             "bar".to_string(),
-            "--foo".to_string(),
         ];
         assert_eq!(
             result.all_args_normalized().expect("Can reproduce args"),
             expected_args
         );
+    }
+
+    #[tokio::test]
+    async fn unknown_arg_for_startup() {
+        let passthrough_command_line = vec![
+            "bazel".to_string(),
+            "--unknown_arg=foo".to_string(),
+            "--host_jvm_args=\"foobarbaz\"".to_string(),
+            "--output_base=/tmp/foo build".to_string(),
+            "test".to_string(),
+            "bar".to_string(),
+            "--keep_going".to_string(),
+        ];
+
+        match parse_bazel_command_line(&passthrough_command_line) {
+            Ok(_) => panic!(
+                "Should have failed to parse bad command line with an extra unknown startup option"
+            ),
+            Err(e) => match e {
+                CommandLineParsingError::MissingBazelPath => {
+                    panic!("Unexpected error, MissingBazelPath, not what we were testing");
+                }
+                CommandLineParsingError::UnknownArgument(o) => {
+                    assert_eq!(o, "--unknown_arg=foo".to_string())
+                }
+                CommandLineParsingError::MissingArgToOption(_) => {
+                    panic!("Unexpected error, MissingArgToOption, not what we were testing");
+                }
+            },
+        }
+    }
+
+    #[tokio::test]
+    async fn unknown_arg_for_action() {
+        let passthrough_command_line = vec![
+            "bazel".to_string(),
+            "--host_jvm_args=\"foobarbaz\"".to_string(),
+            "--output_base=/tmp/foo build".to_string(),
+            "test".to_string(),
+            "bar".to_string(),
+            "--unknown_arg=foo".to_string(),
+            "--keep_going".to_string(),
+        ];
+
+        match parse_bazel_command_line(&passthrough_command_line) {
+            Ok(_) => panic!(
+                "Should have failed to parse bad command line with an extra unknown startup option"
+            ),
+            Err(e) => match e {
+                CommandLineParsingError::MissingBazelPath => {
+                    panic!("Unexpected error, MissingBazelPath, not what we were testing");
+                }
+                CommandLineParsingError::UnknownArgument(o) => {
+                    assert_eq!(o, "--unknown_arg=foo".to_string())
+                }
+                CommandLineParsingError::MissingArgToOption(_) => {
+                    panic!("Unexpected error, MissingArgToOption, not what we were testing");
+                }
+            },
+        }
     }
 }
