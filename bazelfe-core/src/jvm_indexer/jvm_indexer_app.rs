@@ -222,9 +222,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 bazelfe_core::bazel_command_line_parser::CommandLineParsingError::MissingArgToOption(o) => {
                     eprintln!("Arg parsing from bazelfe doesn't understand the args, missing an option to {}", o);
                     std::process::exit(-1);
-            }
-            
-
+                }
             bazelfe_core::bazel_command_line_parser::CommandLineParsingError::UnknownArgument(o) => {
                 eprintln!("Arg parsing from bazelfe doesn't understand the args, unknown option {}", o);
                 std::process::exit(-1);
