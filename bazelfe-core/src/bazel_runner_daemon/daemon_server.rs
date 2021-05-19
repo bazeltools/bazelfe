@@ -657,7 +657,7 @@ pub async fn main(
     });
 
     println!("Starting inotify watcher");
-    let mut watcher: RecommendedWatcher =
+    let mut core_watcher: RecommendedWatcher =
         Watcher::new_immediate(move |res: notify::Result<notify::Event>| {
             eprintln!("{:#?}", res);
             match res {
@@ -673,15 +673,70 @@ pub async fn main(
         })
         .unwrap();
 
-    watcher
+    core_watcher
         .configure(notify::Config::PreciseEvents(true))
         .unwrap();
 
     // Add a path to be watched. All files and directories at that path and
     // below will be monitored for changes.
     eprintln!("Watching {:#?}", current_dir);
-    watcher
-        .watch(current_dir, RecursiveMode::Recursive)
+    for entry in std::fs::read_dir(&current_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        let is_ignored = daemon_config
+            .inotify_ignore_regexes
+            .0
+            .iter()
+            .find(|&p| p.is_match(entry.file_name().to_string_lossy().as_ref()));
+        if is_ignored.is_some() {
+            continue;
+        }
+
+        core_watcher
+            .watch(path.clone(), RecursiveMode::Recursive)
+            .unwrap();
+    }
+
+    let core_watcher = Arc::new(std::sync::Mutex::new(core_watcher));
+
+    let notify_ignore_regexes = daemon_config.inotify_ignore_regexes.clone();
+
+    let mut root_watcher: RecommendedWatcher =
+        Watcher::new_immediate(move |res: notify::Result<notify::Event>| {
+            match res {
+                Ok(event) => match event.kind {
+                    notify::EventKind::Create(_) => {
+                        for path in event.paths.iter() {
+                            let file_name = if let Some(file_name) = path.file_name() {
+                                file_name
+                            } else {
+                                continue;
+                            };
+                            let is_ignored = notify_ignore_regexes
+                                .0
+                                .iter()
+                                .find(|&p| p.is_match(file_name.to_string_lossy().as_ref()));
+                            if is_ignored.is_some() {
+                                continue;
+                            }
+
+                            let mut core_watcher = core_watcher.lock().unwrap();
+                            core_watcher
+                                .watch(path.clone(), RecursiveMode::Recursive)
+                                .unwrap();
+                        }
+                    }
+                    _ => (),
+                },
+                Err(e) => println!("watch error: {:?}", e),
+            }
+            ()
+        })
+        .unwrap();
+
+    root_watcher
+        .watch(current_dir, RecursiveMode::NonRecursive)
         .unwrap();
 
     eprintln!("Daemon process is up! and serving on socket");
