@@ -651,7 +651,7 @@ pub async fn main(
                     _ => false,
                 },
                 EventKind::Create(_) => true,
-                EventKind::Modify(_) => true,
+                EventKind::Modify(modify) => true,
                 EventKind::Remove(_) => true,
                 EventKind::Other => true,
             };
@@ -667,10 +667,8 @@ pub async fn main(
     println!("Starting inotify watcher");
     let mut core_watcher: RecommendedWatcher =
         Watcher::new_immediate(move |res: notify::Result<notify::Event>| {
-            eprintln!("{:#?}", res);
             match res {
                 Ok(event) => {
-                    eprintln!("{:#?}", event);
                     if let Err(e) = flume_tx.send(event) {
                         eprintln!("Failed to enqueue inotify event: {:#?}", e);
                     }
@@ -687,7 +685,6 @@ pub async fn main(
 
     // Add a path to be watched. All files and directories at that path and
     // below will be monitored for changes.
-    eprintln!("Watching {:#?}", current_dir);
     for entry in std::fs::read_dir(&current_dir)? {
         let entry = entry?;
         let path = entry.path();
@@ -700,6 +697,7 @@ pub async fn main(
         if is_ignored.is_some() {
             continue;
         }
+        eprintln!("Watching {:#?}", path);
 
         core_watcher
             .watch(path.clone(), RecursiveMode::Recursive)
@@ -730,6 +728,8 @@ pub async fn main(
                             }
 
                             let mut core_watcher = core_watcher.lock().unwrap();
+                            eprintln!("Watching {:#?}", path);
+
                             core_watcher
                                 .watch(path.clone(), RecursiveMode::Recursive)
                                 .unwrap();
