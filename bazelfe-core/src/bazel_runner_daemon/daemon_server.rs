@@ -139,12 +139,6 @@ impl TargetState {
                     .expect("Expected to find target")
                     .value();
 
-                // for input in rule.rule_input {
-
-                // }
-                // rule.rule_input
-                // rule.rule_output
-
                 for rdep in rule.rule_input.iter() {
                     if let Some(id) = self.label_string_to_id.get(rdep) {
                         let id: TargetId = *id.value();
