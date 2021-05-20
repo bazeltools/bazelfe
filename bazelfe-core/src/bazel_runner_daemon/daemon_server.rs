@@ -235,7 +235,7 @@ use crate::jvm_indexer::bazel_query::BazelQuery;
 #[derive(Debug)]
 struct TargetCache {
     target_state: Arc<TargetState>,
-    last_files_updated: Arc<Mutex<HashMap<PathBuf, (u128, Instant)>>>,
+    last_files_updated: Arc<Mutex<HashMap<PathBuf, (u128, Instant, Option<Vec<u8>>)>>>,
     inotify_ignore_regexes: NotifyRegexes,
     pending_hydrations: Arc<AtomicUsize>,
     bazel_query: Arc<Mutex<Box<dyn BazelQuery>>>,
@@ -341,9 +341,27 @@ impl TargetCache {
                 continue;
             }
             if real_path.exists() && real_metadata.file_type() == src_metadata.file_type() {
-                {
+                let mut current_sha = None;
+                let mut do_insert = true;
+                if real_metadata.is_file() {
+                    use sha2::{Digest, Sha256};
+                    let mut hasher = Sha256::new();
+                    if let Ok(mut file) = std::fs::File::open(&real_path) {
+                        if let Ok(_) = std::io::copy(&mut file, &mut hasher) {
+                            current_sha = Some(hasher.finalize().to_vec());
+
+                            if let Some((_, _, Some(prev_sha))) = lock.get(&real_path) {
+                                if current_sha.as_ref() == Some(prev_sha) {
+                                    do_insert = false;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if do_insert {
                     self.hydrate_new_file_data(real_path.clone()).await;
-                    lock.insert(real_path.to_path_buf(), (ts, now_instant));
+                    lock.insert(real_path.to_path_buf(), (ts, now_instant, current_sha));
                 }
             }
         }
@@ -390,7 +408,7 @@ impl TargetCache {
         let lock = self.last_files_updated.lock().await;
 
         lock.iter()
-            .filter_map(|(k, (v, _))| {
+            .filter_map(|(k, (v, _, _))| {
                 if *v > instant {
                     Some(super::daemon_service::FileStatus(k.clone(), *v))
                 } else {
@@ -651,7 +669,7 @@ pub async fn main(
                     _ => false,
                 },
                 EventKind::Create(_) => true,
-                EventKind::Modify(modify) => true,
+                EventKind::Modify(_) => true,
                 EventKind::Remove(_) => true,
                 EventKind::Other => true,
             };
