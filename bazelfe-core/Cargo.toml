@@ -39,7 +39,7 @@ path = "src/jvm_indexer/jvm_indexer_app.rs"
 
 [dependencies]
 async-channel = "1.6.1"
-async-stream = "0.3.0"
+async-stream = "0.3.2"
 async-trait = "0.1.48"
 byteorder = "1.4.3"
 bytes = "1.0.1"
