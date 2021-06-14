@@ -60,7 +60,7 @@ serde_derive = "1.0.126"
 toml = "0.5.8"
 walkdir = "2.3.2"
 shellwords = "1.1.0"
-zip = "0.5.12"
+zip = "0.5.13"
 thiserror = "1.0.25"
 
 [dependencies.bazelfe-protos]
