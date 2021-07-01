@@ -121,6 +121,7 @@ mod tests {
         let _ = rewrite_command_line(
             &mut passthrough_command_line,
             &CommandLineRewriter::default(),
+            #[cfg(feature = "bazelfe-daemon")]
             &None,
         )
         .await
@@ -150,9 +151,14 @@ mod tests {
         let rewrite_config = CommandLineRewriter {
             test: TestActionMode::EmptyTestToLocalRepo(EmptyTestToLocalRepoCfg::default()),
         };
-        let _ = rewrite_command_line(&mut passthrough_command_line, &rewrite_config, &None)
-            .await
-            .unwrap();
+        let _ = rewrite_command_line(
+            &mut passthrough_command_line,
+            &rewrite_config,
+            #[cfg(feature = "bazelfe-daemon")]
+            &None,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(
             passthrough_command_line,
@@ -179,7 +185,13 @@ mod tests {
         let rewrite_config = CommandLineRewriter {
             test: TestActionMode::EmptyTestToFail,
         };
-        let ret = rewrite_command_line(&mut passthrough_command_line, &rewrite_config, &None).await;
+        let ret = rewrite_command_line(
+            &mut passthrough_command_line,
+            &rewrite_config,
+            #[cfg(feature = "bazelfe-daemon")]
+            &None,
+        )
+        .await;
 
         assert_eq!(true, ret.is_err());
 
