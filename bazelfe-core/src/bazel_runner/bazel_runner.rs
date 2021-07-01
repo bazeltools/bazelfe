@@ -135,6 +135,7 @@ impl BazelRunner {
                 .unwrap();
         });
 
+        #[cfg(feature = "bazelfe-daemon")]
         let runner_daemon = crate::bazel_runner_daemon::daemon_manager::connect_to_server(
             &config.daemon_config,
             &self.bazel_command_line.bazel_binary.clone(),
@@ -147,6 +148,7 @@ impl BazelRunner {
         let configured_bazel_runner = ConfiguredBazelRunner::new(
             Arc::clone(&config),
             configured_bazel,
+            #[cfg(feature = "bazelfe-daemon")]
             runner_daemon,
             index_table.clone(),
             self.bazel_command_line.clone(),
