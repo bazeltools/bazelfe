@@ -1,9 +1,15 @@
-use serde_derive::Deserialize;
+use serde::Deserialize;
 
 #[derive(Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct EmptyTestToLocalRepoCfg {
     #[serde(default = "default_command_to_use")]
     pub command_to_use: String,
+}
+
+#[derive(Deserialize, Debug, PartialEq, Eq, Clone)]
+pub struct SuggestTestTargetConfig {
+    #[serde(default = "default_distance_to_use")]
+    pub distance_to_expand: u32,
 }
 
 impl Default for EmptyTestToLocalRepoCfg {
@@ -16,11 +22,16 @@ fn default_command_to_use() -> String {
     String::from("//...")
 }
 
+fn default_distance_to_use() -> u32 {
+    2
+}
+
 #[derive(Deserialize, Debug, PartialEq, Eq, Clone)]
 #[serde(tag = "type")]
 pub enum TestActionMode {
     EmptyTestToLocalRepo(EmptyTestToLocalRepoCfg),
     EmptyTestToFail,
+    SuggestTestTarget(SuggestTestTargetConfig),
     Passthrough,
 }
 

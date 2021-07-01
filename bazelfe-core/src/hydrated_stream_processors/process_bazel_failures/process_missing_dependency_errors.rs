@@ -397,10 +397,21 @@ mod tests {
     fn test_output_error_paths() {
         let action_failed_error_info = ActionFailedErrorInfo {
             label: String::from("//src/main/com/example/foo:Bar"),
-            output_files: vec![
-                build_event_stream::file::File::Uri(String::from("remote_uri://foo/bar/baz")),
-                build_event_stream::file::File::Uri(String::from("file:///foo/bar/baz")),
-            ],
+            stderr: Some(build_event_stream::File {
+                name: String::default(),
+                path_prefix: Vec::default(),
+                file: Some(build_event_stream::file::File::Uri(String::from(
+                    "remote_uri://foo/bar/baz",
+                ))),
+            }),
+
+            stdout: Some(build_event_stream::File {
+                name: String::default(),
+                path_prefix: Vec::default(),
+                file: Some(build_event_stream::file::File::Uri(String::from(
+                    "file:///foo/bar/baz",
+                ))),
+            }),
             target_kind: Some(String::from("scala_library")),
         };
 
@@ -418,10 +429,8 @@ mod tests {
     ) {
         let action_failed_error_info = ActionFailedErrorInfo {
             label: String::from("//src/main/com/example/foo:Bar"),
-            output_files: vec![
-                build_event_stream::file::File::Uri(String::from("remote_uri://foo/bar/baz")),
-                build_event_stream::file::File::Uri(String::from("file:///foo/bar/baz")),
-            ],
+            stdout: None,
+            stderr: None,
             target_kind: Some(String::from(target_kind)),
         };
 
@@ -495,13 +504,23 @@ mod tests {
 
             let action_failed_error_info = ActionFailedErrorInfo {
                 label: String::from("//src/main/com/example/foo:Bar"),
-                output_files: vec![
-                    build_event_stream::file::File::Uri(String::from("remote_uri://foo/bar/baz")),
-                    build_event_stream::file::File::Uri(format!(
+                stderr: Some(build_event_stream::File {
+                    name: String::default(),
+                    path_prefix: Vec::default(),
+                    file: Some(build_event_stream::file::File::Uri(String::from(
+                        "remote_uri://foo/bar/baz",
+                    ))),
+                }),
+
+                stdout: Some(build_event_stream::File {
+                    name: String::default(),
+                    path_prefix: Vec::default(),
+                    file: Some(build_event_stream::file::File::Uri(format!(
                         "file://{}",
                         &(*tempfile_path).to_path_buf().to_str().unwrap().to_string()
-                    )),
-                ],
+                    ))),
+                }),
+
                 target_kind: Some(String::from(target_kind)),
             };
 
@@ -606,13 +625,24 @@ mod tests {
 
         let action_failed_error_info = ActionFailedErrorInfo {
             label: String::from("//src/main/com/example/foo:Bar"),
-            output_files: vec![
-                build_event_stream::file::File::Uri(String::from("remote_uri://foo/bar/baz")),
-                build_event_stream::file::File::Uri(format!(
+
+            stderr: Some(build_event_stream::File {
+                name: String::default(),
+                path_prefix: Vec::default(),
+                file: Some(build_event_stream::file::File::Uri(String::from(
+                    "remote_uri://foo/bar/baz",
+                ))),
+            }),
+
+            stdout: Some(build_event_stream::File {
+                name: String::default(),
+                path_prefix: Vec::default(),
+                file: Some(build_event_stream::file::File::Uri(format!(
                     "file://{}",
                     &(*tempfile_path).to_path_buf().to_str().unwrap().to_string()
-                )),
-            ],
+                ))),
+            }),
+
             target_kind: Some(String::from("scala_library")),
         };
 

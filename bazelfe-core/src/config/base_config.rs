@@ -1,7 +1,6 @@
 use super::command_line_rewriter::CommandLineRewriter;
 use super::error_processor::ErrorProcessor;
 use serde::{Deserialize, Deserializer};
-use serde_derive::Deserialize;
 
 #[derive(Deserialize, Debug, PartialEq, Eq)]
 pub struct Config {

@@ -1,5 +1,8 @@
-use crate::config::command_line_rewriter::TestActionMode;
 use crate::config::CommandLineRewriter;
+use crate::{
+    bazel_command_line_parser::{BuiltInAction, ParsedCommandLine},
+    config::command_line_rewriter::TestActionMode,
+};
 
 use thiserror::Error;
 
@@ -9,44 +12,30 @@ pub enum RewriteCommandLineError {
     UserErrorReport(super::UserReportError),
 }
 
-fn find_first_non_flag_arg<'a>(iter: impl Iterator<Item = &'a String>) -> Option<(usize, String)> {
-    iter.enumerate().find_map(|(idx, e)| {
-        if e.starts_with("--") {
-            None
-        } else {
-            Some((idx, e.clone()))
-        }
-    })
-}
-
-pub fn rewrite_command_line(
-    args: &mut Vec<String>,
+pub async fn rewrite_command_line(
+    bazel_command_line: &mut ParsedCommandLine,
     command_line_rewriter: &CommandLineRewriter,
 ) -> Result<(), RewriteCommandLineError> {
-    // Keep in mind here the first arg is the path to the bazel binary, so needs to be ignored!
-
-    let action_and_pos = find_first_non_flag_arg(args.iter().skip(1));
-
-    if let Some((indx, action)) = action_and_pos {
-        if action == "test" {
-            let iter = args.iter();
-            // we ignore the error here since if there are no more args left the iterator will return None
-            // and we are safely done anyway. We just needed to skip beyond the current arg.(also skip the bazel binary at the start.)
-            let iter = iter.skip(indx + 2);
-            let target_opt = find_first_non_flag_arg(iter);
-
+    if bazel_command_line.action
+        == Some(crate::bazel_command_line_parser::Action::BuiltIn(
+            BuiltInAction::Test,
+        ))
+    {
+        if bazel_command_line.remaining_args.is_empty() {
             match &command_line_rewriter.test {
                 TestActionMode::EmptyTestToLocalRepo(cfg) => {
-                    if target_opt.is_none() {
-                        args.push(cfg.command_to_use.clone());
-                    }
+                    bazel_command_line
+                        .remaining_args
+                        .push(cfg.command_to_use.clone());
                 }
                 TestActionMode::EmptyTestToFail => {
-                    if target_opt.is_none() {
-                        Err(RewriteCommandLineError::UserErrorReport(super::UserReportError("No test target specified.\nUnlike other build tools, bazel requires you specify which test target to test.\nTo test the whole repo add //... to the end. But beware this could be slow!".to_owned())))?;
-                    }
+                    Err(RewriteCommandLineError::UserErrorReport(super::UserReportError("No test target specified.\nUnlike other build tools, bazel requires you specify which test target to test.\nTo test the whole repo add //... to the end. But beware this could be slow!".to_owned())))?;
                 }
                 TestActionMode::Passthrough => {}
+                TestActionMode::SuggestTestTarget(_cfg) => {
+                    Err(RewriteCommandLineError::UserErrorReport(super::UserReportError(
+                                "Configured to suggest possible test targets to run, but no daemon is running".to_owned())))?;
+                }
             }
         }
     }
@@ -59,64 +48,80 @@ mod tests {
 
     use super::*;
 
+    use crate::bazel_command_line_parser::*;
     use crate::config::command_line_rewriter::*;
-
-    #[test]
-    fn test_passthrough_args() {
-        let mut passthrough_command_line = vec![
-            "bazel".to_string(),
-            "test".to_string(),
-            "--foo".to_string(),
-            "bar".to_string(),
-        ];
+    use std::path::PathBuf;
+    #[tokio::test]
+    async fn test_passthrough_args() {
+        let mut passthrough_command_line = ParsedCommandLine {
+            bazel_binary: PathBuf::from("bazel"),
+            startup_options: Vec::default(),
+            action: Some(Action::BuiltIn(BuiltInAction::Test)),
+            action_options: Vec::default(),
+            remaining_args: vec!["bar".to_string()],
+        };
 
         let _ = rewrite_command_line(
             &mut passthrough_command_line,
             &CommandLineRewriter::default(),
         )
+        .await
         .unwrap();
 
         assert_eq!(
             passthrough_command_line,
-            vec![
-                "bazel".to_string(),
-                "test".to_string(),
-                "--foo".to_string(),
-                "bar".to_string()
-            ]
+            ParsedCommandLine {
+                bazel_binary: PathBuf::from("bazel"),
+                startup_options: Vec::default(),
+                action: Some(Action::BuiltIn(BuiltInAction::Test)),
+                action_options: Vec::default(),
+                remaining_args: vec!["bar".to_string()],
+            }
         );
     }
 
-    #[test]
-    fn test_rewrite_empty_test() {
-        let mut passthrough_command_line =
-            vec!["bazel".to_string(), "test".to_string(), "--foo".to_string()];
-
+    #[tokio::test]
+    async fn test_rewrite_empty_test() {
+        let mut passthrough_command_line = ParsedCommandLine {
+            bazel_binary: PathBuf::from("bazel"),
+            startup_options: Vec::default(),
+            action: Some(Action::BuiltIn(BuiltInAction::Test)),
+            action_options: Vec::default(),
+            remaining_args: vec![],
+        };
         let rewrite_config = CommandLineRewriter {
             test: TestActionMode::EmptyTestToLocalRepo(EmptyTestToLocalRepoCfg::default()),
         };
-        let _ = rewrite_command_line(&mut passthrough_command_line, &rewrite_config).unwrap();
+        let _ = rewrite_command_line(&mut passthrough_command_line, &rewrite_config)
+            .await
+            .unwrap();
 
         assert_eq!(
             passthrough_command_line,
-            vec![
-                "bazel".to_string(),
-                "test".to_string(),
-                "--foo".to_string(),
-                "//...".to_string()
-            ]
+            ParsedCommandLine {
+                bazel_binary: PathBuf::from("bazel"),
+                startup_options: Vec::default(),
+                action: Some(Action::BuiltIn(BuiltInAction::Test)),
+                action_options: Vec::default(),
+                remaining_args: vec!["//...".to_string()],
+            }
         );
     }
 
-    #[test]
-    fn test_rewrite_empty_test_to_fail() {
-        let mut passthrough_command_line =
-            vec!["bazel".to_string(), "test".to_string(), "--foo".to_string()];
+    #[tokio::test]
+    async fn test_rewrite_empty_test_to_fail() {
+        let mut passthrough_command_line = ParsedCommandLine {
+            bazel_binary: PathBuf::from("bazel"),
+            startup_options: Vec::default(),
+            action: Some(Action::BuiltIn(BuiltInAction::Test)),
+            action_options: Vec::default(),
+            remaining_args: vec![],
+        };
 
         let rewrite_config = CommandLineRewriter {
             test: TestActionMode::EmptyTestToFail,
         };
-        let ret = rewrite_command_line(&mut passthrough_command_line, &rewrite_config);
+        let ret = rewrite_command_line(&mut passthrough_command_line, &rewrite_config).await;
 
         assert_eq!(true, ret.is_err());
 

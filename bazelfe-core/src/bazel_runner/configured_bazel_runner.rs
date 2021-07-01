@@ -1,8 +1,11 @@
 use std::collections::HashMap;
 
-use crate::build_events::build_event_server::BuildEventAction;
 use crate::build_events::hydrated_stream::HydratedInfo;
 use crate::buildozer_driver;
+use crate::{
+    bazel_command_line_parser::ParsedCommandLine,
+    build_events::build_event_server::BuildEventAction,
+};
 
 use crate::{
     bazel_runner,
@@ -22,7 +25,7 @@ use super::processor_activity::*;
 pub struct ConfiguredBazel {
     sender_arc:
         Arc<Mutex<Option<async_channel::Sender<BuildEventAction<bazel_event::BazelBuildEvent>>>>>,
-    aes: EventStreamListener,
+    pub aes: EventStreamListener,
     bes_port: u16,
 }
 
@@ -31,21 +34,29 @@ impl ConfiguredBazel {
         sender_arc: &Arc<
             Mutex<Option<async_channel::Sender<BuildEventAction<bazel_event::BazelBuildEvent>>>>,
         >,
-        aes: &EventStreamListener,
+        aes: EventStreamListener,
         bes_port: u16,
     ) -> Self {
         Self {
             sender_arc: sender_arc.clone(),
-            aes: aes.clone(),
+            aes: aes,
             bes_port,
         }
     }
 
     async fn spawn_bazel_attempt(
         &self,
-        passthrough_args: &Vec<String>,
-    ) -> (ProcessorActivity, bazel_runner::ExecuteResult) {
-        spawn_bazel_attempt(&self.sender_arc, &self.aes, self.bes_port, passthrough_args).await
+        bazel_command_line: &ParsedCommandLine,
+        pipe_output: bool,
+    ) -> Result<(ProcessorActivity, bazel_runner::ExecuteResult), Box<dyn std::error::Error>> {
+        spawn_bazel_attempt(
+            &self.sender_arc,
+            &self.aes,
+            self.bes_port,
+            bazel_command_line,
+            pipe_output,
+        )
+        .await
     }
 }
 
@@ -55,8 +66,9 @@ async fn spawn_bazel_attempt(
     >,
     aes: &EventStreamListener,
     bes_port: u16,
-    passthrough_args: &Vec<String>,
-) -> (ProcessorActivity, bazel_runner::ExecuteResult) {
+    bazel_command_line: &ParsedCommandLine,
+    pipe_output: bool,
+) -> Result<(ProcessorActivity, bazel_runner::ExecuteResult), Box<dyn std::error::Error>> {
     let (tx, rx) = async_channel::unbounded();
     let _ = {
         let mut locked = sender_arc.lock().await;
@@ -112,7 +124,9 @@ async fn spawn_bazel_attempt(
         });
     });
 
-    let res = bazel_runner::execute_bazel(passthrough_args.clone(), bes_port).await;
+    let res =
+        bazel_runner::execute_bazel_output_control(&bazel_command_line, bes_port, pipe_output)
+            .await?;
 
     let _ = {
         let mut locked = sender_arc.lock().await;
@@ -121,7 +135,7 @@ async fn spawn_bazel_attempt(
 
     recv_task.await.unwrap();
     let r = results_data.write().await.take().unwrap();
-    (r, res)
+    Ok((r, res))
 }
 
 pub struct ConfiguredBazelRunner<
@@ -129,13 +143,18 @@ pub struct ConfiguredBazelRunner<
     U: crate::hydrated_stream_processors::process_bazel_failures::CommandLineRunner,
 > {
     config: Arc<Config>,
-    configured_bazel: ConfiguredBazel,
+    pub configured_bazel: ConfiguredBazel,
     _index_table: crate::index_table::IndexTable,
-    _aes: EventStreamListener,
-    passthrough_args: Vec<String>,
+    pub bazel_command_line: ParsedCommandLine,
     process_build_failures: Arc<ProcessBazelFailures<T, U>>,
 }
 
+pub struct RunCompleteState {
+    pub attempts: u16,
+    pub total_actions_taken: u32,
+    pub final_exit_code: i32,
+    pub running_total: ProcessorActivity,
+}
 impl<
         T: buildozer_driver::Buildozer,
         U: crate::hydrated_stream_processors::process_bazel_failures::CommandLineRunner,
@@ -145,20 +164,22 @@ impl<
         config: Arc<Config>,
         configured_bazel: ConfiguredBazel,
         index_table: crate::index_table::IndexTable,
-        aes: EventStreamListener,
-        passthrough_args: Vec<String>,
+        bazel_command_line: ParsedCommandLine,
         process_build_failures: Arc<ProcessBazelFailures<T, U>>,
     ) -> Self {
         Self {
             config,
             configured_bazel,
             _index_table: index_table,
-            _aes: aes,
-            passthrough_args,
+            bazel_command_line,
             process_build_failures,
         }
     }
-    pub async fn run(self) -> Result<i32, Box<dyn std::error::Error>> {
+
+    pub async fn run_command_line(
+        &self,
+        pipe_output: bool,
+    ) -> Result<RunCompleteState, Box<dyn std::error::Error>> {
         let mut attempts: u16 = 0;
 
         let mut running_total = ProcessorActivity::default();
@@ -171,8 +192,8 @@ impl<
 
             let (processor_activity, bazel_result) = self
                 .configured_bazel
-                .spawn_bazel_attempt(&self.passthrough_args)
-                .await;
+                .spawn_bazel_attempt(&self.bazel_command_line, pipe_output)
+                .await?;
             let actions_taken = processor_activity.actions_taken;
             total_actions_taken += actions_taken;
             running_total.merge(processor_activity, disable_action_stories_on_success);
@@ -181,21 +202,43 @@ impl<
                 break;
             }
         }
+        Ok(RunCompleteState {
+            attempts,
+            total_actions_taken,
+            final_exit_code,
+            running_total,
+        })
+    }
+
+    pub async fn run(mut self) -> Result<i32, Box<dyn std::error::Error>> {
+        super::command_line_rewriter_action::rewrite_command_line(
+            &mut self.bazel_command_line,
+            &self.config.command_line_rewriter,
+        )
+        .await?;
+
+        let res_data = self.run_command_line(true).await?;
+        let disable_action_stories_on_success = self.config.disable_action_stories_on_success;
 
         // we should be very quiet if the build is successful/we added nothing.
-        if total_actions_taken > 0 && !(final_exit_code == 0 && disable_action_stories_on_success) {
+        if res_data.total_actions_taken > 0
+            && !(res_data.final_exit_code == 0 && disable_action_stories_on_success)
+        {
             eprintln!("--------------------Bazel Runner Report--------------------");
 
-            if running_total.target_story_actions.len() > 0 {
-                if final_exit_code != 0 {
+            if res_data.running_total.target_story_actions.len() > 0 {
+                if res_data.final_exit_code != 0 {
                     eprintln!(
                     "\nBuild still failed. Active stories about failed targets/what we've tried:"
                 );
                 } else {
                     eprintln!("\nBuild succeeded, but documenting actions we took(some may have failed, but the build completed ok.):\n");
                 }
-                let mut v: Vec<(String, Vec<TargetStory>)> =
-                    running_total.target_story_actions.into_iter().collect();
+                let mut v: Vec<(String, Vec<TargetStory>)> = res_data
+                    .running_total
+                    .target_story_actions
+                    .into_iter()
+                    .collect();
                 v.sort_by_key(|k| k.0.clone());
                 for (label, mut story_entries) in v.into_iter() {
                     eprintln!("Target: {}", label);
@@ -228,16 +271,16 @@ impl<
                     }
                 }
             }
-            eprintln!("Bazel exit code: {}", final_exit_code);
-            eprintln!("Bazel build attempts: {}", attempts);
-            eprintln!("Actions taken: {}", running_total.actions_taken);
+            eprintln!("Bazel exit code: {}", res_data.final_exit_code);
+            eprintln!("Bazel build attempts: {}", res_data.attempts);
+            eprintln!("Actions taken: {}", res_data.running_total.actions_taken);
             eprintln!(
                 "Jvm fragments (classes/packages) added to index: {}",
-                running_total.jvm_segments_indexed
+                res_data.running_total.jvm_segments_indexed
             );
             eprintln!("------------------------------------------------------------\n");
         }
 
-        Ok(final_exit_code)
+        Ok(res_data.final_exit_code)
     }
 }

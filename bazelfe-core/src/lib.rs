@@ -3,6 +3,7 @@ extern crate lazy_static;
 #[macro_use]
 extern crate log;
 
+pub mod bazel_command_line_parser;
 pub mod bazel_runner;
 pub mod build_events;
 pub mod buildozer_driver;

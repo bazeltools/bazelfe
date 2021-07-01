@@ -188,14 +188,8 @@ mod tests {
         // This was referring to a random string put into the dependencies list of the target
         let action_failed_error_info = hydrated_stream::ActionFailedErrorInfo {
             label: String::from("//src/main/com/example/foo:Bar"),
-            output_files: vec![
-                bazelfe_protos::build_event_stream::file::File::Uri(String::from(
-                    "remote_uri://foo/bar/baz",
-                )),
-                bazelfe_protos::build_event_stream::file::File::Uri(String::from(
-                    "file:///foo/bar/baz",
-                )),
-            ],
+            stderr: None,
+            stdout: None,
             target_kind: Some(String::from("scala_library")),
         };
 

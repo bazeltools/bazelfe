@@ -13,8 +13,10 @@ use tonic::transport::Server;
 
 use bazelfe_protos::*;
 
-use bazelfe_core::build_events::hydrated_stream::HydratedInfo;
 use bazelfe_core::jvm_indexer::bazel_query::BazelQuery;
+use bazelfe_core::{
+    bazel_command_line_parser::ParsedCommandLine, build_events::hydrated_stream::HydratedInfo,
+};
 use bazelfe_core::{
     bazel_runner,
     hydrated_stream_processors::{
@@ -101,7 +103,7 @@ async fn spawn_bazel_attempt(
     >,
     aes: &EventStreamListener,
     bes_port: u16,
-    bazel_args: &Vec<String>,
+    bazel_args: &ParsedCommandLine,
 ) -> bazel_runner::ExecuteResult {
     let (tx, rx) = async_channel::unbounded();
     let _ = {
@@ -114,7 +116,9 @@ async fn spawn_bazel_attempt(
 
     let recv_task =
         tokio::spawn(async move { while let Ok(_) = target_extracted_stream.recv().await {} });
-    let res = bazel_runner::execute_bazel_output_control(bazel_args.clone(), bes_port, false).await;
+    let res = bazel_runner::execute_bazel_output_control(&bazel_args, bes_port, false)
+        .await
+        .expect("Internal errors should not occur invoking bazel.");
 
     let _ = {
         let mut locked = sender_arc.lock().await;
@@ -200,6 +204,33 @@ fn parse_current_repo_name() -> Option<String> {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opt = Opt::parse();
+
+    let parsed_command_line = match bazelfe_core::bazel_command_line_parser::parse_bazel_command_line(&vec![opt.bazel_binary_path.to_string_lossy().to_string()]) {
+        Ok(parsed_command_line) => {
+            if parsed_command_line.is_action_option_set("bes_backend") {
+                eprintln!("Bes backend already set, must exit since we can't add another safely.");
+                std::process::exit(-1);
+            }
+            parsed_command_line
+        }
+        Err(cmd_line_parsing_failed) => {
+            match cmd_line_parsing_failed {
+                bazelfe_core::bazel_command_line_parser::CommandLineParsingError::MissingBazelPath => {
+                    eprintln!("Missing bazel path, invalid command line arg supplied");
+                    std::process::exit(-1);
+                }
+                bazelfe_core::bazel_command_line_parser::CommandLineParsingError::MissingArgToOption(o) => {
+                    eprintln!("Arg parsing from bazelfe doesn't understand the args, missing an option to {}", o);
+                    std::process::exit(-1);
+                }
+                bazelfe_core::bazel_command_line_parser::CommandLineParsingError::UnknownArgument(o) => {
+                    eprintln!("Arg parsing from bazelfe doesn't understand the args, unknown option {}", o);
+                    std::process::exit(-1);
+                }
+            }
+        }
+    };
+
     let mut rng = rand::thread_rng();
     let mut builder = pretty_env_logger::formatted_timed_builder();
     builder.format_timestamp_nanos();
@@ -211,8 +242,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         builder.parse_filters("warn,bazelfe_core::jvm_indexer=info,jvm_indexer=info");
     }
     builder.init();
-
-    let bazel_binary_path: String = (&opt.bazel_binary_path.to_str().unwrap()).to_string();
 
     let target_blacklist = (&opt.blacklist_targets_from_index)
         .clone()
@@ -234,7 +263,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .collect();
 
     let bazel_query =
-        bazelfe_core::jvm_indexer::bazel_query::from_binary_path(opt.bazel_binary_path);
+        bazelfe_core::jvm_indexer::bazel_query::from_binary_path(&opt.bazel_binary_path);
 
     let bazel_deps_replacement_map: HashMap<String, String> = match &opt.bazel_deps_root {
         None => HashMap::default(),
@@ -619,7 +648,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         sender_arc: Arc<
             Mutex<Option<async_channel::Sender<BuildEventAction<bazel_event::BazelBuildEvent>>>>,
         >,
-        bazel_binary_path: String,
+        parsed_command_line: &ParsedCommandLine,
         aes: &EventStreamListener,
         batch_idx: usize,
         chunk: &mut Vec<String>,
@@ -627,13 +656,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ) {
         let batch_idx = batch_idx;
         let batch_start_time = Instant::now();
-        let mut current_args: Vec<String> = vec![
-            bazel_binary_path,
-            String::from("build"),
-            String::from("--keep_going"),
-        ];
-        current_args.extend(chunk.drain(..));
-        let bazel_result = spawn_bazel_attempt(&sender_arc, &aes, bes_port, &current_args).await;
+
+        let mut parsed_command_line = parsed_command_line.clone();
+        parsed_command_line.set_action(Some(
+            bazelfe_core::bazel_command_line_parser::Action::BuiltIn(
+                bazelfe_core::bazel_command_line_parser::BuiltInAction::Build,
+            ),
+        ));
+
+        parsed_command_line.add_action_option_if_unset(
+            bazelfe_core::bazel_command_line_parser::BazelOption::BooleanOption(
+                String::from("keep_going"),
+                true,
+            ),
+        );
+
+        parsed_command_line.remaining_args.extend(chunk.drain(..));
+        let bazel_result =
+            spawn_bazel_attempt(&sender_arc, &aes, bes_port, &parsed_command_line).await;
 
         let remaining_targets = target_completed_tracker.expected_targets.lock().await.len();
 
@@ -657,7 +697,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             run_bazel(
                 bes_port,
                 Arc::clone(&sender_arc),
-                bazel_binary_path.clone(),
+                &parsed_command_line,
                 &aes,
                 batch_idx,
                 &mut batch_elements,
@@ -671,7 +711,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     run_bazel(
         bes_port,
         Arc::clone(&sender_arc),
-        bazel_binary_path.clone(),
+        &parsed_command_line,
         &aes,
         batch_idx,
         &mut batch_elements,
