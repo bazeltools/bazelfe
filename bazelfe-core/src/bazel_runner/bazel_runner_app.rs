@@ -86,6 +86,7 @@ fn passthrough_to_bazel(opt: Opt) -> () {
 }
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(feature = "bazelfe-daemon")]
     if let Ok(_) = std::env::var("BAZEL_FE_ENABLE_DAEMON_MODE") {
         return Ok(bazelfe_core::bazel_runner_daemon::daemon_server::base_main().await?);
     }

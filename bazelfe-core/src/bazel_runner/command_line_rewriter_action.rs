@@ -15,7 +15,9 @@ pub enum RewriteCommandLineError {
 pub async fn rewrite_command_line(
     bazel_command_line: &mut ParsedCommandLine,
     command_line_rewriter: &CommandLineRewriter,
-    daemon_client: &Option<crate::bazel_runner_daemon::daemon_service::RunnerDaemonClient>,
+    #[cfg(feature = "bazelfe-daemon")] daemon_client: &Option<
+        crate::bazel_runner_daemon::daemon_service::RunnerDaemonClient,
+    >,
 ) -> Result<(), RewriteCommandLineError> {
     if bazel_command_line.action
         == Some(crate::bazel_command_line_parser::Action::BuiltIn(
@@ -33,7 +35,9 @@ pub async fn rewrite_command_line(
                     Err(RewriteCommandLineError::UserErrorReport(super::UserReportError("No test target specified.\nUnlike other build tools, bazel requires you specify which test target to test.\nTo test the whole repo add //... to the end. But beware this could be slow!".to_owned())))?;
                 }
                 TestActionMode::Passthrough => {}
+                #[allow(unused)]
                 TestActionMode::SuggestTestTarget(cfg) => {
+                    #[cfg(feature = "bazelfe-daemon")]
                     if let Some(daemon_cli) = daemon_client.as_ref() {
                         let mut invalidated_targets = vec![];
 
@@ -84,6 +88,10 @@ pub async fn rewrite_command_line(
                         Err(RewriteCommandLineError::UserErrorReport(super::UserReportError(
                                 "Configured to suggest possible test targets to run, but no daemon is running".to_owned())))?;
                     }
+
+                    #[cfg(not(feature = "bazelfe-daemon"))]
+                    Err(RewriteCommandLineError::UserErrorReport(super::UserReportError(
+                        "Configured to suggest possible test targets to run, but daemon is not in this build".to_owned())))?;
                 }
             }
         }

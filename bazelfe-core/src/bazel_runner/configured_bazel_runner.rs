@@ -144,6 +144,7 @@ pub struct ConfiguredBazelRunner<
 > {
     config: Arc<Config>,
     pub configured_bazel: ConfiguredBazel,
+    #[cfg(feature = "bazelfe-daemon")]
     pub runner_daemon: Option<crate::bazel_runner_daemon::daemon_service::RunnerDaemonClient>,
     _index_table: crate::index_table::IndexTable,
     pub bazel_command_line: ParsedCommandLine,
@@ -164,7 +165,9 @@ impl<
     pub fn new(
         config: Arc<Config>,
         configured_bazel: ConfiguredBazel,
-        runner_daemon: Option<crate::bazel_runner_daemon::daemon_service::RunnerDaemonClient>,
+        #[cfg(feature = "bazelfe-daemon")] runner_daemon: Option<
+            crate::bazel_runner_daemon::daemon_service::RunnerDaemonClient,
+        >,
         index_table: crate::index_table::IndexTable,
         bazel_command_line: ParsedCommandLine,
         process_build_failures: Arc<ProcessBazelFailures<T, U>>,
@@ -172,6 +175,7 @@ impl<
         Self {
             config,
             configured_bazel,
+            #[cfg(feature = "bazelfe-daemon")]
             runner_daemon,
             _index_table: index_table,
             bazel_command_line,
@@ -217,6 +221,7 @@ impl<
         super::command_line_rewriter_action::rewrite_command_line(
             &mut self.bazel_command_line,
             &self.config.command_line_rewriter,
+            #[cfg(feature = "bazelfe-daemon")]
             &self.runner_daemon,
         )
         .await?;

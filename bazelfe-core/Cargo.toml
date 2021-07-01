@@ -75,25 +75,26 @@ walkdir = "2.3.2"
 shellwords = "1.1.0"
 zip = "0.5.13"
 thiserror = "1.0.25"
-fork = "0.1.18"
+fork = {version = "0.1.18", optional=true}
 serde_json = "1.0.64"
-stdio-override = "0.1.3"
+stdio-override = {version = "0.1.3", optional = true}
 libc = "0.2.94"
-crossbeam-channel = "0.4.0"
-notify = "5.0.0-pre.7"
-tarpc = {version = "0.25.1", features = ["tokio1", "serde1", "serde-transport"]}
-tokio-serde = { version = "0.8", features = ["bincode"] }
+crossbeam-channel = {version = "0.4.0", optional = true}
+notify = {version = "5.0.0-pre.7", optional = true}
+tarpc = {version = "0.25.1", features = ["tokio1", "serde1", "serde-transport"], optional=true}
+tokio-serde = { version = "0.8", features = ["bincode"] , optional=true}
 tokio-util = { version = "0.6.4", features = ["compat"] }
 sha2 = "0.9.4"
 nix = "0.20.0"
-flume = "0.10.5"
-trim-margin = "0.1.0"
-dashmap = "4.0.2"
+flume = {version = "0.10.5", optional = true}
+trim-margin = {version = "0.1.0", optional = true}
+dashmap = {version = "4.0.2", optional = true}
 tui = {version = "0.15.0", default_features = false, features = ["crossterm"], optional = true}
 crossterm = {version = "0.19.0", optional = true}
 muncher = {version  = "0.6.1", optional = true}
 humantime = "2.1.0"
 tempfile = {version = "3.2.0", optional = true}
+
 
 [build-dependencies]
 vergen = "5.1.5"
@@ -128,7 +129,8 @@ tempfile = {version = "3.2.0"}
 [features]
 default = []
 dev-binaries = []
-autotest-action = ["tui", "crossterm", "muncher", "tempfile"]
+autotest-action = ["tui", "crossterm", "muncher", "tempfile", "bazelfe-daemon"]
+bazelfe-daemon = ["notify", "tarpc", "tokio-serde", "flume", "trim-margin", "dashmap", "fork", "stdio-override"]
 
 [lib]
 name = "bazelfe_core"
