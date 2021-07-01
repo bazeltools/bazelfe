@@ -221,6 +221,7 @@ impl<
         )
         .await?;
 
+        #[cfg(feature = "autotest-action")]
         if super::auto_test_action::maybe_auto_test_mode(&mut self).await? {
             return Ok(0);
         };
