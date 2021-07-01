@@ -144,6 +144,7 @@ pub struct ConfiguredBazelRunner<
 > {
     config: Arc<Config>,
     pub configured_bazel: ConfiguredBazel,
+    pub runner_daemon: Option<crate::bazel_runner_daemon::daemon_service::RunnerDaemonClient>,
     _index_table: crate::index_table::IndexTable,
     pub bazel_command_line: ParsedCommandLine,
     process_build_failures: Arc<ProcessBazelFailures<T, U>>,
@@ -163,6 +164,7 @@ impl<
     pub fn new(
         config: Arc<Config>,
         configured_bazel: ConfiguredBazel,
+        runner_daemon: Option<crate::bazel_runner_daemon::daemon_service::RunnerDaemonClient>,
         index_table: crate::index_table::IndexTable,
         bazel_command_line: ParsedCommandLine,
         process_build_failures: Arc<ProcessBazelFailures<T, U>>,
@@ -170,6 +172,7 @@ impl<
         Self {
             config,
             configured_bazel,
+            runner_daemon,
             _index_table: index_table,
             bazel_command_line,
             process_build_failures,
@@ -214,9 +217,14 @@ impl<
         super::command_line_rewriter_action::rewrite_command_line(
             &mut self.bazel_command_line,
             &self.config.command_line_rewriter,
+            &self.runner_daemon,
         )
         .await?;
 
+        #[cfg(feature = "autotest-action")]
+        if super::auto_test_action::maybe_auto_test_mode(&mut self).await? {
+            return Ok(0);
+        };
         let res_data = self.run_command_line(true).await?;
         let disable_action_stories_on_success = self.config.disable_action_stories_on_success;
 

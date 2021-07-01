@@ -6,6 +6,9 @@ pub use base_config::Config;
 pub mod command_line_rewriter;
 pub use command_line_rewriter::CommandLineRewriter;
 
+pub mod daemon_config;
+pub use daemon_config::DaemonConfig;
+
 pub fn parse_config(input: &str) -> Result<Config, toml::de::Error> {
     toml::from_str(input)
 }
