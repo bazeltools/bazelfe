@@ -1,8 +1,12 @@
 #!/bin/bash
 
-BAZEL_FE_VERSION=v0.1-102
+BAZEL_FE_VERSION=v0.1-130
 BUILDOZER_VERSION=3.5.0
 export INDEX_INPUT_LOCATION=/tmp/bazelfe_current_index
+DAEMON_NAME_SECTION=""
+if [ -n "$BAZELFE_INCLUDE_DAEMON" ]; then
+  DAEMON_NAME_SECTION="-with-daemon"
+fi
 
 TMPDIR="${TMPDIR:-/tmp}"
 
@@ -23,13 +27,13 @@ fi
 mkdir -p "$BAZEL_FE_TOOLS"
 
 
-BAZEL_RUNNER_URL=https://github.com/bazeltools/bazelfe/releases/download/${BAZEL_FE_VERSION}/bazel-runner-${BAZEL_FE_PLATFORM_NAME}
-BAZEL_RUNNER_SHA_URL=https://github.com/bazeltools/bazelfe/releases/download/${BAZEL_FE_VERSION}/bazel-runner-${BAZEL_FE_PLATFORM_NAME}.sha256
-BAZEL_RUNNER_LOCAL_PATH="${BAZEL_FE_TOOLS}/bazel-runner-${BAZEL_FE_VERSION}"
+BAZEL_RUNNER_URL=https://github.com/bazeltools/bazelfe/releases/download/${BAZEL_FE_VERSION}/bazel-runner${DAEMON_NAME_SECTION}-${BAZEL_FE_PLATFORM_NAME}
+BAZEL_RUNNER_SHA_URL=https://github.com/bazeltools/bazelfe/releases/download/${BAZEL_FE_VERSION}/bazel-runner${DAEMON_NAME_SECTION}-${BAZEL_FE_PLATFORM_NAME}.sha256
+BAZEL_RUNNER_LOCAL_PATH="${BAZEL_FE_TOOLS}/bazel-runner${DAEMON_NAME_SECTION}-${BAZEL_FE_VERSION}"
 
-JVM_INDEXER_URL=https://github.com/bazeltools/bazelfe/releases/download/${BAZEL_FE_VERSION}/jvm-indexer-${BAZEL_FE_PLATFORM_NAME}
-JVM_INDEXER_SHA_URL=https://github.com/bazeltools/bazelfe/releases/download/${BAZEL_FE_VERSION}/jvm-indexer-${BAZEL_FE_PLATFORM_NAME}.sha256
-JVM_INDEXER_LOCAL_PATH="${BAZEL_FE_TOOLS}/jvm-indexer-${BAZEL_FE_VERSION}"
+JVM_INDEXER_URL=https://github.com/bazeltools/bazelfe/releases/download/${BAZEL_FE_VERSION}/jvm-indexer${DAEMON_NAME_SECTION}-${BAZEL_FE_PLATFORM_NAME}
+JVM_INDEXER_SHA_URL=https://github.com/bazeltools/bazelfe/releases/download/${BAZEL_FE_VERSION}/jvm-indexer${DAEMON_NAME_SECTION}-${BAZEL_FE_PLATFORM_NAME}.sha256
+JVM_INDEXER_LOCAL_PATH="${BAZEL_FE_TOOLS}/jvm-indexer${DAEMON_NAME_SECTION}-${BAZEL_FE_VERSION}"
 
 BUILDOZER_URL=https://github.com/bazelbuild/buildtools/releases/download/${BUILDOZER_VERSION}/buildozer${BUILDIFIER_PLATFORM_SUFFIX}
 BUILDOZER_SHA_URL=""
