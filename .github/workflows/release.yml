@@ -26,11 +26,19 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: build
-          args: --release --all-features
+          args: --release
       - name: Prepare bazel-runner output
         run: ./.github/ci_scripts/prepare_output.sh bazel-runner-${{ matrix.platform }} staging-directory target/release/bazel-runner
       - name: Prepare jvm-indexer
         run: ./.github/ci_scripts/prepare_output.sh jvm-indexer-${{ matrix.platform }} staging-directory target/release/jvm-indexer
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --all-features
+      - name: Prepare bazel-runner output
+        run: ./.github/ci_scripts/prepare_output.sh bazel-runner-with-daemon-${{ matrix.platform }} staging-directory target/release/bazel-runner
+      - name: Prepare jvm-indexer
+        run: ./.github/ci_scripts/prepare_output.sh jvm-indexer-with-daemon-${{ matrix.platform }} staging-directory target/release/jvm-indexer
       - uses: actions/upload-artifact@master
         with:
           name: ${{ matrix.artifact }}
@@ -61,8 +69,12 @@ jobs:
           files: |
             downloads/bazel-runner-macos
             downloads/bazel-runner-macos.sha256
+            downloads/bazel-runner-with-daemon-macos
+            downloads/bazel-runner-with-daemon-macos.sha256
             downloads/bazel-runner-linux
             downloads/bazel-runner-linux.sha256
+            downloads/bazel-runner-with-daemon-linux
+            downloads/bazel-runner-with-daemon-linux.sha256
             downloads/jvm-indexer-macos
             downloads/jvm-indexer-macos.sha256
             downloads/jvm-indexer-linux
