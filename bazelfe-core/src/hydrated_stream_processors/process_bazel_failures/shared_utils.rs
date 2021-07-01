@@ -30,15 +30,15 @@ pub(in crate::hydrated_stream_processors::process_bazel_failures) fn output_succ
     output_from_paths(
         vec![&data.stdout, &data.stderr]
             .iter()
-            .cloned()
-            .filter_map(|e| e.as_ref()),
+            .filter_map(|&e| e.as_ref())
+            .filter_map(|e| e.file.as_ref()),
     )
 }
 
 pub(in crate::hydrated_stream_processors::process_bazel_failures) fn output_error_paths(
     err_data: &ActionFailedErrorInfo,
 ) -> Vec<std::path::PathBuf> {
-    output_from_paths(err_data.output_files.iter())
+    output_from_paths(err_data.files().iter().filter_map(|e| e.file.as_ref()))
 }
 
 pub(in crate::hydrated_stream_processors::process_bazel_failures) async fn text_logs_from_success(

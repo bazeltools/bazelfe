@@ -4,7 +4,7 @@ use tonic::transport::Server;
 
 use bazelfe_protos::*;
 
-use crate::buildozer_driver;
+use crate::{bazel_command_line_parser::ParsedCommandLine, buildozer_driver};
 
 use crate::config::Config;
 use crate::{
@@ -50,23 +50,20 @@ impl From<Box<dyn std::error::Error>> for BazelRunnerError {
 }
 
 pub struct BazelRunner {
-    pub config: Arc<Config>,
-    pub passthrough_args: Vec<String>,
+    pub config: Config,
+    pub bazel_command_line: ParsedCommandLine,
 }
 
 impl BazelRunner {
-    pub async fn run(mut self) -> Result<i32, BazelRunnerError> {
+    pub async fn run(self) -> Result<i32, BazelRunnerError> {
         let mut rng = rand::thread_rng();
-
-        super::command_line_rewriter_action::rewrite_command_line(
-            &mut self.passthrough_args,
-            &self.config.command_line_rewriter,
-        )?;
 
         bazel_runner::register_ctrlc_handler();
 
+        let config = Arc::new(self.config);
+
         debug!("Loading index..");
-        let index_table = match &self.config.index_input_location {
+        let index_table = match &config.index_input_location {
             Some(p) => {
                 if p.exists() {
                     let mut src_f = std::fs::File::open(p).unwrap();
@@ -83,14 +80,13 @@ impl BazelRunner {
         let process_build_failures = Arc::new(ProcessBazelFailures::new(
             index_table.clone(),
             buildozer_driver::from_binary_path(
-                &self
-                    .config
+                &config
                     .buildozer_path
                     .as_ref()
                     .expect("Unable to find a config for buildozer, error."),
             ),
             crate::hydrated_stream_processors::process_bazel_failures::CommandLineRunnerImpl(),
-            Arc::clone(&self.config),
+            Arc::clone(&config),
         )?);
         let processors: Vec<Arc<dyn BazelEventHandler>> = vec![
             process_build_failures.clone(),
@@ -103,8 +99,7 @@ impl BazelRunner {
             40000 + (rand_v % 3000)
         };
 
-        let addr: std::net::SocketAddr = self
-            .config
+        let addr: std::net::SocketAddr = config
             .bes_server_bind_address
             .map(|s| s.to_owned())
             .unwrap_or_else(|| {
@@ -131,14 +126,13 @@ impl BazelRunner {
         });
 
         let configured_bazel =
-            super::configured_bazel_runner::ConfiguredBazel::new(&sender_arc, &aes, bes_port);
+            super::configured_bazel_runner::ConfiguredBazel::new(&sender_arc, aes, bes_port);
 
         let configured_bazel_runner = ConfiguredBazelRunner::new(
-            Arc::clone(&self.config),
+            Arc::clone(&config),
             configured_bazel,
             index_table.clone(),
-            aes,
-            self.passthrough_args.clone(),
+            self.bazel_command_line.clone(),
             process_build_failures,
         );
 
@@ -147,7 +141,7 @@ impl BazelRunner {
         if index_table.is_mutated() {
             debug!("Writing out index file...");
 
-            if let Some(target_path) = &self.config.index_input_location {
+            if let Some(target_path) = &config.index_input_location {
                 if let Some(parent) = target_path.parent() {
                     std::fs::create_dir_all(parent).unwrap();
                 }

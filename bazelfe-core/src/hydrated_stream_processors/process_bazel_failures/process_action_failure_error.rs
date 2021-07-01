@@ -113,18 +113,15 @@ pub async fn process_action_failed<T: Buildozer + Clone + Send + Sync + 'static>
 mod tests {
 
     use super::*;
-    use bazelfe_protos::*;
     use hydrated_stream::ActionFailedErrorInfo;
     #[test]
     fn test_extract_dependency_isnt_used() {
         // This was referring to a random string put into the dependencies list of the target
         let action_failed_error_info = ActionFailedErrorInfo {
             label: String::from("//src/main/com/example/foo:Bar"),
-            output_files: vec![
-                build_event_stream::file::File::Uri(String::from("remote_uri://foo/bar/baz")),
-                build_event_stream::file::File::Uri(String::from("file:///foo/bar/baz")),
-            ],
             target_kind: Some(String::from("scala_library")),
+            stdout: None,
+            stderr: None,
         };
 
         let error_streams = vec![

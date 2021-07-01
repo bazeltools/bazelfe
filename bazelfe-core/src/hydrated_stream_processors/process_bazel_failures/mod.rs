@@ -88,6 +88,7 @@ pub struct ProcessBazelFailures<T: Buildozer, U: CommandLineRunner> {
 impl<T: Buildozer, U: CommandLineRunner> super::BazelEventHandler for ProcessBazelFailures<T, U> {
     async fn process_event(
         &self,
+        _bazel_run_id: usize,
         event: &hydrated_stream::HydratedInfo,
     ) -> Vec<super::BuildEventResponse> {
         self.process(event).await
@@ -215,6 +216,9 @@ impl<T: Buildozer, U: CommandLineRunner> ProcessBazelFailures<T, U> {
                     )
                     .await,
                 ]
+            }
+            hydrated_stream::HydratedInfo::TestResult(_) => {
+                vec![]
             }
         };
         r.into_iter()

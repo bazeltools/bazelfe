@@ -32,48 +32,53 @@ pub mod bazel_event {
             let _event = inner_data.and_then(|mut e| e.event.take());
 
             let decoded_evt = match _event {
-                Some(inner) => match inner {
-                    google::devtools::build::v1::build_event::Event::BazelEvent(e) => {
-                        use prost::Message;
+                Some(inner) => {
+                    match inner {
+                        google::devtools::build::v1::build_event::Event::BazelEvent(e) => {
+                            use prost::Message;
 
-                        let v = build_event_stream::BuildEvent::decode(&*e.value).unwrap();
+                            let v = build_event_stream::BuildEvent::decode(&*e.value).unwrap();
 
-                        let target_configured_evt: Option<TargetConfiguredEvt> = {
-                            let target_kind_opt = v.payload.as_ref().and_then(|e| match e {
-                                build_event_stream::build_event::Payload::Configured(cfg) => {
-                                    Some(cfg.target_kind.replace(" rule", ""))
-                                }
-                                _ => None,
-                            });
-                            let target_label_opt = v
-                                .id
-                                .as_ref()
-                                .and_then(|e| e.id.as_ref())
-                                .and_then(|e| match e {
+                            let target_configured_evt: Option<TargetConfiguredEvt> = {
+                                let target_kind_opt = v.payload.as_ref().and_then(|e| match e {
+                                    build_event_stream::build_event::Payload::Configured(cfg) => {
+                                        Some(cfg.target_kind.replace(" rule", ""))
+                                    }
+                                    _ => None,
+                                });
+                                let target_label_opt =
+                                    v.id.as_ref().and_then(|e| e.id.as_ref()).and_then(|e| {
+                                        match e {
                                     build_event_stream::build_event_id::Id::TargetConfigured(
                                         target_configured_id,
                                     ) => Some(target_configured_id.label.clone()),
                                     _ => None,
-                                });
+                                }
+                                    });
 
-                            target_kind_opt.and_then(|e| {
-                                target_label_opt.map(|u| TargetConfiguredEvt {
-                                    rule_kind: e,
-                                    label: u,
+                                target_kind_opt.and_then(|e| {
+                                    target_label_opt.map(|u| TargetConfiguredEvt {
+                                        rule_kind: e,
+                                        label: u,
+                                    })
                                 })
-                            })
-                        };
+                            };
 
-                        let aborted: Option<Evt> = {
-                            let abort_info = v.payload.as_ref().and_then(|e| match e {
-                                build_event_stream::build_event::Payload::Aborted(cfg) => Some((
-                                    build_event_stream::aborted::AbortReason::from_i32(cfg.reason),
-                                    cfg.description.clone(),
-                                )),
-                                _ => None,
-                            });
-                            let target_label_opt =
-                                v.id.as_ref()
+                            let aborted: Option<Evt> = {
+                                let abort_info = v.payload.as_ref().and_then(|e| match e {
+                                    build_event_stream::build_event::Payload::Aborted(cfg) => {
+                                        Some((
+                                            build_event_stream::aborted::AbortReason::from_i32(
+                                                cfg.reason,
+                                            ),
+                                            cfg.description.clone(),
+                                        ))
+                                    }
+                                    _ => None,
+                                });
+                                let target_label_opt = v
+                                    .id
+                                    .as_ref()
                                     .and_then(|e| e.id.as_ref())
                                     .and_then(|e| match e {
                                         build_event_stream::build_event_id::Id::ConfiguredLabel(
@@ -82,32 +87,34 @@ pub mod bazel_event {
                                         _ => None,
                                     });
 
-                            abort_info.map(|(reason, description)| {
-                                Evt::Aborted(AbortedEvt {
-                                    label: target_label_opt,
-                                    reason: reason,
-                                    description: description,
+                                abort_info.map(|(reason, description)| {
+                                    Evt::Aborted(AbortedEvt {
+                                        label: target_label_opt,
+                                        reason: reason,
+                                        description: description,
+                                    })
                                 })
-                            })
-                        };
+                            };
 
-                        let progress_info: Option<Evt> = v.payload.as_ref().and_then(|e| match e {
-                            build_event_stream::build_event::Payload::Progress(cfg) => {
-                                if cfg.stdout.is_empty() && cfg.stderr.is_empty() {
-                                    None
-                                } else {
-                                    Some(Evt::Progress(ProgressEvt {
-                                        stdout: cfg.stdout.clone(),
-                                        stderr: cfg.stderr.clone(),
-                                    }))
-                                }
-                            }
-                            _ => None,
-                        });
+                            let progress_info: Option<Evt> =
+                                v.payload.as_ref().and_then(|e| match e {
+                                    build_event_stream::build_event::Payload::Progress(cfg) => {
+                                        if cfg.stdout.is_empty() && cfg.stderr.is_empty() {
+                                            None
+                                        } else {
+                                            Some(Evt::Progress(ProgressEvt {
+                                                stdout: cfg.stdout.clone(),
+                                                stderr: cfg.stderr.clone(),
+                                            }))
+                                        }
+                                    }
+                                    _ => None,
+                                });
 
-                        let action_info: Option<Evt> = {
-                            let target_label_opt =
-                                v.id.as_ref()
+                            let action_info: Option<Evt> = {
+                                let target_label_opt = v
+                                    .id
+                                    .as_ref()
                                     .and_then(|e| e.id.as_ref())
                                     .and_then(|e| match e {
                                         build_event_stream::build_event_id::Id::ActionCompleted(
@@ -116,45 +123,46 @@ pub mod bazel_event {
                                         _ => None,
                                     });
 
-                            target_label_opt.and_then(|label| {
-                                v.payload.as_ref().and_then(|e| match e {
-                                    build_event_stream::build_event::Payload::Action(
-                                        action_executed,
-                                    ) => {
-                                        let stdout = action_executed
-                                            .stdout
-                                            .as_ref()
-                                            .and_then(|e| e.file.clone());
-                                        let stderr = action_executed
-                                            .stderr
-                                            .as_ref()
-                                            .and_then(|e| e.file.clone());
+                                target_label_opt.and_then(|label| {
+                                    v.payload.as_ref().and_then(|e| match e {
+                                        build_event_stream::build_event::Payload::Action(
+                                            action_executed,
+                                        ) => {
+                                            let stdout = action_executed
+                                                .stdout
+                                                .as_ref()
+                                                .and_then(|e| e.file.clone());
+                                            let stderr = action_executed
+                                                .stderr
+                                                .as_ref()
+                                                .and_then(|e| e.file.clone());
 
-                                        Some(Evt::ActionCompleted(ActionCompletedEvt {
-                                            success: action_executed.success,
-                                            label: label,
-                                            stdout: stdout,
-                                            stderr: stderr,
-                                        }))
-                                    }
-                                    _ => None,
-                                })
-                            })
-                        };
-
-                        let named_set_of_files: Option<Evt> = {
-                            let fileset_id =
-                                v.id.as_ref()
-                                    .and_then(|e| e.id.as_ref())
-                                    .and_then(|e| match e {
-                                        build_event_stream::build_event_id::Id::NamedSet(
-                                            fileset_id,
-                                        ) => Some(fileset_id.id.clone()),
+                                            Some(Evt::ActionCompleted(ActionCompletedEvt {
+                                                success: action_executed.success,
+                                                label: label,
+                                                stdout: stdout,
+                                                stderr: stderr,
+                                            }))
+                                        }
                                         _ => None,
-                                    });
+                                    })
+                                })
+                            };
 
-                            fileset_id.and_then(|id| {
-                                v.payload.as_ref().and_then(|e| match e {
+                            let named_set_of_files: Option<Evt> = {
+                                let fileset_id =
+                                    v.id.as_ref().and_then(|e| e.id.as_ref()).and_then(
+                                        |e| match e {
+                                            build_event_stream::build_event_id::Id::NamedSet(
+                                                fileset_id,
+                                            ) => Some(fileset_id.id.clone()),
+                                            _ => None,
+                                        },
+                                    );
+
+                                fileset_id.and_then(|id| {
+                                    v.payload.as_ref().and_then(|e| {
+                                        match e {
                                     build_event_stream::build_event::Payload::NamedSetOfFiles(
                                         named_set_of_files,
                                     ) => Some(Evt::NamedSetOfFiles {
@@ -162,13 +170,15 @@ pub mod bazel_event {
                                         named_set_of_files: named_set_of_files.clone(),
                                     }),
                                     _ => None,
+                                }
+                                    })
                                 })
-                            })
-                        };
+                            };
 
-                        let target_complete: Option<Evt> = {
-                            let target_label_opt =
-                                v.id.as_ref()
+                            let target_complete: Option<Evt> = {
+                                let target_label_opt = v
+                                    .id
+                                    .as_ref()
                                     .and_then(|e| e.id.as_ref())
                                     .and_then(|e| match e {
                                         build_event_stream::build_event_id::Id::TargetCompleted(
@@ -181,75 +191,92 @@ pub mod bazel_event {
                                         _ => None,
                                     });
 
-                            target_label_opt.and_then(|(label, aspect)| {
-                                v.payload.as_ref().and_then(|e| match e {
-                                    build_event_stream::build_event::Payload::Completed(
-                                        target_completed,
-                                    ) => Some(Evt::TargetCompleted(TargetCompletedEvt {
-                                        success: target_completed.success,
-                                        label: label,
-                                        aspect: aspect,
-                                        output_groups: target_completed.output_group.clone(),
-                                    })),
-                                    _ => None,
+                                target_label_opt.and_then(|(label, aspect)| {
+                                    v.payload.as_ref().and_then(|e| match e {
+                                        build_event_stream::build_event::Payload::Completed(
+                                            target_completed,
+                                        ) => Some(Evt::TargetCompleted(TargetCompletedEvt {
+                                            success: target_completed.success,
+                                            label: label,
+                                            aspect: aspect,
+                                            output_groups: target_completed.output_group.clone(),
+                                        })),
+                                        _ => None,
+                                    })
                                 })
-                            })
-                        };
+                            };
 
-                        let test_outputs: Option<Evt> = {
-                            let failed_file_data: Option<Vec<build_event_stream::file::File>> =
-                                v.payload.as_ref().and_then(|e| match e {
-                                    build_event_stream::build_event::Payload::TestSummary(cfg) => {
-                                        Some(
-                                            cfg.failed
+                            let test_outputs: Option<Evt> = {
+                                let failed_file_data: Option<(
+                                    build_event_stream::TestStatus,
+                                    Vec<build_event_stream::file::File>,
+                                )> = v.payload.as_ref().and_then(|e| match e {
+                                    build_event_stream::build_event::Payload::TestResult(cfg) => {
+                                        Some((
+                                            cfg.status(),
+                                            cfg.test_action_output
                                                 .iter()
                                                 .flat_map(|e| e.file.clone().into_iter())
                                                 .collect(),
-                                        )
+                                        ))
                                     }
                                     _ => None,
                                 });
 
-                            let target_label_opt =
-                                v.id.as_ref()
-                                    .and_then(|e| e.id.as_ref())
-                                    .and_then(|e| match e {
-                                        build_event_stream::build_event_id::Id::TestSummary(
-                                            test_summary_id,
-                                        ) => Some(test_summary_id.label.clone()),
-                                        _ => None,
-                                    });
+                                let target_label_opt =
+                                    v.id.as_ref().and_then(|e| e.id.as_ref()).and_then(
+                                        |e| match e {
+                                            build_event_stream::build_event_id::Id::TestResult(
+                                                test_summary_id,
+                                            ) => Some(test_summary_id.label.clone()),
+                                            _ => None,
+                                        },
+                                    );
 
-                            failed_file_data.and_then(|failed_files| {
+                                failed_file_data.and_then(|(test_status, failed_files)| {
                                 target_label_opt.map(|u| {
-                                    Evt::TestFailure(TestFailureEvt {
+
+                                    let test_status= match test_status {
+                                        build_event_stream::TestStatus::NoStatus => todo!(),
+                                        build_event_stream::TestStatus::Passed => TestStatus::Passed,
+                                        build_event_stream::TestStatus::Flaky => TestStatus::Flaky,
+                                        build_event_stream::TestStatus::Timeout => TestStatus::Timeout,
+                                        build_event_stream::TestStatus::Failed => TestStatus::Failed,
+                                        build_event_stream::TestStatus::Incomplete => TestStatus::Incomplete,
+                                        build_event_stream::TestStatus::RemoteFailure => TestStatus::RemoteFailure,
+                                        build_event_stream::TestStatus::FailedToBuild => TestStatus::FailedToBuild,
+                                        build_event_stream::TestStatus::ToolHaltedBeforeTesting => TestStatus::ToolHaltedBeforeTesting,
+                                    };
+                                    Evt::TestResult(TestResultEvt {
                                         label: u,
+                                        test_status,
                                         failed_files: failed_files,
                                     })
                                 })
                             })
-                        };
+                            };
 
-                        if let Some(e) = target_configured_evt {
-                            Evt::TargetConfigured(e)
-                        } else if let Some(e) = action_info {
-                            e
-                        } else if let Some(e) = target_complete {
-                            e
-                        } else if let Some(e) = test_outputs {
-                            e
-                        } else if let Some(e) = named_set_of_files {
-                            e
-                        } else if let Some(e) = aborted {
-                            e
-                        } else if let Some(e) = progress_info {
-                            e
-                        } else {
-                            Evt::BazelEvent(v)
+                            if let Some(e) = target_configured_evt {
+                                Evt::TargetConfigured(e)
+                            } else if let Some(e) = action_info {
+                                e
+                            } else if let Some(e) = target_complete {
+                                e
+                            } else if let Some(e) = test_outputs {
+                                e
+                            } else if let Some(e) = named_set_of_files {
+                                e
+                            } else if let Some(e) = aborted {
+                                e
+                            } else if let Some(e) = progress_info {
+                                e
+                            } else {
+                                Evt::BazelEvent(v)
+                            }
                         }
+                        other => Evt::UnknownEvent(format!("{:?}", other)),
                     }
-                    other => Evt::UnknownEvent(format!("{:?}", other)),
-                },
+                }
                 None => Evt::UnknownEvent("Missing Event".to_string()),
             };
 
@@ -279,8 +306,20 @@ pub mod bazel_event {
     }
 
     #[derive(Clone, PartialEq, Debug)]
-    pub struct TestFailureEvt {
+    pub enum TestStatus {
+        Passed,
+        Flaky,
+        Timeout,
+        Failed,
+        Incomplete,
+        RemoteFailure,
+        FailedToBuild,
+        ToolHaltedBeforeTesting,
+    }
+    #[derive(Clone, PartialEq, Debug)]
+    pub struct TestResultEvt {
         pub label: String,
+        pub test_status: TestStatus,
         pub failed_files: Vec<build_event_stream::file::File>,
     }
     #[derive(Clone, PartialEq, Debug)]
@@ -301,7 +340,7 @@ pub mod bazel_event {
         BazelEvent(build_event_stream::BuildEvent),
         TargetConfigured(TargetConfiguredEvt),
         ActionCompleted(ActionCompletedEvt),
-        TestFailure(TestFailureEvt),
+        TestResult(TestResultEvt),
         Progress(ProgressEvt),
         Aborted(AbortedEvt),
         TargetCompleted(TargetCompletedEvt),
