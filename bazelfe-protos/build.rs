@@ -28,5 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tonic_build::configure().compile(&["proto/devtools/buildozer/api.proto"], &["proto"])?;
 
+    tonic_build::configure().compile(&["proto/blaze_query/build.proto"], &["proto"])?;
+
     Ok(())
 }

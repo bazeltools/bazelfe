@@ -55,10 +55,20 @@ pub struct BazelRunner {
 }
 
 impl BazelRunner {
-    pub async fn run(self) -> Result<i32, BazelRunnerError> {
+    pub async fn run(mut self) -> Result<i32, BazelRunnerError> {
         let mut rng = rand::thread_rng();
 
         bazel_runner::register_ctrlc_handler();
+
+        debug!("Based on custom action if present, overriding the daemon option");
+        if let Some(action) = self.bazel_command_line.action.as_ref() {
+            if let crate::bazel_command_line_parser::Action::Custom(
+                crate::bazel_command_line_parser::CustomAction::AutoTest,
+            ) = action
+            {
+                self.config.daemon_config.enabled = true;
+            }
+        }
 
         let config = Arc::new(self.config);
 
@@ -125,12 +135,19 @@ impl BazelRunner {
                 .unwrap();
         });
 
+        let runner_daemon = crate::bazel_runner_daemon::daemon_manager::connect_to_server(
+            &config.daemon_config,
+            &self.bazel_command_line.bazel_binary.clone(),
+        )
+        .await?;
+
         let configured_bazel =
             super::configured_bazel_runner::ConfiguredBazel::new(&sender_arc, aes, bes_port);
 
         let configured_bazel_runner = ConfiguredBazelRunner::new(
             Arc::clone(&config),
             configured_bazel,
+            runner_daemon,
             index_table.clone(),
             self.bazel_command_line.clone(),
             process_build_failures,
