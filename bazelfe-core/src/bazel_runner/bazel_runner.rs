@@ -49,6 +49,15 @@ impl From<Box<dyn std::error::Error>> for BazelRunnerError {
     }
 }
 
+use crate::bazel_runner::configured_bazel_runner::ConfiguredBazelRunnerError;
+impl From<ConfiguredBazelRunnerError> for BazelRunnerError {
+    fn from(inner: ConfiguredBazelRunnerError) -> Self {
+        match inner {
+            ConfiguredBazelRunnerError::OtherError(o) => Self::Unknown(o),
+            ConfiguredBazelRunnerError::UserErrorReport(u) => Self::UserErrorReport(u),
+        }
+    }
+}
 pub struct BazelRunner {
     pub config: Config,
     pub bazel_command_line: ParsedCommandLine,
@@ -136,11 +145,22 @@ impl BazelRunner {
         });
 
         #[cfg(feature = "bazelfe-daemon")]
-        let runner_daemon = crate::bazel_runner_daemon::daemon_manager::connect_to_server(
-            &config.daemon_config,
-            &self.bazel_command_line.bazel_binary.clone(),
-        )
-        .await?;
+        let runner_daemon = if let Some(crate::bazel_command_line_parser::Action::BuiltIn(
+            crate::bazel_command_line_parser::BuiltInAction::Shutdown,
+        )) = self.bazel_command_line.action
+        {
+            crate::bazel_runner_daemon::daemon_manager::try_kill_server_from_cfg(
+                &config.daemon_config,
+            )
+            .await;
+            None
+        } else {
+            crate::bazel_runner_daemon::daemon_manager::connect_to_server(
+                &config.daemon_config,
+                &self.bazel_command_line.bazel_binary.clone(),
+            )
+            .await?
+        };
 
         let configured_bazel =
             super::configured_bazel_runner::ConfiguredBazel::new(&sender_arc, aes, bes_port);

@@ -467,7 +467,7 @@ impl super::daemon_service::RunnerDaemon for DaemonServerInstance {
             .await
         {
             super::daemon_service::TargetsFromFilesResponse::Targets(t) => t,
-            super::daemon_service::TargetsFromFilesResponse::InQuery => unreachable!(),
+            super::daemon_service::TargetsFromFilesResponse::InQuery => Vec::default(),
         }
     }
 

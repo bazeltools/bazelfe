@@ -15,8 +15,8 @@ use crate::{
     },
 };
 use crate::{build_events::build_event_server::bazel_event, config::Config};
-
 use std::sync::Arc;
+use thiserror::Error;
 
 use tokio::sync::{Mutex, RwLock};
 
@@ -151,6 +151,30 @@ pub struct ConfiguredBazelRunner<
     process_build_failures: Arc<ProcessBazelFailures<T, U>>,
 }
 
+#[derive(Error, Debug)]
+pub enum ConfiguredBazelRunnerError {
+    #[error("Reporting user error: `{0}`")]
+    UserErrorReport(#[from] super::UserReportError),
+
+    #[error("Unclassified error: {0}")]
+    OtherError(#[from] Box<dyn std::error::Error>),
+}
+
+impl From<crate::bazel_runner::command_line_rewriter_action::RewriteCommandLineError>
+    for ConfiguredBazelRunnerError
+{
+    fn from(
+        cle: crate::bazel_runner::command_line_rewriter_action::RewriteCommandLineError,
+    ) -> Self {
+        use crate::bazel_runner::command_line_rewriter_action::RewriteCommandLineError;
+        match cle {
+            RewriteCommandLineError::UserErrorReport(e) => {
+                ConfiguredBazelRunnerError::UserErrorReport(e)
+            }
+        }
+    }
+}
+
 pub struct RunCompleteState {
     pub attempts: u16,
     pub total_actions_taken: u32,
@@ -217,7 +241,7 @@ impl<
         })
     }
 
-    pub async fn run(mut self) -> Result<i32, Box<dyn std::error::Error>> {
+    pub async fn run(mut self) -> Result<i32, ConfiguredBazelRunnerError> {
         super::command_line_rewriter_action::rewrite_command_line(
             &mut self.bazel_command_line,
             &self.config.command_line_rewriter,

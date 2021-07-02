@@ -38,5 +38,22 @@ Putting this in `./tools/bazelfe_config` as the config for the commandline rewri
 Will fail with an error message about specifying a test target.
 
 
+### Suggest a test target to use
 
+For this to operate you must be using a build which includes the daemon code. It should be available in the releases. This example on master will by default use this build.
+
+```toml
+[CommandLineRewriter]
+  [CommandLineRewriter.test]
+    type = 'SuggestTestTarget'
+
+[DaemonConfig]
+  enabled = true
+```
+
+Putting this in `./tools/bazelfe_config` as the config for the commandline rewriter will enable the rewriting such that running:
+
+`./bazelisk test`
+
+Will fail with an error message about specifying a test target.
 

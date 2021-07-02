@@ -69,14 +69,22 @@ pub async fn rewrite_command_line(
                                 });
                             });
 
+                            let suggestion_str = if buf.is_empty() {
+                                format!("Daemon hasn't noticed any changes to suggest test targets")
+                            } else {
+                                format!(
+                                    r#"Suggestions: 
+                                |{}
+                                |"#,
+                                    buf
+                                )
+                            };
                             Err(RewriteCommandLineError::UserErrorReport(
                                 super::UserReportError(
                                     format!(
                                         r#"|No test target specified.
-                                    | Suggestions: 
-                                    |{}
-                                    |"#,
-                                        buf
+                                    |{}"#,
+                                        suggestion_str
                                     )
                                     .trim_margin()
                                     .unwrap()
@@ -91,7 +99,7 @@ pub async fn rewrite_command_line(
 
                     #[cfg(not(feature = "bazelfe-daemon"))]
                     Err(RewriteCommandLineError::UserErrorReport(super::UserReportError(
-                        "Configured to suggest possible test targets to run, but daemon is not in this build".to_owned())))?;
+                        "Bazelfe is configured to suggest possible test targets to run, however the daemon is not included in this build".to_owned())))?;
                 }
             }
         }

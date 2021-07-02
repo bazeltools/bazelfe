@@ -1,3 +1,6 @@
 [CommandLineRewriter]
   [CommandLineRewriter.test]
-    type = 'EmptyTestToFail'
+    type = 'SuggestTestTarget'
+
+[DaemonConfig]
+  enabled = true
