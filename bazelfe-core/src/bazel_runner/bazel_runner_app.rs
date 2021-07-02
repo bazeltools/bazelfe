@@ -129,9 +129,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     builder.format_timestamp_nanos();
     builder.target(pretty_env_logger::env_logger::Target::Stderr);
     if let Ok(s) = ::std::env::var("RUST_LOG") {
-        builder.parse_filters(&s);
+        let f = if s.contains("tarpc") {
+            s
+        } else {
+            format!("tarpc::client=error,{}", s)
+        };
+        builder.parse_filters(&f);
     } else {
-        builder.parse_filters("warn,bazelfe_core=info,bazel_runner=info");
+        builder.parse_filters("warn,tarpc::client=error,bazelfe_core=info,bazel_runner=info");
     }
     builder.init();
 

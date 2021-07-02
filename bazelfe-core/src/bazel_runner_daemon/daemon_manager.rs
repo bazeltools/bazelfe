@@ -41,6 +41,14 @@ async fn start_server(
     Ok(())
 }
 
+pub(in crate) async fn try_kill_server_from_cfg(daemon_config: &DaemonConfig) -> () {
+    let paths = daemon_paths_from_config(daemon_config);
+
+    if let Some(pid) = super::read_pid(&paths) {
+        signal_mgr::kill(pid)
+    }
+}
+
 async fn try_kill_server(paths: &DaemonPaths) -> () {
     if let Some(pid) = super::read_pid(&paths) {
         signal_mgr::kill(pid)
@@ -115,6 +123,19 @@ async fn maybe_connect_to_server(
     }
 }
 
+fn daemon_paths_from_config(daemon_config: &DaemonConfig) -> DaemonPaths {
+    DaemonPaths {
+        logs_path: daemon_config.daemon_communication_folder.clone(),
+        pid_path: daemon_config
+            .daemon_communication_folder
+            .clone()
+            .join("server.pid"),
+        socket_path: daemon_config
+            .daemon_communication_folder
+            .clone()
+            .join("server.sock"),
+    }
+}
 pub async fn connect_to_server(
     daemon_config: &DaemonConfig,
     bazel_binary_path: &PathBuf,
@@ -127,17 +148,7 @@ pub async fn connect_to_server(
 
     let executable_id = super::current_executable_id();
 
-    let paths = DaemonPaths {
-        logs_path: daemon_config.daemon_communication_folder.clone(),
-        pid_path: daemon_config
-            .daemon_communication_folder
-            .clone()
-            .join("server.pid"),
-        socket_path: daemon_config
-            .daemon_communication_folder
-            .clone()
-            .join("server.sock"),
-    };
+    let paths = daemon_paths_from_config(daemon_config);
 
     let mut cntr = 0;
     while cntr < 3 {
