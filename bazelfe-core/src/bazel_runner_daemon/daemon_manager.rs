@@ -94,28 +94,25 @@ async fn maybe_connect_to_server(
     let conn = UnixStream::connect(&paths.socket_path).await?;
 
     let transport = tarpc::serde_transport::new(codec_builder.new_framed(conn), Bincode::default());
-    if let Ok(cli) =
-        super::daemon_service::RunnerDaemonClient::new(Default::default(), transport).spawn()
-    {
-        match cli.ping(tarpc::context::current()).await {
-            Ok(remote_id) => {
-                if executable_id == &remote_id {
-                    return Ok(Some(cli));
-                } else {
-                    try_kill_server(&paths).await;
-                    return Ok(None);
-                }
-            }
-            Err(err) => {
-                eprintln!(
-                    "Connected to daemon process, but ping failed with error: {:#?}",
-                    err
-                );
-                return Ok(None);
+    let cli = super::daemon_service::RunnerDaemonClient::new(Default::default(), transport).spawn();
+
+    match cli.ping(tarpc::context::current()).await {
+        Ok(remote_id) => {
+            if executable_id == &remote_id {
+                Ok(Some(cli))
+            } else {
+                try_kill_server(&paths).await;
+                Ok(None)
             }
         }
+        Err(err) => {
+            eprintln!(
+                "Connected to daemon process, but ping failed with error: {:#?}",
+                err
+            );
+            Ok(None)
+        }
     }
-    Ok(None)
 }
 
 pub async fn connect_to_server(
