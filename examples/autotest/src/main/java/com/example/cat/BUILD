@@ -1,5 +1,6 @@
 java_library(
-    name = "example",
+    name = "cat",
     srcs = ["Cat.java"],
     visibility = ["//visibility:public"],
+    deps = ["//src/main/java/com/example/animal"],
 )
