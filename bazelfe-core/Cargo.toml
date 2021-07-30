@@ -97,7 +97,7 @@ tempfile = {version = "3.2.0", optional = true}
 
 
 [build-dependencies]
-vergen = "5.1.13"
+vergen = "5.1.14"
 anyhow = "1.0.42"
 
 [dependencies.bazelfe-protos]
