@@ -53,7 +53,7 @@ path = "src/bazel_runner/bazel_runner_app.rs"
 [dependencies]
 async-channel = "1.6.1"
 async-stream = "0.3.2"
-async-trait = "0.1.50"
+async-trait = "0.1.51"
 byteorder = "1.4.3"
 bytes = "1.0.1"
 clap = "3.0.0-beta.2"
@@ -89,7 +89,7 @@ nix = "0.22.0"
 flume = {version = "0.10.5", optional = true}
 trim-margin = {version = "0.1.0", optional = true}
 dashmap = {version = "4.0.2", optional = true}
-tui = {version = "0.15.0", default_features = false, features = ["crossterm"], optional = true}
+tui = {version = "0.16.0", default_features = false, features = ["crossterm"], optional = true}
 crossterm = {version = "0.20.0", optional = true}
 muncher = {version  = "0.6.1", optional = true}
 humantime = "2.1.0"
