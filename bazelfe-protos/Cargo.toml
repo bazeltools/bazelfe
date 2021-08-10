@@ -7,7 +7,7 @@ license = "Apache-2.0"
 
 
 [dependencies]
-tonic = { version = "0.5.0", features = ["tls"] }
+tonic = { version = "0.5.1", features = ["tls"] }
 prost = "0.8"
 # Required for wellknown types
 prost-types = "0.8"
