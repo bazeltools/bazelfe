@@ -78,7 +78,7 @@ thiserror = "1.0.26"
 fork = {version = "0.1.18", optional=true}
 serde_json = "1.0.66"
 stdio-override = {version = "0.1.3", optional = true}
-libc = "0.2.98"
+libc = "0.2.99"
 crossbeam-channel = {version = "0.5.1", optional = true}
 notify = {version = "5.0.0-pre.7", optional = true}
 tarpc = {version = "0.26.2", features = ["tokio1", "serde1", "serde-transport"], optional=true}
