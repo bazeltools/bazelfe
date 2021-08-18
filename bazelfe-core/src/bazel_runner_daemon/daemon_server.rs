@@ -695,7 +695,7 @@ pub async fn main(
 
     println!("Starting inotify watcher");
     let mut core_watcher: RecommendedWatcher =
-        Watcher::new_immediate(move |res: notify::Result<notify::Event>| {
+        RecommendedWatcher::new(move |res: notify::Result<notify::Event>| {
             match res {
                 Ok(event) => {
                     if let Err(e) = flume_tx.send(event) {
