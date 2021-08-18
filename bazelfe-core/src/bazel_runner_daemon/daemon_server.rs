@@ -728,9 +728,7 @@ pub async fn main(
         }
         eprintln!("Watching {:#?}", path);
 
-        core_watcher
-            .watch(path.clone(), RecursiveMode::Recursive)
-            .unwrap();
+        core_watcher.watch(&path, RecursiveMode::Recursive).unwrap();
     }
 
     let core_watcher = Arc::new(std::sync::Mutex::new(core_watcher));
@@ -738,7 +736,7 @@ pub async fn main(
     let notify_ignore_regexes = daemon_config.inotify_ignore_regexes.clone();
 
     let mut root_watcher: RecommendedWatcher =
-        Watcher::new_immediate(move |res: notify::Result<notify::Event>| {
+        RecommendedWatcher::new(move |res: notify::Result<notify::Event>| {
             match res {
                 Ok(event) => match event.kind {
                     notify::EventKind::Create(_) => {
@@ -759,9 +757,7 @@ pub async fn main(
                             let mut core_watcher = core_watcher.lock().unwrap();
                             eprintln!("Watching {:#?}", path);
 
-                            core_watcher
-                                .watch(path.clone(), RecursiveMode::Recursive)
-                                .unwrap();
+                            core_watcher.watch(&path, RecursiveMode::Recursive).unwrap();
                         }
                     }
                     _ => (),
@@ -773,7 +769,7 @@ pub async fn main(
         .unwrap();
 
     root_watcher
-        .watch(current_dir, RecursiveMode::NonRecursive)
+        .watch(&current_dir, RecursiveMode::NonRecursive)
         .unwrap();
 
     eprintln!("Daemon process is up! and serving on socket");
