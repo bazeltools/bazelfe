@@ -1137,9 +1137,9 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "muncher"
-version = "0.6.1"
+version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0aeee23e39d46940d01b843da99d6e26fb8b3659e33f3c48272aef45d978671"
+checksum = "f9b48a067e1e74613530076c6b9ea04c359f0a57349d9f2c8aa265d4a44328a7"
 
 [[package]]
 name = "nanorand"
