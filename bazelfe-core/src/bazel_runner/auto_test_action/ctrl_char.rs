@@ -45,7 +45,7 @@ impl CtrlChunk {
     pub fn parse(munch: &mut Muncher) -> Self {
         // munch.reset_peek();
         // handles links
-        if munch.seek(5) == Some("\u{1b}]8;;".to_string()) {
+        if munch.seek(5) == Some("\u{1b}]8;;") {
             let raw_link = munch.eat_until(|c| *c == '\u{7}').collect::<String>();
             // eat all of display text for now
             // TODO display the wanted text for the link [show_me](http://link.com)
@@ -64,7 +64,7 @@ impl CtrlChunk {
         }
 
         munch.reset_peek();
-        if munch.seek(1) == Some("\u{1b}".to_string()) {
+        if munch.seek(1) == Some("\u{1b}") {
             munch.eat();
         }
 
@@ -79,7 +79,7 @@ impl CtrlChunk {
 
         munch.reset_peek();
 
-        if munch.seek(4) == Some("\u{1b}[0m".to_string()) {
+        if munch.seek(4) == Some("\u{1b}[0m") {
             // eat the reset escape code
             let _ = munch.eat_until(|c| *c == 'm');
             munch.eat();
