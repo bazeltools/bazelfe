@@ -85,7 +85,7 @@ tarpc = {version = "0.27.2", features = ["tokio1", "serde1", "serde-transport"],
 tokio-serde = { version = "0.8", features = ["bincode"] , optional=true}
 tokio-util = { version = "0.6.8", features = ["compat"] }
 sha2 = "0.9.8"
-nix = "0.22.1"
+nix = "0.23.0"
 flume = {version = "0.10.9", optional = true}
 trim-margin = {version = "0.1.0", optional = true}
 dashmap = {version = "4.0.2", optional = true}
