@@ -1,9 +1,9 @@
-use clap::Clap;
+use clap::Parser;
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
 use tokio::process::Command;
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 #[clap(name = "basic")]
 struct Opt {
     #[clap(long, parse(from_os_str))]

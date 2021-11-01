@@ -1,10 +1,10 @@
-use clap::Clap;
+use clap::Parser;
 use std::path::PathBuf;
 use std::{collections::HashSet, error::Error};
 
 // use bazelfe_core::index_table::parse_file;
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 #[clap(name = "basic")]
 struct Opt {
     /// Files to process

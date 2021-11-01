@@ -606,8 +606,8 @@ struct SharedLastFiles {
     inotify_ignore_regexes: NotifyRegexes,
 }
 impl SharedLastFiles {}
-use clap::Clap;
-#[derive(Clap, Debug)]
+use clap::Parser;
+#[derive(Parser, Debug)]
 #[clap(name = "basic")]
 struct DaemonArgs {
     #[clap(parse(from_os_str))]

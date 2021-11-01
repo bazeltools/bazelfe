@@ -1,5 +1,5 @@
 use bazelfe_core::config::DaemonConfig;
-use clap::Clap;
+use clap::Parser;
 use std::error::Error;
 use std::path::PathBuf;
 
@@ -22,20 +22,20 @@ impl std::str::FromStr for RunMode {
     }
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 enum SubCommands {
     SpawnDaemon,
     QueryGraph,
     RunForkExecDaemon(DaemonArgs),
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 struct DaemonArgs {
     #[clap(parse(from_os_str))]
     pub config_path: PathBuf,
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 #[clap(name = "basic")]
 struct Opt {
     #[clap(long, parse(from_os_str))]

@@ -1,10 +1,10 @@
-use clap::Clap;
+use clap::Parser;
 use std::error::Error;
 use std::path::PathBuf;
 
 use bazelfe_core::buildozer_driver::{from_binary_path, Buildozer};
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 #[clap(name = "basic")]
 struct Opt {
     #[clap(long, env = "BUILDOZER_PATH", parse(from_os_str))]
