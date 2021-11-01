@@ -1,4 +1,4 @@
-use clap::Clap;
+use clap::Parser;
 #[macro_use]
 extern crate log;
 use regex::Regex;
@@ -38,7 +38,7 @@ use std::io::Write;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 #[clap(name = "basic")]
 struct Opt {
     /// Optional if you have some restrictions/needs where the server bazel will connect to should bind
