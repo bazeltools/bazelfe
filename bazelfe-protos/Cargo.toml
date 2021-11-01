@@ -7,10 +7,10 @@ license = "Apache-2.0"
 
 
 [dependencies]
-tonic = { version = "0.6.1", features = ["tls"] }
+tonic = { version = "0.6", features = ["tls"] }
 prost = "0.9"
 # Required for wellknown types
 prost-types = "0.9"
  
 [build-dependencies]
-tonic-build = { version = "0.6.1", features = ["prost"] }
+tonic-build = { version = "0.6", features = ["prost"] }
