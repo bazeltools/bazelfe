@@ -2,9 +2,8 @@
 name = "bazelfe-protos"
 version = "0.1.0"
 authors = ["Ian O'Connell <ianoc@ianoc.net>"]
-edition = "2018"
+edition = "2021"
 license = "Apache-2.0"
-
 
 [dependencies]
 tonic = { version = "0.6", features = ["tls"] }

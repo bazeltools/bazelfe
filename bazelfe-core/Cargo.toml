@@ -1,6 +1,6 @@
 [package]
 authors = ["Ian O'Connell <ianoc@ianoc.net>"]
-edition = "2018"
+edition = "2021"
 license = "Apache-2.0"
 name = "bazelfe-core"
 version = "0.1.0"
