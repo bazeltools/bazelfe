@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate log;
 
-use clap::Clap;
+use clap::Parser;
 
 use std::{env, sync::Arc};
 use tonic::transport::Server;
@@ -14,7 +14,7 @@ use google::devtools::build::v1::PublishBuildToolEventStreamRequest;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 #[clap(name = "basic")]
 struct Opt {
     #[clap(name = "BIND_ADDRESS")]

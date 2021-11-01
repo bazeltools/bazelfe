@@ -1,4 +1,4 @@
-use clap::{AppSettings, Clap};
+use clap::{AppSettings, Parser};
 use std::path::PathBuf;
 
 use std::ffi::OsString;
@@ -6,7 +6,7 @@ use std::ffi::OsString;
 use bazelfe_core::config::Config;
 use bazelfe_core::{bazel_command_line_parser::parse_bazel_command_line, bazel_runner};
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 #[clap(name = "basic", setting = AppSettings::TrailingVarArg)]
 struct Opt {
     #[clap(long, env = "BIND_ADDRESS")]
