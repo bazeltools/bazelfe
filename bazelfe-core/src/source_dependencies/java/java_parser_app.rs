@@ -1,4 +1,4 @@
-use clap::Clap;
+use clap::Parser;
 use std::error::Error;
 use std::fs;
 use std::path::PathBuf;
@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use bazelfe_core::source_dependencies::java::parse_file;
 use bazelfe_core::source_dependencies::SelectorType;
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 #[clap(name = "basic")]
 struct Opt {
     /// Files to process
