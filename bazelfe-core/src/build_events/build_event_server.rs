@@ -395,7 +395,6 @@ where
         Box<
             dyn Stream<Item = Result<PublishBuildToolEventStreamResponse, Status>>
                 + Send
-                + Sync
                 + 'static,
         >,
     >;
