@@ -106,7 +106,7 @@ path = "../bazelfe-protos"
 [dependencies.futures]
 default-features = false
 features = ["alloc"]
-version = "0.3.17"
+version = "0.3.18"
 
 [dependencies.tokio]
 features = ["full"]
