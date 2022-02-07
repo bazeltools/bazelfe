@@ -393,9 +393,7 @@ where
 {
     type PublishBuildToolEventStreamStream = Pin<
         Box<
-            dyn Stream<Item = Result<PublishBuildToolEventStreamResponse, Status>>
-                + Send
-                + 'static,
+            dyn Stream<Item = Result<PublishBuildToolEventStreamResponse, Status>> + Send + 'static,
         >,
     >;
 
