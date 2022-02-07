@@ -527,10 +527,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     next_v.push(vec![e.clone()]);
                                 }
                             }
-                            let next_v: Vec<Vec<RuleQuery>> = current_chunk
-                                .chunks(next_chunk_len)
-                                .into_iter()
-                                .map(|e| {
+
+                            remaining_chunks.extend(
+                                current_chunk.chunks(next_chunk_len).into_iter().map(|e| {
                                     e.to_vec()
                                         .into_iter()
                                         .filter(|e| {
@@ -538,9 +537,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 && !global_banned_roots.contains(&e.root)
                                         })
                                         .collect()
-                                })
-                                .collect();
-                            remaining_chunks.extend(next_v.into_iter());
+                                }),
+                            );
                         }
                     }
                 } else {
@@ -559,7 +557,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut all_found_targets = HashSet::new();
     for (k, v) in all_targets_to_use.iter() {
         let spaces = 70 - k.len();
-        let space_section = std::iter::repeat(" ").take(spaces).collect::<String>();
+        let space_section = " ".repeat(spaces);
         info!("{}{}{}", k, space_section, v.len());
         for e in v.iter() {
             all_found_targets.insert(e.clone());
@@ -603,9 +601,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let addr: std::net::SocketAddr = opt
         .bind_address
-        .map(|s| s.to_owned())
-        .or(env::var("BIND_ADDRESS").ok())
-        .unwrap_or_else(|| format!("127.0.0.1:{}", default_port).into())
+        .or_else(|| env::var("BIND_ADDRESS").ok())
+        .unwrap_or_else(|| format!("127.0.0.1:{}", default_port))
         .parse()
         .expect("can't parse BIND_ADDRESS variable");
 
@@ -658,9 +655,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ),
         );
 
-        parsed_command_line.remaining_args.extend(chunk.drain(..));
+        parsed_command_line.remaining_args.append(chunk);
         let bazel_result =
-            spawn_bazel_attempt(&sender_arc, &aes, bes_port, &parsed_command_line).await;
+            spawn_bazel_attempt(&sender_arc, aes, bes_port, &parsed_command_line).await;
 
         let remaining_targets = target_completed_tracker.expected_targets.lock().await.len();
 

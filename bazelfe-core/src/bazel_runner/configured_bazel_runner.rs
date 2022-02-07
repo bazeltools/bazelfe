@@ -39,7 +39,7 @@ impl ConfiguredBazel {
     ) -> Self {
         Self {
             sender_arc: sender_arc.clone(),
-            aes: aes,
+            aes,
             bes_port,
         }
     }
@@ -118,14 +118,14 @@ async fn spawn_bazel_attempt(
         }
 
         *guard = Some(ProcessorActivity {
-            jvm_segments_indexed: jvm_segments_indexed,
-            actions_taken: actions_taken,
-            target_story_actions: target_story_actions,
+            jvm_segments_indexed,
+            actions_taken,
+            target_story_actions,
         });
     });
 
     let res =
-        bazel_runner::execute_bazel_output_control(&bazel_command_line, bes_port, pipe_output)
+        bazel_runner::execute_bazel_output_control(bazel_command_line, bes_port, pipe_output)
             .await?;
 
     let _ = {
@@ -263,7 +263,7 @@ impl<
         {
             eprintln!("--------------------Bazel Runner Report--------------------");
 
-            if res_data.running_total.target_story_actions.len() > 0 {
+            if !res_data.running_total.target_story_actions.is_empty() {
                 if res_data.final_exit_code != 0 {
                     eprintln!(
                     "\nBuild still failed. Active stories about failed targets/what we've tried:"
@@ -279,7 +279,7 @@ impl<
                 v.sort_by_key(|k| k.0.clone());
                 for (label, mut story_entries) in v.into_iter() {
                     eprintln!("Target: {}", label);
-                    story_entries.sort_by_key(|e| e.when.clone());
+                    story_entries.sort_by_key(|e| e.when);
                     for entry in story_entries.into_iter() {
                         match entry.action {
                             TargetStoryAction::AddedDependency { added_what, why } => {
@@ -299,9 +299,9 @@ impl<
                                 execution_result,
                             } => {
                                 if execution_result.exit_success {
-                                    eprintln!("\tRan user action: {}\n\t\tReason: {}\n\t\tSuccess: {}\n\t\tCommand line: {}", user_action_name, why, true, command_line);
+                                    eprintln!("\tRan user action: {}\n\t\tReason: {}\n\t\tSuccess: true\n\t\tCommand line: {}", user_action_name, why, command_line);
                                 } else {
-                                    eprintln!("\tRan user action: {}\n\t\tReason: {}\n\t\tSuccess: {}\n\t\tCommand line: {}\nstdout:\n{}\n\nstderr:\n{}\n\n", user_action_name, why, false, command_line, execution_result.stdout, execution_result.stderr);
+                                    eprintln!("\tRan user action: {}\n\t\tReason: {}\n\t\tSuccess: false\n\t\tCommand line: {}\nstdout:\n{}\n\nstderr:\n{}\n\n", user_action_name, why, command_line, execution_result.stdout, execution_result.stderr);
                                 }
                             }
                         }

@@ -54,7 +54,7 @@ impl ProcessorActivity {
                 story_vec
             };
 
-            if updated_vec.len() > 0 {
+            if !updated_vec.is_empty() {
                 self.target_story_actions.insert(target, updated_vec);
             }
         }

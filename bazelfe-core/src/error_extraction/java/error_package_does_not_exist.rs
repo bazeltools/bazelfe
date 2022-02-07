@@ -15,10 +15,10 @@ fn build_class_import_request(
 ) -> JavaClassImportRequest {
     JavaClassImportRequest {
         src_file_name: source_file_name,
-        class_name: class_name,
+        class_name,
         exact_only: false,
         src_fn: "package_does_not_exist",
-        priority: priority,
+        priority,
     }
 }
 
@@ -56,21 +56,19 @@ pub(in crate::error_extraction) fn extract(
                             ));
                         }
                     }
-                } else {
-                    if pos < lines.len() - 1 {
-                        let target_line = lines[pos + 1];
-                        match crate::source_dependencies::java::parse_imports(target_line) {
-                            Ok(matched) => {
-                                if let Some(e) = matched.into_iter().next() {
-                                    class_import_request = Some(build_class_import_request(
-                                        src_file_name.to_string(),
-                                        e.prefix_section.to_string(),
-                                        30,
-                                    ));
-                                }
+                } else if pos < lines.len() - 1 {
+                    let target_line = lines[pos + 1];
+                    match crate::source_dependencies::java::parse_imports(target_line) {
+                        Ok(matched) => {
+                            if let Some(e) = matched.into_iter().next() {
+                                class_import_request = Some(build_class_import_request(
+                                    src_file_name.to_string(),
+                                    e.prefix_section.to_string(),
+                                    30,
+                                ));
                             }
-                            Err(_) => (),
                         }
+                        Err(_) => (),
                     }
                 }
 

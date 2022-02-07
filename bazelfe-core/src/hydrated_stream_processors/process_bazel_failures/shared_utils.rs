@@ -45,8 +45,8 @@ pub(in crate::hydrated_stream_processors::process_bazel_failures) async fn text_
     action_success_info: &ActionSuccessInfo,
 ) -> Vec<String> {
     let mut error_data = Vec::default();
-    for path_str in output_success_paths(&action_success_info).into_iter() {
-        let path: PathBuf = path_str.into();
+    for path_str in output_success_paths(action_success_info).into_iter() {
+        let path: PathBuf = path_str;
         if path.exists() {
             let file_len = std::fs::metadata(&path).unwrap().len();
             if file_len < 10 * 1024 * 1024 {
@@ -62,8 +62,8 @@ pub(in crate::hydrated_stream_processors::process_bazel_failures) async fn text_
     action_failed_error_info: &ActionFailedErrorInfo,
 ) -> Vec<String> {
     let mut error_data = Vec::default();
-    for path_str in output_error_paths(&action_failed_error_info).into_iter() {
-        let path: PathBuf = path_str.into();
+    for path_str in output_error_paths(action_failed_error_info).into_iter() {
+        let path: PathBuf = path_str;
         if path.exists() {
             let file_len = std::fs::metadata(&path).unwrap().len();
             if file_len < 10 * 1024 * 1024 {

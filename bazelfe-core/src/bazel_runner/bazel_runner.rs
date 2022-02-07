@@ -99,7 +99,7 @@ impl BazelRunner {
         let process_build_failures = Arc::new(ProcessBazelFailures::new(
             index_table.clone(),
             buildozer_driver::from_binary_path(
-                &config
+                config
                     .buildozer_path
                     .as_ref()
                     .expect("Unable to find a config for buildozer, error."),
@@ -124,7 +124,7 @@ impl BazelRunner {
             .unwrap_or_else(|| {
                 env::var("BIND_ADDRESS")
                     .ok()
-                    .unwrap_or_else(|| format!("127.0.0.1:{}", default_port).into())
+                    .unwrap_or_else(|| format!("127.0.0.1:{}", default_port))
                     .parse()
                     .expect("can't parse BIND_ADDRESS variable")
             });

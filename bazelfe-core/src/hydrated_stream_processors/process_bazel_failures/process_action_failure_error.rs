@@ -58,7 +58,7 @@ async fn apply_candidates<T: Buildozer + Clone + Send + Sync + 'static>(
     buildozer: T,
 ) -> super::Response {
     let mut target_stories = Vec::default();
-    if candidate_correction_commands.len() == 0 {
+    if candidate_correction_commands.is_empty() {
         return super::Response::new(Vec::default());
     }
     for correction_command in candidate_correction_commands.into_iter() {

@@ -90,8 +90,8 @@ pub mod bazel_event {
                                 abort_info.map(|(reason, description)| {
                                     Evt::Aborted(AbortedEvt {
                                         label: target_label_opt,
-                                        reason: reason,
-                                        description: description,
+                                        reason,
+                                        description,
                                     })
                                 })
                             };
@@ -139,9 +139,9 @@ pub mod bazel_event {
 
                                             Some(Evt::ActionCompleted(ActionCompletedEvt {
                                                 success: action_executed.success,
-                                                label: label,
-                                                stdout: stdout,
-                                                stderr: stderr,
+                                                label,
+                                                stdout,
+                                                stderr,
                                             }))
                                         }
                                         _ => None,
@@ -166,7 +166,7 @@ pub mod bazel_event {
                                     build_event_stream::build_event::Payload::NamedSetOfFiles(
                                         named_set_of_files,
                                     ) => Some(Evt::NamedSetOfFiles {
-                                        id: id,
+                                        id,
                                         named_set_of_files: named_set_of_files.clone(),
                                     }),
                                     _ => None,
@@ -197,8 +197,8 @@ pub mod bazel_event {
                                             target_completed,
                                         ) => Some(Evt::TargetCompleted(TargetCompletedEvt {
                                             success: target_completed.success,
-                                            label: label,
-                                            aspect: aspect,
+                                            label,
+                                            aspect,
                                             output_groups: target_completed.output_group.clone(),
                                         })),
                                         _ => None,
@@ -250,7 +250,7 @@ pub mod bazel_event {
                                     Evt::TestResult(TestResultEvt {
                                         label: u,
                                         test_status,
-                                        failed_files: failed_files,
+                                        failed_files,
                                     })
                                 })
                             })
@@ -409,7 +409,7 @@ where
             (*m).clone()
         };
         let cloned_v = sender_ref.clone();
-        let second_writer = sender_ref.clone();
+        let second_writer = sender_ref;
         let transform_fn = Arc::clone(&self.transform_fn);
         let output = async_stream::try_stream! {
             while let Some(inbound_evt) = stream.next().await {
@@ -516,7 +516,7 @@ mod tests {
         let mut buf: &[u8] = &data_vec;
         let mut res_buf = vec![];
 
-        while buf.len() > 0 {
+        while !buf.is_empty() {
             res_buf.push(
                 PublishBuildToolEventStreamRequest::decode_length_delimited(&mut buf).unwrap(),
             );
@@ -556,7 +556,7 @@ mod tests {
         let (promise, completion_pinky) = PinkySwear::<()>::new();
         let server_state = ServerStateHandler {
             _temp_dir_for_uds: uds_temp_dir,
-            completion_pinky: completion_pinky,
+            completion_pinky,
             read_channel: Some(rx),
         };
         // let shutdown_promise =

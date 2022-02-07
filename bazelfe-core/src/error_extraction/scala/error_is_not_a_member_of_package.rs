@@ -15,10 +15,10 @@ fn build_class_import_request(
 ) -> ScalaClassImportRequest {
     ScalaClassImportRequest {
         src_file_name: source_file_name,
-        class_name: class_name,
+        class_name,
         exact_only: false,
         src_fn: "extract_not_a_member_of_package",
-        priority: priority,
+        priority,
     }
 }
 
@@ -55,7 +55,7 @@ pub(in crate::error_extraction::scala) fn extract(
                                     for (orig, _) in lst {
                                         v.push(build_class_import_request(
                                             src_file_name.to_string(),
-                                            format!("{}.{}", e.prefix_section.to_string(), orig),
+                                            format!("{}.{}", e.prefix_section, orig),
                                             10,
                                         ));
                                     }

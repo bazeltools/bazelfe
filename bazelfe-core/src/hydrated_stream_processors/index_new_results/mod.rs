@@ -19,7 +19,7 @@ impl Default for Response {
 impl Response {
     pub fn new(jvm_segments_indexed: u32) -> Self {
         Self {
-            jvm_segments_indexed: jvm_segments_indexed,
+            jvm_segments_indexed,
         }
     }
 }
@@ -42,7 +42,7 @@ impl super::BazelEventHandler for IndexNewResults {
 impl IndexNewResults {
     pub fn new(index_table: index_table::IndexTable) -> Self {
         Self {
-            index_table: index_table,
+            index_table,
         }
     }
     pub async fn process(
@@ -59,7 +59,7 @@ impl IndexNewResults {
                 let label = tce.label.clone();
                 let mut files = Vec::default();
 
-                let external_match = if label.starts_with("@") {
+                let external_match = if label.starts_with('@') {
                     let idx = label.find('/').unwrap();
                     let repo = &label[1..idx];
                     let path_segment = format!("external/{}", repo);
@@ -95,7 +95,7 @@ impl IndexNewResults {
             }
             _ => None,
         };
-        r.map(|r| super::BuildEventResponse::IndexedResults(r))
+        r.map(super::BuildEventResponse::IndexedResults)
             .into_iter()
             .collect()
     }

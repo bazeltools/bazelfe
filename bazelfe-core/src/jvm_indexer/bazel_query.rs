@@ -15,7 +15,7 @@ impl std::convert::From<std::io::Error> for ExecuteResult {
     fn from(io_e: std::io::Error) -> Self {
         Self {
             exit_code: -120,
-            stderr: format!("{:?}", io_e).to_string(),
+            stderr: format!("{:?}", io_e),
             stdout: String::from(""),
             stdout_raw: Vec::default(),
             stderr_raw: Vec::default(),
@@ -42,8 +42,8 @@ pub fn from_binary_path(pb: &PathBuf) -> BazelQueryBinaryImpl {
 
 impl BazelQueryBinaryImpl {
     fn decode_str(data: &Vec<u8>) -> String {
-        if data.len() > 0 {
-            std::str::from_utf8(&data)
+        if !data.is_empty() {
+            std::str::from_utf8(data)
                 .unwrap_or("Unable to decode content")
                 .to_string()
         } else {
@@ -59,7 +59,7 @@ impl BazelQueryBinaryImpl {
         let exit_code = command_result.status.code().unwrap_or(-1);
 
         ExecuteResult {
-            exit_code: exit_code,
+            exit_code,
             stdout: BazelQueryBinaryImpl::decode_str(&command_result.stdout),
             stderr: BazelQueryBinaryImpl::decode_str(&command_result.stderr),
             stderr_raw: command_result.stderr,

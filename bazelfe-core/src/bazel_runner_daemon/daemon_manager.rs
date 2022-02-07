@@ -41,7 +41,7 @@ async fn start_server(
     Ok(())
 }
 
-pub(in crate) async fn try_kill_server_from_cfg(daemon_config: &DaemonConfig) -> () {
+pub(in crate) async fn try_kill_server_from_cfg(daemon_config: &DaemonConfig) {
     let paths = daemon_paths_from_config(daemon_config);
 
     if let Some(pid) = super::read_pid(&paths) {
@@ -49,8 +49,8 @@ pub(in crate) async fn try_kill_server_from_cfg(daemon_config: &DaemonConfig) ->
     }
 }
 
-async fn try_kill_server(paths: &DaemonPaths) -> () {
-    if let Some(pid) = super::read_pid(&paths) {
+async fn try_kill_server(paths: &DaemonPaths) {
+    if let Some(pid) = super::read_pid(paths) {
         signal_mgr::kill(pid)
     }
 }
@@ -60,7 +60,7 @@ mod signal_mgr {
         unsafe { libc::kill(pid, 0) == 0 }
     }
 
-    pub fn kill(pid: i32) -> () {
+    pub fn kill(pid: i32) {
         unsafe {
             libc::kill(pid, libc::SIGKILL);
         }
@@ -75,7 +75,7 @@ async fn maybe_connect_to_server(
         return Ok(None);
     }
 
-    if let Some(pid) = super::read_pid(&paths) {
+    if let Some(pid) = super::read_pid(paths) {
         if !signal_mgr::process_is_alive(pid) {
             return Ok(None);
         }
@@ -90,7 +90,7 @@ async fn maybe_connect_to_server(
     }
 
     if !paths.socket_path.exists() {
-        try_kill_server(&paths).await;
+        try_kill_server(paths).await;
         return Ok(None);
     }
 
@@ -109,7 +109,7 @@ async fn maybe_connect_to_server(
             if executable_id == &remote_id {
                 Ok(Some(cli))
             } else {
-                try_kill_server(&paths).await;
+                try_kill_server(paths).await;
                 Ok(None)
             }
         }
@@ -166,5 +166,5 @@ pub async fn connect_to_server(
         }
     }
 
-    return Ok(None);
+    Ok(None)
 }

@@ -43,7 +43,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             for (clazz, targets) in debug_table.data_map.into_iter() {
                 let mut res_str = String::from("");
                 for (priority, target) in targets {
-                    if res_str.len() > 0 {
+                    if !res_str.is_empty() {
                         res_str = format!("{},{}:{}", res_str, priority, target);
                     } else {
                         res_str = format!("{}:{}", priority, target);

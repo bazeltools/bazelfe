@@ -51,7 +51,7 @@ fn build_class_import_request(
 ) -> ScalaClassImportRequest {
     ScalaClassImportRequest {
         src_file_name: source_file_name,
-        class_name: class_name,
+        class_name,
         exact_only: false,
         src_fn: "extract_symbol_is_missing_from_classpath",
         priority: 1,

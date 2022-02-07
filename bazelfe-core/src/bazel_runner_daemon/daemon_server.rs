@@ -79,7 +79,7 @@ fn monotonic_current_time() -> u128 {
     unsafe {
         CURRENT_TIME += 1;
     }
-    return ret;
+    ret
 }
 fn target_as_path(s: &String) -> Option<PathBuf> {
     let pb = PathBuf::from(s.replace(":", "/").replace("//", ""));
@@ -257,7 +257,7 @@ impl TargetCache {
         }
     }
 
-    async fn hydrate_new_file_data(&self, path: PathBuf) -> () {
+    async fn hydrate_new_file_data(&self, path: PathBuf) {
         self.pending_hydrations.fetch_add(1, Ordering::Release);
 
         let pending_hydrations = self.pending_hydrations.clone();
@@ -279,7 +279,7 @@ impl TargetCache {
         &self,
         paths: Vec<PathBuf>,
         event_kind: notify::EventKind,
-    ) -> () {
+    ) {
         let current_path = std::env::current_dir().expect("Should be able to get the current dir");
         let mut lock = self.last_files_updated.lock().await;
         let ts = monotonic_current_time();
@@ -704,7 +704,7 @@ pub async fn main(
                 }
                 Err(e) => println!("watch error: {:?}", e),
             }
-            ()
+            
         })
         .unwrap();
 
@@ -757,14 +757,14 @@ pub async fn main(
                             let mut core_watcher = core_watcher.lock().unwrap();
                             eprintln!("Watching {:#?}", path);
 
-                            core_watcher.watch(&path, RecursiveMode::Recursive).unwrap();
+                            core_watcher.watch(path, RecursiveMode::Recursive).unwrap();
                         }
                     }
                     _ => (),
                 },
                 Err(e) => println!("watch error: {:?}", e),
             }
-            ()
+            
         })
         .unwrap();
 
@@ -800,7 +800,7 @@ pub async fn main(
             last_call = current_v;
             last_seen = Instant::now();
         }
-        let pid = super::read_pid(&paths);
+        let pid = super::read_pid(paths);
         if let Some(p) = pid {
             // Another process lauched and we didn't catch the conflict in the manager, we should die to avoid issues.
             let our_pid = std::process::id();

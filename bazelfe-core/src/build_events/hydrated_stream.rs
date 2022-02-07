@@ -120,12 +120,10 @@ async fn tce_event(
     let mut output_files = Vec::default();
     let found_everything = if let Some(output_grp) = &tce
         .output_groups
-        .iter()
-        .filter(|grp| grp.name == "default")
-        .next()
+        .iter().find(|grp| grp.name == "default")
     {
         recursive_lookup(
-            &named_set_of_files_lookup,
+            named_set_of_files_lookup,
             &mut output_files,
             output_grp
                 .file_sets
@@ -140,8 +138,8 @@ async fn tce_event(
 
     if found_everything {
         let target_complete_info = TargetCompleteInfo {
-            output_files: output_files,
-            target_kind: rule_kind_lookup.get(&tce.label).map(|e| e.clone()),
+            output_files,
+            target_kind: rule_kind_lookup.get(&tce.label).cloned(),
             aspect: tce.aspect,
             label: tce.label,
             success: tce.success,
@@ -232,8 +230,7 @@ impl HydratedInfo {
                                         name: String::from("stderr"),
                                     }),
                                     target_kind: rule_kind_lookup
-                                        .get(&ace.label)
-                                        .map(|e| e.clone()),
+                                        .get(&ace.label).cloned(),
                                     label: ace.label,
                                 };
                                 tx.send(Some(HydratedInfo::ActionFailed(err_info)))
@@ -253,8 +250,7 @@ impl HydratedInfo {
                                     }),
 
                                     target_kind: rule_kind_lookup
-                                        .get(&ace.label)
-                                        .map(|e| e.clone()),
+                                        .get(&ace.label).cloned(),
                                     label: ace.label,
                                 };
                                 tx.send(Some(HydratedInfo::ActionSuccess(act_info)))
@@ -265,7 +261,7 @@ impl HydratedInfo {
 
                         bazel_event::Evt::TestResult(tfe) => {
                             let tst_info = TestResultInfo {
-                                target_kind: rule_kind_lookup.get(&tfe.label).map(|e| e.clone()),
+                                target_kind: rule_kind_lookup.get(&tfe.label).cloned(),
                                 test_summary_event: tfe,
                             };
                             tx.send(Some(HydratedInfo::TestResult(tst_info)))

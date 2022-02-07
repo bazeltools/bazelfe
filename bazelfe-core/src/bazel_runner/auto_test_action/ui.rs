@@ -117,7 +117,7 @@ where
 
     let mut entries: Vec<&mut super::app::FailureState> = app.failure_state.values_mut().collect();
 
-    if entries.len() == 0 {
+    if entries.is_empty() {
         return;
     }
     entries.sort_by_key(|e| e.when);
@@ -131,7 +131,7 @@ where
         app.error_tab_position += entries.len() as isize;
     }
 
-    app.error_tab_position = app.error_tab_position % entries.len() as isize;
+    app.error_tab_position %= entries.len() as isize;
 
     let chunks = Layout::default()
         .constraints([Constraint::Length(3), Constraint::Min(0)].as_ref())
@@ -156,7 +156,7 @@ where
                 if let Ok(_) = buf_reader.read_to_string(&mut buffer) {}
             }
             super::app::OutputFile::Inline(content) => {
-                buffer = String::from_utf8_lossy(&content).to_string()
+                buffer = String::from_utf8_lossy(content).to_string()
             }
         }
 
@@ -201,7 +201,7 @@ where
                 Span::styled(
                     format!(
                         "{:<14}",
-                        format!("{} ago", format_duration(elapsed).to_string())
+                        format!("{} ago", format_duration(elapsed))
                     ),
                     time_style,
                 ),
@@ -257,7 +257,7 @@ where
             } else {
                 &failed_span
             };
-            let mut elapsed = now_time.duration_since(*&action_entry.when);
+            let mut elapsed = now_time.duration_since(action_entry.when);
             elapsed = elapsed
                 .checked_sub(Duration::from_nanos(elapsed.subsec_nanos() as u64))
                 .unwrap_or(elapsed);
@@ -265,7 +265,7 @@ where
                 Span::styled(
                     format!(
                         "{:<14}",
-                        format!("{} ago", format_duration(elapsed).to_string())
+                        format!("{} ago", format_duration(elapsed))
                     ),
                     time_style,
                 ),

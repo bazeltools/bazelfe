@@ -103,7 +103,7 @@ pub fn main(
                 }
             }
             if last_tick.elapsed() >= tick_rate {
-                if let Err(_) = tx.send(Event::Tick) {
+                if tx.send(Event::Tick).is_err() {
                     debug!("Tick failed to send, assuming shutdown");
                     break;
                 };

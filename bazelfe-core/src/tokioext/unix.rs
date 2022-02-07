@@ -13,7 +13,7 @@ pub struct UnixStream(pub tokio::net::UnixStream);
 impl Connected for UnixStream {
     type ConnectInfo = ();
     fn connect_info(&self) -> <Self as Connected>::ConnectInfo {
-        ()
+        
     }
 }
 

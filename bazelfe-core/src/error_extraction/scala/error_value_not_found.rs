@@ -14,7 +14,7 @@ fn build_class_import_request(
 ) -> ScalaClassImportRequest {
     ScalaClassImportRequest {
         src_file_name: source_file_name,
-        class_name: class_name,
+        class_name,
         exact_only: true,
         src_fn: "extract_value_or_type_not_found",
         priority: 1,
@@ -48,14 +48,12 @@ pub fn extract(input: &str) -> Vec<ScalaClassImportRequest> {
                             for chr in e.chars() {
                                 if chr.is_alphanumeric() || chr == '_' || chr == '.' {
                                     buf.push(chr);
-                                } else {
-                                    if buf.len() > 0 {
-                                        res.push(buf.into_iter().collect());
-                                        buf = Vec::default();
-                                    }
+                                } else if !buf.is_empty() {
+                                    res.push(buf.into_iter().collect());
+                                    buf = Vec::default();
                                 }
                             }
-                            if buf.len() > 0 {
+                            if !buf.is_empty() {
                                 res.push(buf.into_iter().collect());
                             }
                             res.into_iter()

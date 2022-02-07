@@ -21,8 +21,8 @@ pub struct CommandLineRunnerImpl();
 
 impl CommandLineRunnerImpl {
     fn decode_str(data: &Vec<u8>) -> String {
-        if data.len() > 0 {
-            std::str::from_utf8(&data)
+        if !data.is_empty() {
+            std::str::from_utf8(data)
                 .unwrap_or("Unable to decode content")
                 .to_string()
         } else {
