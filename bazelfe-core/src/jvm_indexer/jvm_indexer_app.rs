@@ -84,14 +84,11 @@ struct RuleQuery {
     pub kinds: Vec<String>,
     pub root: String,
 }
-fn build_rule_queries(
-    allowed_rule_kinds: &Vec<String>,
-    target_roots: &Vec<String>,
-) -> Vec<RuleQuery> {
+fn build_rule_queries(allowed_rule_kinds: &[String], target_roots: &[String]) -> Vec<RuleQuery> {
     let mut result = Vec::default();
     for target_root in target_roots {
         result.push(RuleQuery {
-            kinds: allowed_rule_kinds.clone(),
+            kinds: allowed_rule_kinds.to_vec(),
             root: target_root.clone(),
         });
     }
@@ -115,8 +112,8 @@ async fn spawn_bazel_attempt(
     let target_extracted_stream = aes.handle_stream(error_stream);
 
     let recv_task =
-        tokio::spawn(async move { while let Ok(_) = target_extracted_stream.recv().await {} });
-    let res = bazel_runner::execute_bazel_output_control(&bazel_args, bes_port, false)
+        tokio::spawn(async move { while target_extracted_stream.recv().await.is_ok() {} });
+    let res = bazel_runner::execute_bazel_output_control(bazel_args, bes_port, false)
         .await
         .expect("Internal errors should not occur invoking bazel.");
 
@@ -145,10 +142,10 @@ async fn run_query_chunk<B: BazelQuery>(
                 for kind in rq.kinds.iter() {
                     let x = format!("kind({}, {})", kind, rq.root);
                     if buffer.is_empty() {
-                        buffer.write_all(&x.as_bytes()).unwrap();
+                        buffer.write_all(x.as_bytes()).unwrap();
                     } else {
-                        buffer.write_all(&union_with_spaces_bytes).unwrap();
-                        buffer.write_all(&x.as_bytes()).unwrap();
+                        buffer.write_all(union_with_spaces_bytes).unwrap();
+                        buffer.write_all(x.as_bytes()).unwrap();
                     }
                 }
             }
@@ -171,7 +168,7 @@ async fn run_query_chunk<B: BazelQuery>(
         if entries.len() == 3 {
             let entry = all_targets_to_use
                 .entry(entries[0].to_string())
-                .or_insert(HashSet::default());
+                .or_insert_with(HashSet::default);
             entry.insert(entries[2].to_string());
         }
     }
@@ -190,10 +187,9 @@ fn parse_current_repo_name() -> Option<String> {
         let workspace_content = std::fs::read_to_string(workspace_path).unwrap();
         let ln = workspace_content
             .lines()
-            .filter(|e| e.starts_with("workspace("))
-            .next();
+            .find(|e| e.starts_with("workspace("));
         if let Some(line) = ln {
-            if let Some(captures) = RE.captures(&line) {
+            if let Some(captures) = RE.captures(line) {
                 return Some(String::from(captures.get(2).unwrap().as_str()));
             }
         }
@@ -205,7 +201,7 @@ fn parse_current_repo_name() -> Option<String> {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opt = Opt::parse();
 
-    let parsed_command_line = match bazelfe_core::bazel_command_line_parser::parse_bazel_command_line(&vec![opt.bazel_binary_path.to_string_lossy().to_string()]) {
+    let parsed_command_line = match bazelfe_core::bazel_command_line_parser::parse_bazel_command_line(&[opt.bazel_binary_path.to_string_lossy().to_string()]) {
         Ok(parsed_command_line) => {
             if parsed_command_line.is_action_option_set("bes_backend") {
                 eprintln!("Bes backend already set, must exit since we can't add another safely.");
@@ -291,13 +287,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let bazel_deps = {
                 let mut bazel_deps = HashSet::new();
-                for ln in targets_in_bazel_deps_root.stdout.lines().into_iter() {
+                for ln in targets_in_bazel_deps_root.stdout.lines() {
                     bazel_deps.insert(ln);
                 }
                 bazel_deps
             };
             let mut mapping = HashMap::new();
-            for ln in bazel_deps_deps.stdout.lines().into_iter() {
+            for ln in bazel_deps_deps.stdout.lines() {
                 if ln.contains(" -> ") {
                     let elements: Vec<&str> = ln.split(" -> ").collect();
                     if elements.len() > 1 {
@@ -306,7 +302,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                         let e = mapping
                             .entry(src.replace("\"", "").to_string())
-                            .or_insert(Vec::default());
+                            .or_insert_with(Vec::default);
                         e.push(dest.replace("\"", ""));
                     }
                 }
@@ -318,23 +314,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let mut values = values.clone();
                     while !values.is_empty() {
                         let e = values.pop().unwrap();
-                        if e.starts_with("@")
+                        if e.starts_with('@')
                             && (e.ends_with("//jar:jar")
                                 || e.ends_with("//jar:file")
                                 || e.ends_with("//jar"))
                         {
-                            match e.split("//").next() {
-                                Some(prefix) => {
-                                    results_mapping.insert(
-                                        format!("{}//jar:jar", prefix),
-                                        bazel_dep.to_string(),
-                                    );
-                                    results_mapping.insert(
-                                        format!("{}//jar:file", prefix),
-                                        bazel_dep.to_string(),
-                                    );
-                                }
-                                None => (),
+                            if let Some(prefix) = e.split("//").next() {
+                                results_mapping
+                                    .insert(format!("{}//jar:jar", prefix), bazel_dep.to_string());
+                                results_mapping
+                                    .insert(format!("{}//jar:file", prefix), bazel_dep.to_string());
                             }
                         } else if e.starts_with("//external") {
                             if let Some(r) = mapping.get(&e) {
@@ -358,10 +347,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             for x in bazel_deps_replacement_map.keys() {
                 if buffer.is_empty() {
-                    buffer.write_all(&x.as_bytes()).unwrap();
+                    buffer.write_all(x.as_bytes()).unwrap();
                 } else {
-                    buffer.write_all(&union_with_spaces_bytes).unwrap();
-                    buffer.write_all(&x.as_bytes()).unwrap();
+                    buffer.write_all(union_with_spaces_bytes).unwrap();
+                    buffer.write_all(x.as_bytes()).unwrap();
                 }
             }
             String::from_utf8(buffer).unwrap()
@@ -382,7 +371,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if entries.len() == 3 {
                 let entry = all_targets_to_use
                     .entry(entries[0].to_string())
-                    .or_insert(HashSet::default());
+                    .or_insert_with(HashSet::default);
                 entry.insert(entries[2].to_string());
             }
         }
@@ -415,7 +404,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         blacklist_repos.extend(opt.blacklist_remote_roots.into_iter());
 
-        for line in res.stdout.lines().into_iter() {
+        for line in res.stdout.lines() {
             if let Some(ln) = line.strip_prefix("//external:") {
                 let mut ok = true;
                 for root in &blacklist_repos {
@@ -424,7 +413,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 // Some externals are bind mounts
-                if ln.contains("/") {
+                if ln.contains('/') {
                     ok = false;
                 }
 
@@ -471,7 +460,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let mut global_banned_roots = HashSet::new();
         while let Some(current_chunk) = remaining_chunks.pop() {
-            if current_chunk.len() > 0 {
+            if !current_chunk.is_empty() {
                 let res = run_query_chunk(
                     &current_chunk,
                     &bazel_query,
@@ -493,38 +482,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let mut have_unmatched_line = false;
                         for ln in res.stderr.lines() {
                             let mut matched: bool = false;
-                            if let Some(captures) = NO_REPO_REGEX.captures(&ln) {
+                            if let Some(captures) = NO_REPO_REGEX.captures(ln) {
                                 let repo = captures.get(1).unwrap().as_str().to_string();
                                 info!("Ignoring non existant repo: {}", repo);
                                 global_banned_roots.insert(repo);
                                 matched = true;
                             }
 
-                            if let Some(captures) = OTHER_NO_REPO_REGEX.captures(&ln) {
+                            if let Some(captures) = OTHER_NO_REPO_REGEX.captures(ln) {
                                 let repo = captures.get(1).unwrap().as_str().to_string();
                                 info!("Ignoring non existant repo: {}", repo);
                                 global_banned_roots.insert(repo);
                                 matched = true;
                             }
 
-                            if let Some(captures) = NO_SUCH_FILE.captures(&ln) {
+                            if let Some(captures) = NO_SUCH_FILE.captures(ln) {
                                 must_go_solo.insert(captures.get(1).unwrap().as_str().to_string());
                                 matched = true;
                             }
-                            if let Some(captures) = NOT_RESOLVABLE.captures(&ln) {
-                                must_go_solo.insert(captures.get(1).unwrap().as_str().to_string());
-                                matched = true;
-                            }
-
-                            if let Some(captures) = NO_TARGETS_FOUND.captures(&ln) {
+                            if let Some(captures) = NOT_RESOLVABLE.captures(ln) {
                                 must_go_solo.insert(captures.get(1).unwrap().as_str().to_string());
                                 matched = true;
                             }
 
-                            if !matched {
-                                if ln.starts_with("ERROR:") {
-                                    have_unmatched_line = true;
-                                }
+                            if let Some(captures) = NO_TARGETS_FOUND.captures(ln) {
+                                must_go_solo.insert(captures.get(1).unwrap().as_str().to_string());
+                                matched = true;
+                            }
+
+                            if !matched && ln.starts_with("ERROR:") {
+                                have_unmatched_line = true;
                             }
                         }
 
