@@ -152,12 +152,7 @@ async fn generate_all_action_requests(
 ) -> Vec<ActionRequest> {
     let mut action_requests: Vec<ActionRequest> = vec![];
     for path in output_error_paths(action_failed_error_info).into_iter() {
-        path_to_import_requests(
-            action_failed_error_info,
-            &path,
-            &mut action_requests,
-        )
-        .await
+        path_to_import_requests(action_failed_error_info, &path, &mut action_requests).await
     }
     expand_candidate_import_requests(action_requests)
 }

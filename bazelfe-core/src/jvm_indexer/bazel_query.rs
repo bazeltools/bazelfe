@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::process::Command;
 
 #[derive(Clone, PartialEq, Debug)]
@@ -34,9 +34,9 @@ pub struct BazelQueryBinaryImpl {
     bazel_executable_path: PathBuf,
 }
 
-pub fn from_binary_path(pb: &PathBuf) -> BazelQueryBinaryImpl {
+pub fn from_binary_path(pb: &Path) -> BazelQueryBinaryImpl {
     BazelQueryBinaryImpl {
-        bazel_executable_path: pb.clone(),
+        bazel_executable_path: pb.to_path_buf(),
     }
 }
 

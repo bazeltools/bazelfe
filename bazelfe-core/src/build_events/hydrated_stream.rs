@@ -118,23 +118,21 @@ async fn tce_event(
     to_revisit: &mut Vec<bazel_event::TargetCompletedEvt>,
 ) -> Option<TargetCompleteInfo> {
     let mut output_files = Vec::default();
-    let found_everything = if let Some(output_grp) = &tce
-        .output_groups
-        .iter().find(|grp| grp.name == "default")
-    {
-        recursive_lookup(
-            named_set_of_files_lookup,
-            &mut output_files,
-            output_grp
-                .file_sets
-                .iter()
-                .map(|fs| fs.id.clone())
-                .collect(),
-        )
-        .await
-    } else {
-        true
-    };
+    let found_everything =
+        if let Some(output_grp) = &tce.output_groups.iter().find(|grp| grp.name == "default") {
+            recursive_lookup(
+                named_set_of_files_lookup,
+                &mut output_files,
+                output_grp
+                    .file_sets
+                    .iter()
+                    .map(|fs| fs.id.clone())
+                    .collect(),
+            )
+            .await
+        } else {
+            true
+        };
 
     if found_everything {
         let target_complete_info = TargetCompleteInfo {
@@ -229,8 +227,7 @@ impl HydratedInfo {
                                         path_prefix: vec![],
                                         name: String::from("stderr"),
                                     }),
-                                    target_kind: rule_kind_lookup
-                                        .get(&ace.label).cloned(),
+                                    target_kind: rule_kind_lookup.get(&ace.label).cloned(),
                                     label: ace.label,
                                 };
                                 tx.send(Some(HydratedInfo::ActionFailed(err_info)))
@@ -249,8 +246,7 @@ impl HydratedInfo {
                                         name: String::from("stderr"),
                                     }),
 
-                                    target_kind: rule_kind_lookup
-                                        .get(&ace.label).cloned(),
+                                    target_kind: rule_kind_lookup.get(&ace.label).cloned(),
                                     label: ace.label,
                                 };
                                 tx.send(Some(HydratedInfo::ActionSuccess(act_info)))

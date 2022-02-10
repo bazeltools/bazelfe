@@ -41,9 +41,7 @@ impl super::BazelEventHandler for IndexNewResults {
 }
 impl IndexNewResults {
     pub fn new(index_table: index_table::IndexTable) -> Self {
-        Self {
-            index_table,
-        }
+        Self { index_table }
     }
     pub async fn process(
         &self,

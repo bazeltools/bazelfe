@@ -124,9 +124,8 @@ async fn spawn_bazel_attempt(
         });
     });
 
-    let res =
-        bazel_runner::execute_bazel_output_control(bazel_command_line, bes_port, pipe_output)
-            .await?;
+    let res = bazel_runner::execute_bazel_output_control(bazel_command_line, bes_port, pipe_output)
+        .await?;
 
     let _ = {
         let mut locked = sender_arc.lock().await;

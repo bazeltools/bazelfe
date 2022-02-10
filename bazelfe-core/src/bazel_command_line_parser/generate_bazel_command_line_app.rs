@@ -82,7 +82,6 @@ async fn extract_options(
 
     command.args(&["help", action, "--short"]);
 
-    eprintln!("Running {:#?}", command);
     let output = command.output().await?;
 
     let stdout = decode_str(&output.stdout)?;
@@ -137,7 +136,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut actions = generate_actions_list(&opt.bazel_cmd_path).await?;
     actions.sort();
-    println!("{:?}", actions);
 
     let startup_options = extract_options(&opt.bazel_cmd_path, "startup_options").await?;
 

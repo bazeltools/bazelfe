@@ -199,10 +199,7 @@ where
                 .unwrap_or(elapsed);
             let content = vec![Spans::from(vec![
                 Span::styled(
-                    format!(
-                        "{:<14}",
-                        format!("{} ago", format_duration(elapsed))
-                    ),
+                    format!("{:<14}", format!("{} ago", format_duration(elapsed))),
                     time_style,
                 ),
                 Span::raw(pb.to_string_lossy()),
@@ -263,10 +260,7 @@ where
                 .unwrap_or(elapsed);
             let content = vec![Spans::from(vec![
                 Span::styled(
-                    format!(
-                        "{:<14}",
-                        format!("{} ago", format_duration(elapsed))
-                    ),
+                    format!("{:<14}", format!("{} ago", format_duration(elapsed))),
                     time_style,
                 ),
                 Span::styled(format!("{:<9}", lvl_str), s),

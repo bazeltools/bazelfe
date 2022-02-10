@@ -485,9 +485,9 @@ impl<'a> IndexTable {
 
     pub async fn decode_string(&self, key: usize) -> Option<String> {
         let read_lock = self.id_to_target_vec.read().await;
-        read_lock.get(key).map(|e| {
-            unsafe { std::str::from_utf8_unchecked(e).to_string() }
-        })
+        read_lock
+            .get(key)
+            .map(|e| unsafe { std::str::from_utf8_unchecked(e).to_string() })
     }
 
     pub async fn replace_with_id<'b, S>(&self, key: S, target_id: usize, priority: u16) -> bool
@@ -682,12 +682,10 @@ mod tests {
     async fn updating_index() {
         let index = IndexTable::default();
 
-        assert!(
-            index
-                .get("org.apache.parquet.thrift.test.TestPerson.TestPersonTupleScheme")
-                .await
-                .is_none()
-        );
+        assert!(index
+            .get("org.apache.parquet.thrift.test.TestPerson.TestPersonTupleScheme")
+            .await
+            .is_none());
 
         // Insert new element
         index
@@ -764,12 +762,10 @@ mod tests {
             ))
             .await;
 
-        assert!(
-            index
-                .get("org.apache.parquet.thrift.test.TestPerson.TestPersonTupleScheme")
-                .await
-                .is_none()
-        );
+        assert!(index
+            .get("org.apache.parquet.thrift.test.TestPerson.TestPersonTupleScheme")
+            .await
+            .is_none());
 
         // Insert new elements, one in blacklist, one not.
         index

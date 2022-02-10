@@ -1,7 +1,8 @@
-use std::error::Error;
 use std::path::PathBuf;
+use std::{error::Error, path::Path};
 
 use crate::config::DaemonConfig;
+use anyhow::{anyhow, Context};
 use serde::{Deserialize, Serialize};
 
 use super::DaemonPaths;
@@ -42,10 +43,12 @@ async fn start_server(
 }
 
 pub(in crate) async fn try_kill_server_from_cfg(daemon_config: &DaemonConfig) {
-    let paths = daemon_paths_from_config(daemon_config);
+    if let Ok(daemon_communication_ptr) = configure_communication_ptr(&daemon_config) {
+        let paths = daemon_paths_from_access(&daemon_communication_ptr);
 
-    if let Some(pid) = super::read_pid(&paths) {
-        signal_mgr::kill(pid)
+        if let Some(pid) = super::read_pid(&paths) {
+            signal_mgr::kill(pid)
+        }
     }
 }
 
@@ -123,32 +126,58 @@ async fn maybe_connect_to_server(
     }
 }
 
-fn daemon_paths_from_config(daemon_config: &DaemonConfig) -> DaemonPaths {
+fn daemon_paths_from_access(access_path: &Path) -> DaemonPaths {
     DaemonPaths {
-        logs_path: daemon_config.daemon_communication_folder.clone(),
-        pid_path: daemon_config
-            .daemon_communication_folder
-            .clone()
-            .join("server.pid"),
-        socket_path: daemon_config
-            .daemon_communication_folder
-            .clone()
-            .join("server.sock"),
+        logs_path: access_path.to_path_buf(),
+        pid_path: access_path.to_path_buf().join("server.pid"),
+        socket_path: access_path.to_path_buf().join("server.sock"),
     }
+}
+
+fn configure_communication_ptr(daemon_config: &DaemonConfig) -> Result<PathBuf, Box<dyn Error>> {
+    std::fs::create_dir_all(&daemon_config.daemon_communication_folder)?;
+
+    let current_dir = std::env::current_dir().expect("Should be able to get the current dir");
+    if !current_dir.join("WORKSPACE").exists() {
+        return Err(anyhow!(
+            "Expected the CWD to be a root of a bazel repo, but unable to find a WORKSPACE file"
+        )
+        .into());
+    }
+
+    let bazelfe_path = current_dir.join("bazel-bazelfe");
+
+    if bazelfe_path.exists() {
+        let metadata = std::fs::symlink_metadata(&bazelfe_path).with_context(|| {
+            "Expect to be able to try get metadata for the bazel-bazelfe even if it doesn't exist"
+        })?;
+
+        if !metadata.is_symlink() {
+            return Err(anyhow!("Expected bazel-bazelfe to be a symlink, but it wasn't..").into());
+        }
+
+        let target = std::fs::read_link(&bazelfe_path)?;
+
+        if target != daemon_config.daemon_communication_folder {
+            return Err(anyhow!("Exepected bazel-bazelfe to point at the expected communication daemon folder. {}, but it pointed at {}. If in doubt, remove this symlink.", daemon_config.daemon_communication_folder.to_string_lossy(), target.to_string_lossy()).into());
+        }
+    } else {
+        std::os::unix::fs::symlink(&daemon_config.daemon_communication_folder, &bazelfe_path).with_context(|| "Expected to be able to build a symlink from the CWD to the bazelfe communication folder")?;
+    }
+    Ok(bazelfe_path)
 }
 pub async fn connect_to_server(
     daemon_config: &DaemonConfig,
-    bazel_binary_path: &PathBuf,
+    bazel_binary_path: &Path,
 ) -> Result<Option<super::daemon_service::RunnerDaemonClient>, Box<dyn Error>> {
-    std::fs::create_dir_all(&daemon_config.daemon_communication_folder)?;
-
     if !daemon_config.enabled {
+        debug!("Daemon isn't requested/needed. Noop.");
         return Ok(None);
     }
-
     let executable_id = super::current_executable_id();
 
-    let paths = daemon_paths_from_config(daemon_config);
+    let daemon_communication_ptr = configure_communication_ptr(&daemon_config)?;
+    let paths = daemon_paths_from_access(&daemon_communication_ptr);
 
     let mut cntr = 0;
     while cntr < 3 {
@@ -161,7 +190,7 @@ pub async fn connect_to_server(
         }
 
         if cntr < 3 {
-            start_server(daemon_config, bazel_binary_path, &paths).await?;
+            start_server(daemon_config, &bazel_binary_path.to_path_buf(), &paths).await?;
             tokio::time::sleep(tokio::time::Duration::from_millis(4)).await;
         }
     }

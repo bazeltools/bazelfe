@@ -563,7 +563,7 @@ mod tests {
         tokio::spawn(async {
             let uds = UnixListener::bind(path).expect("Should be able to setup unix listener");
 
-            eprintln!("Starting server..");
+            debug!("Starting server..");
             Server::builder()
                 .add_service(publish_build_event_server::PublishBuildEventServer::new(
                     server_instance,

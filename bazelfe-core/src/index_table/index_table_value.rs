@@ -142,7 +142,6 @@ impl IndexTableValue {
     }
 
     pub async fn lookup_by_value(&self, k: usize) -> Option<(usize, u16)> {
-
         for (idx, element) in (&self.read_iter().await).into_iter().enumerate() {
             if element.target == k {
                 return Some((idx, element.priority.0));

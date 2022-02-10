@@ -29,7 +29,7 @@ pub enum BazelRunnerError {
     #[error(transparent)]
     CommandLineRewriterActionError(command_line_rewriter_action::RewriteCommandLineError),
 
-    #[error("Unclassified or otherwise unknown error occured: `{0}`")]
+    #[error("Unclassified or otherwise unknown error occured: `{0:?}`")]
     Unknown(Box<dyn std::error::Error>),
 }
 

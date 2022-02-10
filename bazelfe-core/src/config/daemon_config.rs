@@ -21,6 +21,11 @@ impl Eq for NotifyRegexes {}
 pub struct DaemonConfig {
     #[serde(default = "default_enabled")]
     pub enabled: bool,
+
+    // Where the actual communication folder is stored
+    // we access via a symlink in the workspace since on
+    // macos these paths can be so long some forms of I/O
+    // will start failing.
     #[serde(default = "default_communication_folder")]
     pub daemon_communication_folder: PathBuf,
 
