@@ -1375,13 +1375,13 @@ checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 
 [[package]]
 name = "pinky-swear"
-version = "5.2.1"
+version = "6.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ca53c10e251c47206b98e51299c05fbfd6a08318bd593db4f5dca6039dbb96e"
+checksum = "d894b67aa7a4bf295db5e85349078c604edaa6fa5c8721e8eca3c7729a27f2ac"
 dependencies = [
  "doc-comment",
  "flume",
- "parking_lot 0.11.2",
+ "parking_lot 0.12.0",
  "tracing",
 ]
 
