@@ -87,7 +87,7 @@ impl FromStr for Action {
     type Err = ();
 
     fn from_str(input: &str) -> Result<Action, Self::Err> {
-        if let Some(builtin) = input.parse::<BuiltInAction>().ok() {
+        if let Ok(builtin) = input.parse::<BuiltInAction>() {
             return Ok(Action::BuiltIn(builtin));
         }
 
@@ -154,10 +154,10 @@ impl ParsedCommandLine {
     }
 
     pub fn add_action_option_if_unset(&mut self, option: BazelOption) -> bool {
-        if let Some(_) = self
+        if self
             .action_options
             .iter()
-            .find(|e| e.name() == option.name())
+            .any(|e| e.name() == option.name())
         {
             false
         } else {
@@ -167,10 +167,7 @@ impl ParsedCommandLine {
     }
 
     pub fn is_action_option_set(&self, opt: &str) -> bool {
-        self.action_options
-            .iter()
-            .find(|e| e.name() == opt)
-            .is_some()
+        self.action_options.iter().any(|e| e.name() == opt)
     }
 
     pub fn set_action(&mut self, action: Option<Action>) -> Option<Action> {
@@ -186,7 +183,7 @@ impl ParsedCommandLine {
 
 fn extract_set_of_flags<'a, I: Iterator<Item = &'a String>>(
     iter: &mut Peekable<I>,
-    flags: &Vec<BazelOption>,
+    flags: &[BazelOption],
 ) -> Result<Vec<BazelOption>, CommandLineParsingError> {
     let mut result: Vec<BazelOption> = Vec::default();
     'outer_loop: loop {
@@ -197,16 +194,15 @@ fn extract_set_of_flags<'a, I: Iterator<Item = &'a String>>(
             if trimmed.starts_with("--") {
                 let mut value: Option<String> = None;
                 trimmed = &trimmed[2..];
-                if let Some(loc_eq) = trimmed.find("=") {
+                if let Some(loc_eq) = trimmed.find('=') {
                     let (prev, mut post) = trimmed.split_at(loc_eq);
                     post = &post[1..];
                     value = Some(post.to_string());
                     trimmed = prev;
-                } else if trimmed.starts_with("no") {
-                    let t = &trimmed[2..];
+                } else if let Some(stripped) = trimmed.strip_prefix("no") {
                     let boolean_option_found = flags.iter().find_map(|e| match e {
                         BazelOption::BooleanOption(nme, _) => {
-                            if nme.as_str() == t {
+                            if nme.as_str() == stripped {
                                 Some(BazelOption::BooleanOption(nme.to_string(), false))
                             } else {
                                 None
@@ -272,7 +268,7 @@ fn extract_set_of_flags<'a, I: Iterator<Item = &'a String>>(
 }
 
 pub fn parse_bazel_command_line(
-    command_line: &Vec<String>,
+    command_line: &[String],
 ) -> Result<ParsedCommandLine, CommandLineParsingError> {
     let mut command_line_iter = command_line.iter().peekable();
     let bazel_path = if let Some(p) = command_line_iter.next() {
@@ -318,15 +314,15 @@ pub fn parse_bazel_command_line(
         action_args.extend(command_line_iter.cloned());
         Ok(ParsedCommandLine {
             bazel_binary: bazel_path,
-            startup_options: startup_options,
+            startup_options,
             action: Some(action.clone()),
-            action_options: action_options,
+            action_options,
             remaining_args: action_args,
         })
     } else {
         Ok(ParsedCommandLine {
             bazel_binary: bazel_path,
-            startup_options: startup_options,
+            startup_options,
             action: None,
             action_options: Vec::default(),
             remaining_args: command_line_iter.cloned().collect(),

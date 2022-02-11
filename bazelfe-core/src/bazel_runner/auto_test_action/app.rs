@@ -213,18 +213,14 @@ impl<'a> App<'a> {
                     r.files.clone(),
                     r.target_kind.clone(),
                     r.bazel_run_id,
-                    r.when.clone(),
+                    r.when,
                     r.label.clone(),
                 );
                 let do_update = if let Some(prev) = self.failure_state.get(&r.label) {
                     if r.bazel_run_id != prev.bazel_run_id {
                         true
                     } else {
-                        if prev.stderr.is_some() && f.stderr.is_none() {
-                            false
-                        } else {
-                            true
-                        }
+                        !(prev.stderr.is_some() && f.stderr.is_none())
                     }
                 } else {
                     true

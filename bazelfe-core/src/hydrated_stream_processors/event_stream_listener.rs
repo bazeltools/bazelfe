@@ -13,7 +13,7 @@ impl EventStreamListener {
         processors: Vec<Arc<dyn crate::hydrated_stream_processors::BazelEventHandler>>,
     ) -> Self {
         Self {
-            processors: processors,
+            processors,
             run_id: Arc::new(AtomicUsize::new(0)),
         }
     }

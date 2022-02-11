@@ -10,7 +10,7 @@ use super::JavaClassImportRequest;
 fn build_class_import_request(class_name: String) -> JavaClassImportRequest {
     JavaClassImportRequest {
         src_file_name: String::from("None"),
-        class_name: class_name,
+        class_name,
         exact_only: false,
         src_fn: "does_not_represent_a_declared_type",
         priority: 1,

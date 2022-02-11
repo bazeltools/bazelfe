@@ -32,7 +32,7 @@ async fn load_config_file(opt: &Opt) -> Result<Config, Box<dyn std::error::Error
     use std::str::FromStr;
     let mut path: Option<String> = None;
     if let Some(p) = &opt.config {
-        let pbuf = PathBuf::from_str(&p)?;
+        let pbuf = PathBuf::from_str(p)?;
         if !pbuf.exists() {
             panic!("Expected to find config at path {}, but it didn't exist", p);
         }
@@ -57,12 +57,12 @@ async fn load_config_file(opt: &Opt) -> Result<Config, Box<dyn std::error::Error
     }
 }
 
-fn passthrough_to_bazel(opt: Opt) -> () {
+fn passthrough_to_bazel(opt: Opt) {
     let application: OsString = opt
         .passthrough_args
         .first()
         .map(|a| {
-            let a: String = a.clone().into();
+            let a: String = a.clone();
             a
         })
         .expect("Should have had at least one arg the bazel process itself.")
@@ -73,7 +73,7 @@ fn passthrough_to_bazel(opt: Opt) -> () {
         .iter()
         .skip(1)
         .map(|str_ref| {
-            let a: String = str_ref.clone().into();
+            let a: String = str_ref.clone();
             let a: OsString = a.into();
             a
         })
@@ -87,8 +87,8 @@ fn passthrough_to_bazel(opt: Opt) -> () {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "bazelfe-daemon")]
-    if let Ok(_) = std::env::var("BAZEL_FE_ENABLE_DAEMON_MODE") {
-        return Ok(bazelfe_core::bazel_runner_daemon::daemon_server::base_main().await?);
+    if std::env::var("BAZEL_FE_ENABLE_DAEMON_MODE").is_ok() {
+        return bazelfe_core::bazel_runner_daemon::daemon_server::base_main().await;
     }
 
     let opt = Opt::parse();
@@ -102,7 +102,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // Likely tooling is setting this, quietly exec bazel.
                 // since we can't invoke our usual behaviors if this is the case.
                 // Need to figure out some way to signal this occured probably to the dev productivity team somewhere.
-                return Ok(passthrough_to_bazel(opt));
+                return {
+                    passthrough_to_bazel(opt);
+                    Ok(())
+                };
             }
             parsed_command_line
         }
@@ -115,11 +118,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 bazelfe_core::bazel_command_line_parser::CommandLineParsingError::MissingArgToOption(o) => {
                         eprintln!("Arg parsing from bazelfe doesn't understand the args, missing an option to {}", o);
                         eprintln!("Will just invoke bazel and abort.");
-                        return Ok(passthrough_to_bazel(opt));
+                        return {
+                            passthrough_to_bazel(opt);
+                            Ok(())
+                        };
                 }
                 bazelfe_core::bazel_command_line_parser::CommandLineParsingError::UnknownArgument(o) => {
                     eprintln!("We got an option we didn't know how to parse, to avoid doing something unexpected, we will just invoke bazel.\nGot: {}", o);
-                    return Ok(passthrough_to_bazel(opt));
+                    return {
+                        passthrough_to_bazel(opt);
+                        Ok(())
+                    };
                 }
             }
         }

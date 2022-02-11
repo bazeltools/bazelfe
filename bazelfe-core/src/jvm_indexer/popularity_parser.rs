@@ -38,7 +38,7 @@ fn is_not_hidden(entry: &DirEntry) -> bool {
     entry
         .file_name()
         .to_str()
-        .map(|s| entry.depth() == 0 || !s.starts_with("."))
+        .map(|s| entry.depth() == 0 || !s.starts_with('.'))
         .unwrap_or(false)
 }
 
@@ -60,7 +60,7 @@ pub async fn build_popularity_map() -> HashMap<String, usize> {
                 let content = tokio::fs::read_to_string(path).await.unwrap();
                 for line in content.lines() {
                     for result in consume_quoted_strings(line).unwrap().1 {
-                        let value = if result.starts_with(":") {
+                        let value = if result.starts_with(':') {
                             Some(format!(
                                 "//{}{}",
                                 path.parent()
@@ -71,9 +71,7 @@ pub async fn build_popularity_map() -> HashMap<String, usize> {
                                     .unwrap(),
                                 result
                             ))
-                        } else if result.starts_with("//") {
-                            Some(result)
-                        } else if result.starts_with("@") {
+                        } else if result.starts_with("//") || result.starts_with('@') {
                             Some(result)
                         } else {
                             None

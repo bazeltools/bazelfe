@@ -17,10 +17,10 @@ pub fn sanitize_label(label: String) -> String {
     // src/foo/bar/baz and src/foo/bar/baz:baz
     // ensures we don't try refer to ourselves
 
-    let label = match label.find(":") {
+    let label = match label.find(':') {
         None => {
-            let last_segment = &label[label.rfind("/").map(|e| e + 1).unwrap_or(0)..label.len()];
-            format!("{}:{}", label, last_segment).to_string()
+            let last_segment = &label[label.rfind('/').map(|e| e + 1).unwrap_or(0)..label.len()];
+            format!("{}:{}", label, last_segment)
         }
         Some(_) => label,
     };
@@ -68,8 +68,8 @@ pub fn class_name_to_prefixes(class_name: &str) -> Vec<String> {
     let mut long_running_string = String::new();
     let mut result = Vec::new();
     let mut loop_cnt = 0;
-    class_name.split(".").for_each(|segment| {
-        if long_running_string.len() > 0 {
+    class_name.split('.').for_each(|segment| {
+        if !long_running_string.is_empty() {
             long_running_string = format!("{}.{}", long_running_string, segment);
         } else {
             long_running_string = segment.to_string();

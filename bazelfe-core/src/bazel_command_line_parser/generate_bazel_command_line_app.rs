@@ -13,8 +13,8 @@ struct Opt {
     output_path: PathBuf,
 }
 fn decode_str(data: &Vec<u8>) -> Result<String, Box<dyn Error>> {
-    if data.len() > 0 {
-        Ok(std::str::from_utf8(&data)?.to_string())
+    if !data.is_empty() {
+        Ok(std::str::from_utf8(data)?.to_string())
     } else {
         Ok(String::from(""))
     }
@@ -36,17 +36,15 @@ async fn generate_actions_list(bazel_path: &PathBuf) -> Result<Vec<String>, Box<
             if line.trim().is_empty() {
                 break;
             } else {
-                let segment = line.split(" ").filter(|e| !e.is_empty()).next();
+                let segment = line.split(' ').find(|e| !e.is_empty());
                 if let Some(action) = segment {
                     res.push(action.to_string());
                 } else {
                     panic!("Unable to parse line {}", line);
                 }
             }
-        } else {
-            if line.starts_with("Available commands:") {
-                in_segment = true;
-            }
+        } else if line.starts_with("Available commands:") {
+            in_segment = true;
         }
     }
 
@@ -84,13 +82,12 @@ async fn extract_options(
 
     command.args(&["help", action, "--short"]);
 
-    eprintln!("Running {:#?}", command);
     let output = command.output().await?;
 
     let stdout = decode_str(&output.stdout)?;
 
     for line in stdout.lines() {
-        let segment = line.split(" ").filter(|e| !e.is_empty()).next();
+        let segment = line.split(' ').find(|e| !e.is_empty());
         if let Some(action) = segment {
             if action.starts_with("--") {
                 if action.starts_with("--[no]") {
@@ -115,7 +112,7 @@ fn convert_raw_action_to_enum_name(s: &str) -> String {
     let mut last_special = true;
     for chr in s.chars() {
         if last_special {
-            let mut chr = chr.clone();
+            let mut chr = chr;
             chr.make_ascii_uppercase();
             v.push(chr);
             last_special = false;
@@ -139,13 +136,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut actions = generate_actions_list(&opt.bazel_cmd_path).await?;
     actions.sort();
-    println!("{:?}", actions);
 
     let startup_options = extract_options(&opt.bazel_cmd_path, "startup_options").await?;
 
     let mut options_per_action: HashMap<String, Vec<BazelOption>> = HashMap::default();
     for action in actions.iter() {
-        let options = extract_options(&opt.bazel_cmd_path, &action).await?;
+        let options = extract_options(&opt.bazel_cmd_path, action).await?;
         options_per_action.insert(action.clone(), options);
     }
 
@@ -254,7 +250,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .map(|opt| action_lookup.get(opt).expect("Should exist in table"))
             .cloned()
             .collect();
-        options_indices.sort();
+        options_indices.sort_unstable();
         let mut str_buf: String = String::default();
         for u in options_indices {
             str_buf = format!("{}{},", str_buf, u);

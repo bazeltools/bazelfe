@@ -7,7 +7,7 @@ pub struct Priority(pub u16);
 
 impl PartialOrd for Priority {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(&other))
+        Some(self.cmp(other))
     }
 }
 
@@ -69,7 +69,7 @@ impl Default for IndexTableValue {
 
 impl IndexTableValue {
     /// Used in testing to convert into a simple vec for comparing.
-    pub(in crate) async fn as_vec(self) -> Vec<IndexTableValueEntry> {
+    pub(in crate) async fn into_vec(self) -> Vec<IndexTableValueEntry> {
         let w = self.0.read().await;
         let r = w.clone();
         drop(w);
@@ -98,7 +98,7 @@ impl IndexTableValue {
         Self(Arc::new(RwLock::new(v)))
     }
 
-    pub async fn write<T>(&self, t: &mut T) -> ()
+    pub async fn write<T>(&self, t: &mut T)
     where
         T: Write,
     {
@@ -112,9 +112,9 @@ impl IndexTableValue {
         }
     }
 
-    pub async fn read_iter<'a>(&'a self) -> IterGuard<'a> {
+    pub async fn read_iter(&'_ self) -> IterGuard<'_> {
         let guard = self.0.read().await;
-        return IterGuard { guard };
+        IterGuard { guard }
     }
 
     pub fn from_vec(data: Vec<(u16, usize)>) -> Self {
@@ -142,13 +142,10 @@ impl IndexTableValue {
     }
 
     pub async fn lookup_by_value(&self, k: usize) -> Option<(usize, u16)> {
-        let mut idx = 0;
-
-        for element in &self.read_iter().await {
+        for (idx, element) in (&self.read_iter().await).into_iter().enumerate() {
             if element.target == k {
                 return Some((idx, element.priority.0));
             }
-            idx += 1;
         }
         None
     }
@@ -227,7 +224,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_blank_entry() {
-        let index = IndexTableValue::default().as_vec().await;
+        let index = IndexTableValue::default().into_vec().await;
         let expected: Vec<IndexTableValueEntry> = Vec::default();
         assert_eq!(index, expected);
     }
@@ -249,7 +246,7 @@ mod tests {
                 priority: Priority(22),
             },
         ];
-        assert_eq!(index.as_vec().await, expected);
+        assert_eq!(index.into_vec().await, expected);
     }
 
     #[tokio::test]
@@ -284,6 +281,6 @@ mod tests {
                 priority: Priority(55),
             },
         ];
-        assert_eq!(index.as_vec().await, expected);
+        assert_eq!(index.into_vec().await, expected);
     }
 }

@@ -91,13 +91,13 @@ pub fn parse_import(line_number: u32, input: &str) -> IResult<&str, Import> {
         |r| r.1,
     )(input)?;
 
-    if input.len() > 0 {
-        let (input, selector) = consume_selector()(&input)?;
+    if !input.is_empty() {
+        let (input, selector) = consume_selector()(input)?;
 
         Ok((
             input,
             Import {
-                line_number: line_number,
+                line_number,
                 prefix_section: extracted.to_string(),
                 suffix: selector,
             },
@@ -106,7 +106,7 @@ pub fn parse_import(line_number: u32, input: &str) -> IResult<&str, Import> {
         Ok((
             input,
             Import {
-                line_number: line_number,
+                line_number,
                 prefix_section: extracted.to_string(),
                 suffix: SelectorType::NoSelector,
             },
@@ -138,7 +138,7 @@ fn extract_package_from_line(ln: &str) -> Result<&str> {
         ))),
         |tup| tup.3,
     )(ln)?;
-    if remaining.len() > 0 {
+    if !remaining.is_empty() {
         return Err(Error::UnexpectedRemainingData(remaining.to_string()));
     }
     Ok(res)
@@ -147,9 +147,8 @@ fn extract_package_from_line(ln: &str) -> Result<&str> {
 fn extract_package_from_file(file_lines: &str) -> Result<Option<&str>> {
     for ln in file_lines.lines() {
         if ln.contains("package") {
-            match extract_package_from_line(ln) {
-                Ok(pkg) => return Ok(Some(pkg)),
-                Err(_) => (),
+            if let Ok(pkg) = extract_package_from_line(ln) {
+                return Ok(Some(pkg));
             }
         }
     }
@@ -165,15 +164,18 @@ pub fn parse_imports(input: &str) -> Result<Vec<Import>> {
     while remaining_input.len() > 3 {
         match eat_till_end_of_line(remaining_input) {
             Ok((r, (current_line, end_of_line_eaten))) => {
-                if current_line.len() > 0 && current_line.contains("import") {
-                    match parse_import(line_number, remaining_input) {
-                        Ok((_, found)) => results_vec.push(found),
-                        Err(_) => (),
+                if !current_line.is_empty() && current_line.contains("import") {
+                    if let Ok((_, found)) = parse_import(line_number, remaining_input) {
+                        results_vec.push(found)
                     };
                 }
 
                 // if we never found an end of line, must be end of file.
-                if end_of_line_eaten.len() > 0 {
+                if ({
+                    let this = &end_of_line_eaten;
+                    this.as_bytes().len()
+                }) > 0
+                {
                     remaining_input = r;
                 } else {
                     remaining_input = "";
@@ -183,7 +185,7 @@ pub fn parse_imports(input: &str) -> Result<Vec<Import>> {
                 remaining_input = "";
             }
         }
-        line_number = line_number + 1;
+        line_number += 1;
     }
 
     Ok(results_vec)

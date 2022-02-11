@@ -53,9 +53,9 @@ fn make_paths<'a>(root: &'a PathBuf) -> impl Iterator<Item = PathBuf> + 'a {
 }
 
 fn setup_daemon_io(root: &PathBuf) -> Result<(), SpawnFailure> {
-    std::fs::create_dir_all(&root).map_err(|e| SpawnFailure::MakeDirFailed(e))?;
-    for path in make_paths(&root) {
-        std::fs::File::create(path).map_err(|e| SpawnFailure::TouchLogFile(e))?;
+    std::fs::create_dir_all(&root).map_err(SpawnFailure::MakeDirFailed)?;
+    for path in make_paths(root) {
+        std::fs::File::create(path).map_err(SpawnFailure::TouchLogFile)?;
     }
 
     use stdio_override::*;
@@ -79,7 +79,7 @@ where
     S: AsRef<std::ffi::OsStr>,
 {
     if let Some(parent) = pid_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| SpawnFailure::MakeDirFailed(e))?;
+        std::fs::create_dir_all(parent).map_err(SpawnFailure::MakeDirFailed)?;
     }
 
     let mut path_to_use =
@@ -95,7 +95,7 @@ where
     match fork::fork() {
         Ok(Fork::Parent(_)) => Ok(()),
         Ok(Fork::Child) => fork::setsid()
-            .map_err(|e| SpawnFailure::SetSidFailure(e))
+            .map_err(SpawnFailure::SetSidFailure)
             .and_then(|_| {
                 close_stdin()?;
                 match fork::fork() {
@@ -111,7 +111,7 @@ where
                         let e = exec::Command::new(std::env::current_exe()?)
                             .args(child_process_args)
                             .exec();
-                        Err(e)?
+                        Err(e.into())
                     }
                     Err(e) => Err(SpawnFailure::ForkToGranChildFailed(e)),
                 }

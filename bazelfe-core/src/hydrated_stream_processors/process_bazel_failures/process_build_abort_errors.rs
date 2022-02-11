@@ -180,8 +180,8 @@ async fn extract_added_cycle_in_dependency_graph(
                         if data.ignore_list.contains(&dependency_to_remove) {
                             let correction =
                                 BazelCorrectionCommand::BuildozerRemoveDep(BuildozerRemoveDepCmd {
-                                    target_to_operate_on: target_to_operate_on,
-                                    dependency_to_remove: dependency_to_remove,
+                                    target_to_operate_on,
+                                    dependency_to_remove,
                                     why: String::from("There is a cyclic dependency, so attempting to unwind/remove dependencies")
                                 });
                             command_stream.push(correction);
@@ -211,7 +211,7 @@ async fn apply_candidates<T: Buildozer + Clone + Send + Sync + 'static>(
     buildozer: T,
 ) -> super::Response {
     let mut target_stories = Vec::default();
-    if candidate_correction_commands.len() == 0 {
+    if candidate_correction_commands.is_empty() {
         return super::Response::new(Vec::default());
     }
     for correction_command in candidate_correction_commands.into_iter() {
@@ -254,14 +254,14 @@ pub async fn process_progress<T: Buildozer + Clone + Send + Sync + 'static>(
     let mut candidate_correction_commands: Vec<BazelCorrectionCommand> = vec![];
 
     extract_added_cycle_in_dependency_graph(
-        &bazel_progress_error_info,
+        bazel_progress_error_info,
         &mut candidate_correction_commands,
         &previous_global_seen,
     )
     .await;
 
     extract_target_not_declared_in_package(
-        &bazel_progress_error_info,
+        bazel_progress_error_info,
         &mut candidate_correction_commands,
     );
 
@@ -274,8 +274,8 @@ pub async fn process_build_abort_errors<T: Buildozer + Clone + Send + Sync + 'st
 ) -> super::Response {
     let mut candidate_correction_commands: Vec<BazelCorrectionCommand> = vec![];
 
-    extract_target_does_not_exist(&bazel_abort_error_info, &mut candidate_correction_commands);
-    extract_target_not_visible(&bazel_abort_error_info, &mut candidate_correction_commands);
+    extract_target_does_not_exist(bazel_abort_error_info, &mut candidate_correction_commands);
+    extract_target_not_visible(bazel_abort_error_info, &mut candidate_correction_commands);
     apply_candidates(candidate_correction_commands, buildozer).await
 }
 

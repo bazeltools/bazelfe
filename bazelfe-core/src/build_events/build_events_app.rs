@@ -33,7 +33,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let addr = opt
         .bind_address
-        .map(|s| s.to_owned())
         .or(env::var("BIND_ADDRESS").ok())
         .unwrap_or_else(|| "127.0.0.1:50051".into())
         .parse()
@@ -55,13 +54,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             match action {
                 BuildEventAction::BuildCompleted => {
                     let _ = file.take();
-                    ()
                 }
                 BuildEventAction::LifecycleEvent(_) => (),
                 BuildEventAction::BuildEvent(msg) => {
                     match file {
                         None => {
-                            idx = idx + 1;
+                            idx += 1;
                             let f = tokio::fs::File::create(format!("build_events_{}.proto", idx))
                                 .await
                                 .unwrap();

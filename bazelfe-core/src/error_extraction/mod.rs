@@ -7,7 +7,7 @@ pub struct ClassImportRequest {
 }
 impl PartialOrd for ClassImportRequest {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(&other))
+        Some(self.cmp(other))
     }
 }
 

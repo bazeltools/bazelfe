@@ -85,7 +85,7 @@ pub fn extract_errors(input: &str) -> Vec<super::ActionRequest> {
     combined_vec.extend(
         error_cannot_access::extract(input)
             .into_iter()
-            .map(|e| super::ActionRequest::Suffix(e)),
+            .map(super::ActionRequest::Suffix),
     );
     combined_vec
 }

@@ -53,7 +53,7 @@ pub struct Response {
 impl Response {
     pub fn new(target_story_entries: Vec<TargetStory>) -> Self {
         Self {
-            target_story_entries: target_story_entries,
+            target_story_entries,
         }
     }
 }
@@ -105,8 +105,8 @@ impl<T: Buildozer, U: CommandLineRunner> ProcessBazelFailures<T, U> {
             Arc::new(UserDefinedActionsStateCache::from_config(&config)?);
         Ok(Self {
             previous_global_seen: Arc::new(RwLock::new(HashMap::default())),
-            index_table: index_table,
-            buildozer: buildozer,
+            index_table,
+            buildozer,
             command_line_runner,
             epoch: Arc::new(RwLock::new(0)),
             config,
@@ -114,7 +114,7 @@ impl<T: Buildozer, U: CommandLineRunner> ProcessBazelFailures<T, U> {
         })
     }
 
-    pub async fn advance_epoch(&self) -> () {
+    pub async fn advance_epoch(&self) {
         let mut e = self.epoch.write().await;
         *e += 1;
     }
@@ -142,11 +142,11 @@ impl<T: Buildozer, U: CommandLineRunner> ProcessBazelFailures<T, U> {
                     }
                 };
                 let mut prev_data = prev_data_arc.lock().await;
-                let epoch = self.epoch.read().await.clone();
+                let epoch = *self.epoch.read().await;
 
                 let action_failed_response = process_action_failure_error::process_action_failed(
                     self.buildozer.clone(),
-                    &action_failed_error_info,
+                    action_failed_error_info,
                 )
                 .await;
 
@@ -154,7 +154,7 @@ impl<T: Buildozer, U: CommandLineRunner> ProcessBazelFailures<T, U> {
                     process_missing_dependency_errors::process_missing_dependency_errors(
                         &mut *prev_data,
                         self.buildozer.clone(),
-                        &action_failed_error_info,
+                        action_failed_error_info,
                         &self.index_table,
                         epoch,
                     )
@@ -163,7 +163,7 @@ impl<T: Buildozer, U: CommandLineRunner> ProcessBazelFailures<T, U> {
                 let user_defined_action_failure =
                     process_user_defined_actions::process_action_failed(
                         self.command_line_runner.clone(),
-                        &action_failed_error_info,
+                        action_failed_error_info,
                         &self.user_defined_action_cache,
                     )
                     .await;
@@ -178,12 +178,12 @@ impl<T: Buildozer, U: CommandLineRunner> ProcessBazelFailures<T, U> {
             hydrated_stream::HydratedInfo::BazelAbort(bazel_abort_error_info) => vec![
                 process_build_abort_errors::process_build_abort_errors(
                     self.buildozer.clone(),
-                    &bazel_abort_error_info,
+                    bazel_abort_error_info,
                 )
                 .await,
             ],
             hydrated_stream::HydratedInfo::TargetComplete(tce) => {
-                if tce.success && tce.label.len() > 0 {
+                if tce.success && !tce.label.is_empty() {
                     vec![Response::new(vec![TargetStory {
                         target: tce.label.clone(),
                         action: TargetStoryAction::Success,
@@ -198,7 +198,7 @@ impl<T: Buildozer, U: CommandLineRunner> ProcessBazelFailures<T, U> {
             hydrated_stream::HydratedInfo::ActionSuccess(action_success_info) => {
                 let action_success_response = process_user_defined_actions::process_action_success(
                     self.command_line_runner.clone(),
-                    &action_success_info,
+                    action_success_info,
                     &self.user_defined_action_cache,
                 )
                 .await;
@@ -211,7 +211,7 @@ impl<T: Buildozer, U: CommandLineRunner> ProcessBazelFailures<T, U> {
                 vec![
                     process_build_abort_errors::process_progress(
                         self.buildozer.clone(),
-                        &progress_info,
+                        progress_info,
                         tbl,
                     )
                     .await,
@@ -223,7 +223,7 @@ impl<T: Buildozer, U: CommandLineRunner> ProcessBazelFailures<T, U> {
         };
         r.into_iter()
             .filter_map(|e| {
-                if e.target_story_entries.len() > 0 {
+                if !e.target_story_entries.is_empty() {
                     Some(super::BuildEventResponse::ProcessedBuildFailures(e))
                 } else {
                     None

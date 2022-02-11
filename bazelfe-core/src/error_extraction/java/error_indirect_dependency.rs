@@ -14,7 +14,7 @@ fn build_class_import_request(
 ) -> JavaClassImportRequest {
     JavaClassImportRequest {
         src_file_name: source_file_name,
-        class_name: class_name,
+        class_name,
         exact_only: false,
         src_fn: "package_does_not_exist",
         priority: 1,

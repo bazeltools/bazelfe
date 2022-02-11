@@ -1,4 +1,5 @@
 use bazelfe_protos::*;
+use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::{
     collections::{HashMap, HashSet},
@@ -79,7 +80,7 @@ fn monotonic_current_time() -> u128 {
     unsafe {
         CURRENT_TIME += 1;
     }
-    return ret;
+    ret
 }
 fn target_as_path(s: &String) -> Option<PathBuf> {
     let pb = PathBuf::from(s.replace(":", "/").replace("//", ""));
@@ -257,7 +258,7 @@ impl TargetCache {
         }
     }
 
-    async fn hydrate_new_file_data(&self, path: PathBuf) -> () {
+    async fn hydrate_new_file_data(&self, path: PathBuf) {
         self.pending_hydrations.fetch_add(1, Ordering::Release);
 
         let pending_hydrations = self.pending_hydrations.clone();
@@ -275,11 +276,7 @@ impl TargetCache {
         });
     }
 
-    pub async fn register_new_files(
-        &self,
-        paths: Vec<PathBuf>,
-        event_kind: notify::EventKind,
-    ) -> () {
+    pub async fn register_new_files(&self, paths: Vec<PathBuf>, event_kind: notify::EventKind) {
         let current_path = std::env::current_dir().expect("Should be able to get the current dir");
         let mut lock = self.last_files_updated.lock().await;
         let ts = monotonic_current_time();
@@ -356,7 +353,7 @@ impl TargetCache {
                 if do_insert {
                     self.hydrate_new_file_data(real_path.clone()).await;
                     eprintln!(
-                        "{:#?}",
+                        "Noting changed file, at a given timestamp. {:#?}",
                         (real_path.to_path_buf(), (ts, now_instant, &current_sha))
                     );
                     lock.insert(real_path.to_path_buf(), (ts, now_instant, current_sha));
@@ -381,22 +378,22 @@ impl TargetCache {
 
         loop {
             if *self.last_update_ts.lock().await > instant {
+                debug!("Last update timing indicates we should just try get recent files as of instant: {}", instant);
                 return self.get_recent_files(instant).await;
             }
 
             if Instant::now().sub(start_time) > max_wait {
+                debug!("Timing out and returning empty set of mutated files.");
                 return Vec::default();
             }
-            match self
+            if let Ok(v) = self
                 .inotify_receiver
                 .recv_deadline(start_time.add(spin_wait))
             {
-                Ok(v) => {
-                    if v > instant {
-                        return self.get_recent_files(instant).await;
-                    }
+                if v > instant {
+                    debug!("Returning recent files since update timestamp is good");
+                    return self.get_recent_files(instant).await;
                 }
-                Err(_) => (),
             }
         }
     }
@@ -626,7 +623,7 @@ pub async fn base_main() -> Result<(), Box<dyn Error>> {
 
 pub async fn main(
     daemon_config: &DaemonConfig,
-    bazel_binary_path: &PathBuf,
+    bazel_binary_path: &Path,
     paths: &super::DaemonPaths,
 ) -> Result<(), Box<dyn Error>> {
     super::setup_daemon_io(&daemon_config.daemon_communication_folder)?;
@@ -648,7 +645,7 @@ pub async fn main(
     let captured_target_cache = target_cache.clone();
 
     let captured_daemon_config = Arc::new(daemon_config.clone());
-    let captured_bazel_binary_path = Arc::new(bazel_binary_path.clone());
+    let captured_bazel_binary_path = Arc::new(bazel_binary_path.to_path_buf());
     println!("Starting tarpc");
     start_tarpc_server(&paths.socket_path, move || DaemonServerInstance {
         executable_id: executable_id.clone(),
@@ -695,16 +692,13 @@ pub async fn main(
 
     println!("Starting inotify watcher");
     let mut core_watcher: RecommendedWatcher =
-        RecommendedWatcher::new(move |res: notify::Result<notify::Event>| {
-            match res {
-                Ok(event) => {
-                    if let Err(e) = flume_tx.send(event) {
-                        eprintln!("Failed to enqueue inotify event: {:#?}", e);
-                    }
+        RecommendedWatcher::new(move |res: notify::Result<notify::Event>| match res {
+            Ok(event) => {
+                if let Err(e) = flume_tx.send(event) {
+                    eprintln!("Failed to enqueue inotify event: {:#?}", e);
                 }
-                Err(e) => println!("watch error: {:?}", e),
             }
-            ()
+            Err(e) => println!("watch error: {:?}", e),
         })
         .unwrap();
 
@@ -736,35 +730,32 @@ pub async fn main(
     let notify_ignore_regexes = daemon_config.inotify_ignore_regexes.clone();
 
     let mut root_watcher: RecommendedWatcher =
-        RecommendedWatcher::new(move |res: notify::Result<notify::Event>| {
-            match res {
-                Ok(event) => match event.kind {
-                    notify::EventKind::Create(_) => {
-                        for path in event.paths.iter() {
-                            let file_name = if let Some(file_name) = path.file_name() {
-                                file_name
-                            } else {
-                                continue;
-                            };
-                            let is_ignored = notify_ignore_regexes
-                                .0
-                                .iter()
-                                .find(|&p| p.is_match(file_name.to_string_lossy().as_ref()));
-                            if is_ignored.is_some() {
-                                continue;
-                            }
-
-                            let mut core_watcher = core_watcher.lock().unwrap();
-                            eprintln!("Watching {:#?}", path);
-
-                            core_watcher.watch(&path, RecursiveMode::Recursive).unwrap();
+        RecommendedWatcher::new(move |res: notify::Result<notify::Event>| match res {
+            Ok(event) => match event.kind {
+                notify::EventKind::Create(_) => {
+                    for path in event.paths.iter() {
+                        let file_name = if let Some(file_name) = path.file_name() {
+                            file_name
+                        } else {
+                            continue;
+                        };
+                        let is_ignored = notify_ignore_regexes
+                            .0
+                            .iter()
+                            .find(|&p| p.is_match(file_name.to_string_lossy().as_ref()));
+                        if is_ignored.is_some() {
+                            continue;
                         }
+
+                        let mut core_watcher = core_watcher.lock().unwrap();
+                        eprintln!("Watching {:#?}", path);
+
+                        core_watcher.watch(path, RecursiveMode::Recursive).unwrap();
                     }
-                    _ => (),
-                },
-                Err(e) => println!("watch error: {:?}", e),
-            }
-            ()
+                }
+                _ => (),
+            },
+            Err(e) => println!("watch error: {:?}", e),
         })
         .unwrap();
 
@@ -800,7 +791,7 @@ pub async fn main(
             last_call = current_v;
             last_seen = Instant::now();
         }
-        let pid = super::read_pid(&paths);
+        let pid = super::read_pid(paths);
         if let Some(p) = pid {
             // Another process lauched and we didn't catch the conflict in the manager, we should die to avoid issues.
             let our_pid = std::process::id();

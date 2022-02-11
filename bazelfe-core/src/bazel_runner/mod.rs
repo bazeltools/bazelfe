@@ -36,7 +36,7 @@ pub fn register_ctrlc_handler() {
     .expect("Error setting Ctrl-C handler");
 }
 
-fn add_custom_args(bazel_command_line: &mut ParsedCommandLine, srv_port: u16) -> () {
+fn add_custom_args(bazel_command_line: &mut ParsedCommandLine, srv_port: u16) {
     bazel_command_line.add_action_option_if_unset(
         crate::bazel_command_line_parser::BazelOption::OptionWithArg(
             String::from("bes_timeout"),

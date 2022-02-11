@@ -75,7 +75,7 @@ impl<'a> IndexTable {
 
         let tbl = tbl.read().await;
         for (k, v) in tbl.iter() {
-            let data = v.clone().as_vec().await;
+            let data = v.clone().into_vec().await;
             let mut v = Vec::default();
             for d in data.iter() {
                 v.push((d.priority.0, id_to_str[d.target].clone()));
@@ -123,7 +123,7 @@ impl<'a> IndexTable {
         }
     }
 
-    pub async fn set_popularity(&self, label_id: usize, popularity: u16) -> () {
+    pub async fn set_popularity(&self, label_id: usize, popularity: u16) {
         let mut lock = self.id_to_popularity.write().await;
         if label_id >= lock.len() {
             lock.resize_with((label_id + 100) as usize, Default::default);
@@ -131,7 +131,7 @@ impl<'a> IndexTable {
         lock[label_id] = popularity;
     }
 
-    pub async fn set_popularity_str(&self, label: String, popularity: u16) -> () {
+    pub async fn set_popularity_str(&self, label: String, popularity: u16) {
         let id = self.maybe_insert_target_string(label).await;
         self.set_popularity(id, popularity).await
     }
@@ -140,21 +140,21 @@ impl<'a> IndexTable {
         (*self.mutated).load(Ordering::Relaxed)
     }
 
-    pub async fn write<W>(&self, file: &mut W) -> ()
+    pub async fn write<W>(&self, file: &mut W)
     where
         W: Write,
     {
         let mut file = std::io::BufWriter::with_capacity(512 * 1024, file);
 
-        file.write_u64::<LittleEndian>(7654323579 as u64).unwrap();
-        file.write_u16::<LittleEndian>(1 as u16).unwrap();
+        file.write_u64::<LittleEndian>(7654323579_u64).unwrap();
+        file.write_u16::<LittleEndian>(1_u16).unwrap();
 
         let _ = {
             let id_vec = self.id_to_target_vec.read().await;
             file.write_u64::<LittleEndian>(id_vec.len() as u64).unwrap();
             for ele in id_vec.iter() {
                 file.write_u16::<LittleEndian>(ele.len() as u16).unwrap();
-                file.write_all(&ele).unwrap();
+                file.write_all(ele).unwrap();
             }
         };
 
@@ -434,7 +434,7 @@ impl<'a> IndexTable {
         let val = Arc::new(bytes);
         let read_lock = self.id_to_target_reverse_map.read().await;
         if let Some(id) = read_lock.get(&val) {
-            return id.clone();
+            return *id;
         }
         drop(read_lock);
         let mut id_to_target_vec = self.id_to_target_vec.write().await;
@@ -456,7 +456,7 @@ impl<'a> IndexTable {
                 let val = Arc::new(v.as_bytes().to_vec());
                 match id_to_target_reverse_map.get(&val) {
                     Some(id) => {
-                        nxt.push((freq, id.clone()));
+                        nxt.push((freq, *id));
                     }
                     None => {
                         let id = id_to_target_vec.len();
@@ -485,10 +485,9 @@ impl<'a> IndexTable {
 
     pub async fn decode_string(&self, key: usize) -> Option<String> {
         let read_lock = self.id_to_target_vec.read().await;
-        match read_lock.get(key) {
-            Some(e) => unsafe { Some(std::str::from_utf8_unchecked(&e).to_string()) },
-            None => None,
-        }
+        read_lock
+            .get(key)
+            .map(|e| unsafe { std::str::from_utf8_unchecked(e).to_string() })
     }
 
     pub async fn replace_with_id<'b, S>(&self, key: S, target_id: usize, priority: u16) -> bool
@@ -561,7 +560,7 @@ impl<'a> IndexTable {
         }
     }
 
-    pub async fn insert<'b, S>(&self, key: S, value: (u16, String)) -> ()
+    pub async fn insert<'b, S>(&self, key: S, value: (u16, String))
     where
         S: Into<Cow<'b, str>>,
     {
@@ -597,7 +596,7 @@ impl<'a> IndexTable {
         S: Into<Cow<'b, str>>,
     {
         let v = self.tbl_map.read().await;
-        v.get(&*key.into()).map(|e| e.clone())
+        v.get(&*key.into()).cloned()
     }
 
     pub async fn get_from_suffix<S>(&self, key: S) -> IndexTableValue
@@ -668,13 +667,13 @@ mod tests {
                 .get("javax.annotation.Noof")
                 .await
                 .unwrap()
-                .as_vec()
+                .into_vec()
                 .await,
             index_table
                 .get("javax.annotation.Noof")
                 .await
                 .unwrap()
-                .as_vec()
+                .into_vec()
                 .await
         );
     }
@@ -683,13 +682,10 @@ mod tests {
     async fn updating_index() {
         let index = IndexTable::default();
 
-        assert_eq!(
-            index
-                .get("org.apache.parquet.thrift.test.TestPerson.TestPersonTupleScheme")
-                .await
-                .is_none(),
-            true
-        );
+        assert!(index
+            .get("org.apache.parquet.thrift.test.TestPerson.TestPersonTupleScheme")
+            .await
+            .is_none());
 
         // Insert new element
         index
@@ -707,7 +703,7 @@ mod tests {
                 .get("javax.annotation.foo.boof.Nullable")
                 .await
                 .unwrap()
-                .as_vec()
+                .into_vec()
                 .await,
             vec![IndexTableValueEntry {
                 priority: Priority(236),
@@ -741,7 +737,7 @@ mod tests {
                 .get("javax.annotation.Nullable")
                 .await
                 .unwrap()
-                .as_vec()
+                .into_vec()
                 .await,
             vec![
                 IndexTableValueEntry {
@@ -766,13 +762,10 @@ mod tests {
             ))
             .await;
 
-        assert_eq!(
-            index
-                .get("org.apache.parquet.thrift.test.TestPerson.TestPersonTupleScheme")
-                .await
-                .is_none(),
-            true
-        );
+        assert!(index
+            .get("org.apache.parquet.thrift.test.TestPerson.TestPersonTupleScheme")
+            .await
+            .is_none());
 
         // Insert new elements, one in blacklist, one not.
         index
@@ -800,7 +793,7 @@ mod tests {
                 .get("javax.annotation.foo.boof.Nullable")
                 .await
                 .unwrap()
-                .as_vec()
+                .into_vec()
                 .await,
             vec![IndexTableValueEntry {
                 priority: Priority(232),

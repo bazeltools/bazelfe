@@ -23,84 +23,81 @@ pub async fn rewrite_command_line(
         == Some(crate::bazel_command_line_parser::Action::BuiltIn(
             BuiltInAction::Test,
         ))
+        && bazel_command_line.remaining_args.is_empty()
     {
-        if bazel_command_line.remaining_args.is_empty() {
-            match &command_line_rewriter.test {
-                TestActionMode::EmptyTestToLocalRepo(cfg) => {
-                    bazel_command_line
-                        .remaining_args
-                        .push(cfg.command_to_use.clone());
-                }
-                TestActionMode::EmptyTestToFail => {
-                    Err(RewriteCommandLineError::UserErrorReport(super::UserReportError("No test target specified.\nUnlike other build tools, bazel requires you specify which test target to test.\nTo test the whole repo add //... to the end. But beware this could be slow!".to_owned())))?;
-                }
-                TestActionMode::Passthrough => {}
-                #[allow(unused)]
-                TestActionMode::SuggestTestTarget(cfg) => {
-                    #[cfg(feature = "bazelfe-daemon")]
-                    if let Some(daemon_cli) = daemon_client.as_ref() {
-                        let mut invalidated_targets = vec![];
+        match &command_line_rewriter.test {
+            TestActionMode::EmptyTestToLocalRepo(cfg) => {
+                bazel_command_line
+                    .remaining_args
+                    .push(cfg.command_to_use.clone());
+            }
+            TestActionMode::EmptyTestToFail => {
+                return Err(RewriteCommandLineError::UserErrorReport(super::UserReportError("No test target specified.\nUnlike other build tools, bazel requires you specify which test target to test.\nTo test the whole repo add //... to the end. But beware this could be slow!".to_owned())));
+            }
+            TestActionMode::Passthrough => {}
+            #[allow(unused)]
+            TestActionMode::SuggestTestTarget(cfg) => {
+                #[cfg(feature = "bazelfe-daemon")]
+                if let Some(daemon_cli) = daemon_client.as_ref() {
+                    let mut invalidated_targets = vec![];
 
-                        for distance in 0..(cfg.distance_to_expand + 1) {
-                            let recently_invalidated_targets = daemon_cli
-                                .recently_invalidated_targets(tarpc::context::current(), distance)
-                                .await;
-                            invalidated_targets.extend(
-                                recently_invalidated_targets
-                                    .into_iter()
-                                    .map(|e| (distance, e)),
-                            );
-                        }
-                        if !invalidated_targets.is_empty() {
-                            use trim_margin::MarginTrimmable;
-
-                            invalidated_targets.sort_by_key(|e| e.0);
-                            use std::collections::HashSet;
-                            let mut seen_targets: HashSet<String> = HashSet::default();
-                            let mut buf = String::from("");
-                            invalidated_targets.into_iter().for_each(|(_, targets)| {
-                                targets.iter().for_each(|target| {
-                                    if target.is_test() {
-                                        if !seen_targets.contains(target.target_label()) {
-                                            seen_targets.insert(target.target_label().clone());
-                                            buf.push_str(&format!("\n|{}", target.target_label()));
-                                        }
-                                    }
-                                });
-                            });
-
-                            let suggestion_str = if buf.is_empty() {
-                                format!("Daemon hasn't noticed any changes to suggest test targets")
-                            } else {
-                                format!(
-                                    r#"Suggestions: 
-                                |{}
-                                |"#,
-                                    buf
-                                )
-                            };
-                            Err(RewriteCommandLineError::UserErrorReport(
-                                super::UserReportError(
-                                    format!(
-                                        r#"|No test target specified.
-                                    |{}"#,
-                                        suggestion_str
-                                    )
-                                    .trim_margin()
-                                    .unwrap()
-                                    .to_owned(),
-                                ),
-                            ))?;
-                        }
-                    } else {
-                        Err(RewriteCommandLineError::UserErrorReport(super::UserReportError(
-                                "Configured to suggest possible test targets to run, but no daemon is running".to_owned())))?;
+                    for distance in 0..(cfg.distance_to_expand + 1) {
+                        let recently_invalidated_targets = daemon_cli
+                            .recently_invalidated_targets(tarpc::context::current(), distance)
+                            .await;
+                        invalidated_targets.extend(
+                            recently_invalidated_targets
+                                .into_iter()
+                                .map(|e| (distance, e)),
+                        );
                     }
+                    if !invalidated_targets.is_empty() {
+                        use trim_margin::MarginTrimmable;
 
-                    #[cfg(not(feature = "bazelfe-daemon"))]
-                    Err(RewriteCommandLineError::UserErrorReport(super::UserReportError(
-                        "Bazelfe is configured to suggest possible test targets to run, however the daemon is not included in this build".to_owned())))?;
+                        invalidated_targets.sort_by_key(|e| e.0);
+                        use std::collections::HashSet;
+                        let mut seen_targets: HashSet<String> = HashSet::default();
+                        let mut buf = String::from("");
+                        invalidated_targets.into_iter().for_each(|(_, targets)| {
+                            targets.iter().for_each(|target| {
+                                if target.is_test() && !seen_targets.contains(target.target_label())
+                                {
+                                    seen_targets.insert(target.target_label().clone());
+                                    buf.push_str(&format!("\n|{}", target.target_label()));
+                                }
+                            });
+                        });
+
+                        let suggestion_str = if buf.is_empty() {
+                            "Daemon hasn't noticed any changes to suggest test targets".to_string()
+                        } else {
+                            format!(
+                                r#"Suggestions: 
+                            |{}
+                            |"#,
+                                buf
+                            )
+                        };
+                        return Err(RewriteCommandLineError::UserErrorReport(
+                            super::UserReportError(
+                                format!(
+                                    r#"|No test target specified.
+                                |{}"#,
+                                    suggestion_str
+                                )
+                                .trim_margin()
+                                .unwrap(),
+                            ),
+                        ));
+                    }
+                } else {
+                    return Err(RewriteCommandLineError::UserErrorReport(super::UserReportError(
+                            "Configured to suggest possible test targets to run, but no daemon is running".to_owned())));
                 }
+
+                #[cfg(not(feature = "bazelfe-daemon"))]
+                Err(RewriteCommandLineError::UserErrorReport(super::UserReportError(
+                    "Bazelfe is configured to suggest possible test targets to run, however the daemon is not included in this build".to_owned())))?;
             }
         }
     }

@@ -1,5 +1,5 @@
 pub(in crate::index_table) fn get_guesses_for_class_name(class_name: &str) -> Vec<(u16, String)> {
-    let mut sections: Vec<&str> = class_name.split(".").collect();
+    let mut sections: Vec<&str> = class_name.split('.').collect();
 
     // heuristic looking for a class name, to ignore separate from the package...
 
@@ -25,8 +25,8 @@ pub(in crate::index_table) fn get_guesses_for_class_name(class_name: &str) -> Ve
     let suffix = format!("{}:{}", sections.join("/"), sections.last().unwrap());
 
     vec![
-        (0, format!("//src/main/scala/{}", suffix).to_string()),
-        (0, format!("//src/main/java/{}", suffix).to_string()),
+        (0, format!("//src/main/scala/{}", suffix)),
+        (0, format!("//src/main/java/{}", suffix)),
     ]
 }
 

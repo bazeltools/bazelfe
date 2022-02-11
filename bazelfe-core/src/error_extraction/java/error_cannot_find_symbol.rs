@@ -16,7 +16,7 @@ fn build_class_import_request(
 ) -> JavaClassImportRequest {
     JavaClassImportRequest {
         src_file_name: source_file_name,
-        class_name: class_name,
+        class_name,
         exact_only: false,
         src_fn: "cannot_find_symbol",
         priority: 1,
@@ -29,7 +29,7 @@ fn build_class_import_request_low_priority(
 ) -> JavaClassImportRequest {
     JavaClassImportRequest {
         src_file_name: source_file_name,
-        class_name: class_name,
+        class_name,
         exact_only: true,
         src_fn: "cannot_find_symbol",
         priority: -50,
@@ -163,9 +163,9 @@ pub(in crate::error_extraction) fn extract(
                 extract_symbol_with_package(vec, src_file_name, &mut tmp);
 
                 if tmp.is_empty() {
-                    result.extend(batch_result.drain(..));
+                    result.append(&mut batch_result);
                 } else {
-                    result.extend(tmp.drain(..));
+                    result.append(&mut tmp);
                 }
                 batch_result.clear();
 
@@ -196,7 +196,7 @@ pub(in crate::error_extraction) fn extract(
             }
         }
     }
-    result.extend(batch_result.drain(..));
+    result.append(&mut batch_result);
     result.sort();
     result.dedup();
     Some(result)

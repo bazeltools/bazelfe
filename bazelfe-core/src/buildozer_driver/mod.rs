@@ -16,7 +16,7 @@ impl std::convert::From<std::io::Error> for ExecuteResultError {
     fn from(io_e: std::io::Error) -> Self {
         Self {
             exit_code: -120,
-            stderr: format!("{:?}", io_e).to_string(),
+            stderr: format!("{:?}", io_e),
             stdout: String::from(""),
         }
     }
@@ -55,8 +55,8 @@ pub fn from_binary_path(pb: &PathBuf) -> BuildozerBinaryImpl {
 
 impl BuildozerBinaryImpl {
     fn decode_str(data: &Vec<u8>) -> String {
-        if data.len() > 0 {
-            std::str::from_utf8(&data)
+        if !data.is_empty() {
+            std::str::from_utf8(data)
                 .unwrap_or("Unable to decode content")
                 .to_string()
         } else {
@@ -83,7 +83,7 @@ impl BuildozerBinaryImpl {
         let exit_code = command_result.status.code().unwrap_or(-1);
         if exit_code < 0 {
             return Err(ExecuteResultError {
-                exit_code: exit_code,
+                exit_code,
                 stdout: BuildozerBinaryImpl::decode_str(&command_result.stdout),
                 stderr: BuildozerBinaryImpl::decode_str(&command_result.stderr),
             });
@@ -97,7 +97,7 @@ impl BuildozerBinaryImpl {
 #[async_trait]
 impl Buildozer for BuildozerBinaryImpl {
     async fn print_deps(&self, label: &String) -> Result<Vec<String>> {
-        let (_raw_args, cmd_result) = self.execute_command(vec!["print deps", &label]).await?;
+        let (_raw_args, cmd_result) = self.execute_command(vec!["print deps", label]).await?;
 
         Ok(cmd_result
             .records
@@ -122,7 +122,7 @@ impl Buildozer for BuildozerBinaryImpl {
                     },
                 })
             })
-            .map(|dep| crate::label_utils::sanitize_label(dep))
+            .map(crate::label_utils::sanitize_label)
             .collect())
     }
 
@@ -150,7 +150,7 @@ impl Buildozer for BuildozerBinaryImpl {
         let _ = self
             .execute_command(vec![
                 &format!("remove deps {}", label_to_add),
-                &target_to_operate_on,
+                target_to_operate_on,
             ])
             .await?;
         Ok(())

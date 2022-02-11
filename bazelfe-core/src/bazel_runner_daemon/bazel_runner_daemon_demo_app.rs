@@ -47,8 +47,8 @@ struct Opt {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    if let Ok(_) = std::env::var("BAZEL_FE_ENABLE_DAEMON_MODE") {
-        return Ok(bazelfe_core::bazel_runner_daemon::daemon_server::base_main().await?);
+    if std::env::var("BAZEL_FE_ENABLE_DAEMON_MODE").is_ok() {
+        return bazelfe_core::bazel_runner_daemon::daemon_server::base_main().await;
     }
 
     let opt = Opt::parse();

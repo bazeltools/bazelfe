@@ -51,7 +51,7 @@ fn is_potentially_valid_target(target_kind: &Option<String>, label: &str) -> boo
         }
     }
 
-    let prepared_path = label.strip_prefix("//").and_then(|e| e.split(":").next());
+    let prepared_path = label.strip_prefix("//").and_then(|e| e.split(':').next());
     match prepared_path {
         Some(p) => {
             let path = Path::new(p);
@@ -151,13 +151,8 @@ async fn generate_all_action_requests(
     action_failed_error_info: &ActionFailedErrorInfo,
 ) -> Vec<ActionRequest> {
     let mut action_requests: Vec<ActionRequest> = vec![];
-    for path in output_error_paths(&action_failed_error_info).into_iter() {
-        path_to_import_requests(
-            &action_failed_error_info,
-            &path.into(),
-            &mut action_requests,
-        )
-        .await
+    for path in output_error_paths(action_failed_error_info).into_iter() {
+        path_to_import_requests(action_failed_error_info, &path, &mut action_requests).await
     }
     expand_candidate_import_requests(action_requests)
 }
@@ -178,7 +173,7 @@ pub async fn process_missing_dependency_errors<T: Buildozer>(
     )
     .await;
     let all_requests: Vec<ActionRequest> =
-        generate_all_action_requests(&action_failed_error_info).await;
+        generate_all_action_requests(action_failed_error_info).await;
     debug!("generate_all_action_requests: {:#?}", all_requests);
     let (response, local_previous_seen, remove_from_ignore_list) =
         inner_process_missing_dependency_errors(
@@ -265,12 +260,12 @@ async fn inner_process_missing_dependency_errors<T: Buildozer>(
         for prev in previous_added_for_req.iter() {
             let prev_deps = buildozer.print_deps(&label).await.unwrap();
 
-            if prev_deps.contains(&prev) {
+            if prev_deps.contains(prev) {
                 debug!(
                     "Buildozer action: remove dependency {:?} to {:?}",
                     prev, &label
                 );
-                buildozer.remove_dependency(&label, &prev).await.unwrap();
+                buildozer.remove_dependency(&label, prev).await.unwrap();
 
                 target_stories.push(super::TargetStory {
                     target: unsanitized_label.to_string(),
@@ -300,7 +295,7 @@ async fn inner_process_missing_dependency_errors<T: Buildozer>(
                 .await
                 .unwrap();
             if !ignore_dep_references.contains(&target)
-                && is_potentially_valid_target(&target_kind, &target)
+                && is_potentially_valid_target(target_kind, &target)
             {
                 // If our top candidate hits to be a local previous seen stop
                 // processing this class
@@ -893,8 +888,8 @@ mod tests {
         ) -> Self {
             Self {
                 action_log: Arc::new(Mutex::new(Vec::default())),
-                add_dependency_pairs_to_fail: add_dependency_pairs_to_fail,
-                remove_dependency_pairs_to_fail: remove_dependency_pairs_to_fail,
+                add_dependency_pairs_to_fail,
+                remove_dependency_pairs_to_fail,
             }
         }
         pub async fn to_vec(&self) -> Vec<ActionLogEntry> {
