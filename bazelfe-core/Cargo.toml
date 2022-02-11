@@ -86,7 +86,7 @@ tokio-serde = { version = "0.8", features = ["bincode"] , optional=true}
 tokio-util = { version = "0.6.9", features = ["compat"] }
 sha2 = "0.9.8"
 nix = "0.23.0"
-flume = {version = "0.10.9", optional = true}
+flume = {version = "0.10.10", optional = true}
 trim-margin = {version = "0.1.0", optional = true}
 dashmap = {version = "4.0.2", optional = true}
 tui = {version = "0.16.0", default_features = false, features = ["crossterm"], optional = true}
