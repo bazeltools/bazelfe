@@ -77,7 +77,7 @@ pub fn extract_errors(input: &str) -> Vec<super::ActionRequest> {
     let mut file_parse_cache: FileParseCache = FileParseCache::new();
     let combined_vec: Vec<super::ActionRequest> = vec![
         error_is_not_a_member_of_package::extract(input, &mut file_parse_cache),
-        error_object_not_found::extract(input),
+        error_object_not_found::extract(input, &mut file_parse_cache),
         error_symbol_is_missing_from_classpath::extract(input),
         error_symbol_type_missing_from_classpath::extract(input),
         Some(error_value_not_found::extract(input)),
@@ -131,6 +131,13 @@ pub fn extract_errors(input: &str) -> Vec<super::ActionRequest> {
                 };
                 debug!("Found class suffix request: {:#?}", suffix);
                 super::ActionRequest::Suffix(suffix)
+            } else if let Some(suffix) = o.class_name.strip_prefix("<none>") {
+                let suffix_match = ClassSuffixMatch {
+                    suffix: suffix.to_string(),
+                    src_fn: o.src_fn.to_string(),
+                };
+                debug!("Found class suffix request: {:#?}", suffix_match);
+                super::ActionRequest::Suffix(suffix_match)
             } else {
                 let r = o.to_class_import_request();
                 debug!("Found class import request: {:#?}", r);
