@@ -280,7 +280,7 @@ pub mod bazel_event {
                 None => Evt::UnknownEvent("Missing Event".to_string()),
             };
 
-            info!("Decoded evt: {:?}", decoded_evt);
+            debug!("Decoded evt: {:?}", decoded_evt);
             Some(BazelBuildEvent { event: decoded_evt })
         }
     }

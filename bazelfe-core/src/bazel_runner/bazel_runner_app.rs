@@ -1,4 +1,4 @@
-use clap::{AppSettings, Parser};
+use clap::Parser;
 use std::path::PathBuf;
 
 use std::ffi::OsString;
@@ -7,7 +7,7 @@ use bazelfe_core::config::Config;
 use bazelfe_core::{bazel_command_line_parser::parse_bazel_command_line, bazel_runner};
 
 #[derive(Parser, Debug)]
-#[clap(name = "basic", setting = AppSettings::TrailingVarArg)]
+#[clap(name = "basic", trailing_var_arg = true)]
 struct Opt {
     #[clap(long, env = "BIND_ADDRESS")]
     bind_address: Option<String>,

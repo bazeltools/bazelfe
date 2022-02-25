@@ -80,7 +80,7 @@ pub struct ProcessBazelFailures<T: Buildozer, U: CommandLineRunner> {
     epoch: Arc<RwLock<usize>>,
     buildozer: T,
     command_line_runner: U,
-    config: Arc<Config>,
+    _config: Arc<Config>,
     user_defined_action_cache: Arc<UserDefinedActionsStateCache>,
 }
 
@@ -109,7 +109,7 @@ impl<T: Buildozer, U: CommandLineRunner> ProcessBazelFailures<T, U> {
             buildozer,
             command_line_runner,
             epoch: Arc::new(RwLock::new(0)),
-            config,
+            _config: config,
             user_defined_action_cache,
         })
     }

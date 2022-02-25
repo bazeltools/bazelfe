@@ -109,6 +109,8 @@ impl BazelEventHandler for ProgressTabUpdater {
                         file: Some(f.clone()),
                         path_prefix: Vec::default(),
                         name: "stderr".to_string(),
+                        digest: String::default(),
+                        length: -1
                     })
                     .collect();
                 let _ = self
