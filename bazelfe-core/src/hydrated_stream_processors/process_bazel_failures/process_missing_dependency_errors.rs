@@ -577,6 +577,12 @@ mod tests {
                 src_fn: String::from("java::cannot_find_symbol"),
                 priority: -52,
             }),
+            ActionRequest::Prefix(ClassImportRequest {
+                class_name: String::from("javax.annotation"),
+                exact_only: true,
+                src_fn: String::from("java::cannot_find_symbol"),
+                priority: -53,
+            }),
             ActionRequest::Suffix(ClassSuffixMatch {
                 suffix: String::from("JSONObject"),
                 src_fn: String::from("java::error_cannot_access"),
