@@ -68,16 +68,28 @@ pub fn class_name_to_prefixes(class_name: &str) -> Vec<String> {
     let mut long_running_string = String::new();
     let mut result = Vec::new();
     let mut loop_cnt = 0;
+    let major_domains = vec!["com", "net", "org"];
+    let mut is_major_domain_opt = None;
     class_name.split('.').for_each(|segment| {
+        let is_major_domain = if let Some(v) = is_major_domain_opt {
+            v
+        } else {
+            let v = major_domains.contains(&segment);
+            is_major_domain_opt = Some(v);
+            v
+        };
+
         if !long_running_string.is_empty() {
             long_running_string = format!("{}.{}", long_running_string, segment);
         } else {
             long_running_string = segment.to_string();
         }
         // we only allow things more specific than `com.example`
-        // otherwise its just too generic and a dice roll.
-        // and don't allow the original class
-        if loop_cnt > 1 && long_running_string != class_name {
+        // otherwise its just too generic and a dice roll for com, net and org.
+        // otherwise it likely reflects an organization
+        let required_loop_cnt = if is_major_domain { 1 } else { 0 };
+
+        if loop_cnt > required_loop_cnt && long_running_string != class_name {
             result.push(long_running_string.to_string())
         }
         loop_cnt += 1;
@@ -116,11 +128,25 @@ mod tests {
     fn test_class_name_to_prefixes() {
         assert_eq!(
             class_name_to_prefixes("a.b.c.d.e"),
-            vec![String::from("a.b.c"), String::from("a.b.c.d")]
+            vec![
+                String::from("a.b"),
+                String::from("a.b.c"),
+                String::from("a.b.c.d")
+            ]
         );
 
         let expected: Vec<String> = vec![];
         assert_eq!(class_name_to_prefixes("abcd"), expected);
+
+        assert_eq!(
+            class_name_to_prefixes("vegas.sparkExt.package"),
+            vec![String::from("vegas.sparkExt")]
+        );
+
+        assert_eq!(class_name_to_prefixes("com.google.foo"), expected);
+        assert_eq!(class_name_to_prefixes("net.google.foo"), expected);
+
+        assert_eq!(class_name_to_prefixes("org.google.foo"), expected);
     }
 
     #[test]
@@ -287,6 +313,7 @@ mod tests {
                         String::from("asdf.sadf.sdfwer.sdf.adsf"),
                         String::from("asdf.sadf.sdfwer.sdf"),
                         String::from("asdf.sadf.sdfwer"),
+                        String::from("asdf.sadf"),
                     ]
                 )
             ]

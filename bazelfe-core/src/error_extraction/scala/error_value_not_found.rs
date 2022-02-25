@@ -12,12 +12,18 @@ fn build_class_import_request(
     source_file_name: String,
     class_name: String,
 ) -> ScalaClassImportRequest {
+    let num_segments = class_name.chars().filter(|e| *e == '.').count();
+    let priority: i32 = if num_segments < 2 {
+        -5
+    } else {
+        num_segments as i32
+    };
     ScalaClassImportRequest {
         src_file_name: source_file_name,
         class_name,
         exact_only: true,
         src_fn: "extract_value_or_type_not_found",
-        priority: 1,
+        priority: priority,
     }
 }
 
