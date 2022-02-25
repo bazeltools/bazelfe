@@ -411,7 +411,7 @@ impl<'a> IndexTable {
                         0
                     }
                 };
-                for clazz in crate::label_utils::class_name_to_prefixes(e.as_str()) {
+                for clazz in crate::label_utils::class_name_to_prefixes(e.as_str(), true) {
                     jvm_segments_indexed += if self.insert_with_id(clazz, key_id, popularity).await
                     {
                         1

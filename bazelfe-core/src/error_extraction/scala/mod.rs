@@ -132,7 +132,7 @@ pub fn extract_errors(input: &str) -> Vec<super::ActionRequest> {
                 };
                 debug!("Found class suffix request: {:#?}", suffix);
                 super::ActionRequest::Suffix(suffix)
-            } else if let Some(suffix) = o.class_name.strip_prefix("<none>") {
+            } else if let Some(suffix) = o.class_name.strip_prefix("<none>.").or_else(|| o.class_name.strip_prefix("<none>")).or_else(|| o.class_name.strip_prefix("<root>.")) {
                 let suffix_match = ClassSuffixMatch {
                     suffix: suffix.to_string(),
                     src_fn: o.src_fn.to_string(),

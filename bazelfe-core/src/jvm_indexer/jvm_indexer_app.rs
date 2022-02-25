@@ -404,6 +404,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         blacklist_repos.extend(opt.blacklist_remote_roots.into_iter());
 
+        info!("Will ignore any target in the repos: {}", blacklist_repos.join(","));
+
         for line in res.stdout.lines() {
             if let Some(ln) = line.strip_prefix("//external:") {
                 let mut ok = true;
