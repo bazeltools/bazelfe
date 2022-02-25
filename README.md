@@ -1,10 +1,5 @@
 # Bazel runner
 
-## This is archived
-
--- Last checked this still worked fine for purpose, but original primary user is gradually moving off. So doesn't have a solid user. Archiving to indicate its no longer being maintained and may not work with newer versions of bazel. 
-
-
 ## Goal/motivation
 
 Be a suite of tools to provide ultimately a different frontend around bazel. Initially this is something to be injected to wrap calls for build/test operations in bazel to repair common issues.
