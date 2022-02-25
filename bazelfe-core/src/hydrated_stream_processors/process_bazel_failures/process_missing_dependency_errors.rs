@@ -482,7 +482,7 @@ mod tests {
             one error found",
             "scala_library",
             vec![ClassImportRequest{
-                class_name: String::from("com.example.foo"), exact_only: false, src_fn: String::from("scala::extract_not_a_member_of_package"), priority: 5
+                class_name: String::from("com.example.foo"), exact_only: false, src_fn: String::from("scala::extract_not_a_member_of_package_or_class_or_object"), priority: 5
             }],
             Vec::default()
         ).await;
@@ -548,10 +548,42 @@ mod tests {
                     ClassImportRequest {
                     class_name: String::from("com.example.foo"),
     exact_only: false,
-    src_fn: String::from("scala::extract_not_a_member_of_package"),
+    src_fn: String::from("scala::extract_not_a_member_of_package_or_class_or_object"),
     priority: 5})]
         ).await;
 
+        let mut expected_result = vec![
+            ActionRequest::Prefix(ClassImportRequest {
+                class_name: String::from("javax.annotation.foo.bar.baz.Nullable"),
+                exact_only: false,
+                src_fn: String::from("java::cannot_find_symbol"),
+                priority: 1,
+            }),
+            ActionRequest::Prefix(ClassImportRequest {
+                class_name: String::from("javax.annotation.foo.bar.baz"),
+                exact_only: true,
+                src_fn: String::from("java::cannot_find_symbol"),
+                priority: -50,
+            }),
+            ActionRequest::Prefix(ClassImportRequest {
+                class_name: String::from("javax.annotation.foo.bar"),
+                exact_only: true,
+                src_fn: String::from("java::cannot_find_symbol"),
+                priority: -51,
+            }),
+            ActionRequest::Prefix(ClassImportRequest {
+                class_name: String::from("javax.annotation.foo"),
+                exact_only: true,
+                src_fn: String::from("java::cannot_find_symbol"),
+                priority: -52,
+            }),
+            ActionRequest::Suffix(ClassSuffixMatch {
+                suffix: String::from("JSONObject"),
+                src_fn: String::from("java::error_cannot_access"),
+                priority: 3,
+            }),
+        ];
+        expected_result.sort();
         // we are just testing that we load the file and invoke the paths, so we just need ~any error types in here.
         test_content_to_expected_result(
             "src/main/java/com/example/foo/bar/Baz.java:205: error: cannot access JSONObject
@@ -563,36 +595,7 @@ mod tests {
               symbol:   class Nullable
               location: package javax.annotation.foo.bar.baz",
             "java_library",
-            vec![
-                ActionRequest::Prefix(ClassImportRequest {
-                    class_name: String::from("javax.annotation.foo.bar.baz.Nullable"),
-                    exact_only: false,
-                    src_fn: String::from("java::cannot_find_symbol"),
-                    priority: 1,
-                }),
-                ActionRequest::Prefix(ClassImportRequest {
-                    class_name: String::from("javax.annotation.foo.bar.baz"),
-                    exact_only: true,
-                    src_fn: String::from("java::cannot_find_symbol"),
-                    priority: -50,
-                }),
-                ActionRequest::Prefix(ClassImportRequest {
-                    class_name: String::from("javax.annotation.foo.bar"),
-                    exact_only: true,
-                    src_fn: String::from("java::cannot_find_symbol"),
-                    priority: -51,
-                }),
-                ActionRequest::Prefix(ClassImportRequest {
-                    class_name: String::from("javax.annotation.foo"),
-                    exact_only: true,
-                    src_fn: String::from("java::cannot_find_symbol"),
-                    priority: -52,
-                }),
-                ActionRequest::Suffix(ClassSuffixMatch {
-                    suffix: String::from("JSONObject"),
-                    src_fn: String::from("java::error_cannot_access"),
-                }),
-            ],
+            expected_result,
         )
         .await
     }
@@ -771,7 +774,7 @@ mod tests {
             vec![ActionRequest::Prefix(ClassImportRequest {
                 class_name: String::from("com.example.foo.bar.baz"),
                 exact_only: false,
-                src_fn: String::from("scala::extract_not_a_member_of_package"),
+                src_fn: String::from("scala::extract_not_a_member_of_package_or_class_or_object"),
                 priority: 5,
             })],
         )
@@ -800,13 +803,17 @@ mod tests {
                 ActionRequest::Prefix(ClassImportRequest {
                     class_name: String::from("com.example.foo.bar.baz"),
                     exact_only: false,
-                    src_fn: String::from("scala::extract_not_a_member_of_package"),
+                    src_fn: String::from(
+                        "scala::extract_not_a_member_of_package_or_class_or_object",
+                    ),
                     priority: 5,
                 }),
                 ActionRequest::Prefix(ClassImportRequest {
                     class_name: String::from("com.example.foo.bar.noof"),
                     exact_only: false,
-                    src_fn: String::from("scala::extract_not_a_member_of_package"),
+                    src_fn: String::from(
+                        "scala::extract_not_a_member_of_package_or_class_or_object",
+                    ),
                     priority: 5,
                 }),
             ],
@@ -844,19 +851,25 @@ mod tests {
                 ActionRequest::Prefix(ClassImportRequest {
                     class_name: String::from("com.example.foo.bar.baz"),
                     exact_only: false,
-                    src_fn: String::from("scala::extract_not_a_member_of_package"),
+                    src_fn: String::from(
+                        "scala::extract_not_a_member_of_package_or_class_or_object",
+                    ),
                     priority: 5,
                 }),
                 ActionRequest::Prefix(ClassImportRequest {
                     class_name: String::from("com.example.foo.bar.baz"),
                     exact_only: false,
-                    src_fn: String::from("scala::extract_not_a_member_of_package"),
+                    src_fn: String::from(
+                        "scala::extract_not_a_member_of_package_or_class_or_object",
+                    ),
                     priority: 5,
                 }),
                 ActionRequest::Prefix(ClassImportRequest {
                     class_name: String::from("com.example.foo.bar.noof"),
                     exact_only: false,
-                    src_fn: String::from("scala::extract_not_a_member_of_package"),
+                    src_fn: String::from(
+                        "scala::extract_not_a_member_of_package_or_class_or_object",
+                    ),
                     priority: 5,
                 }),
             ],

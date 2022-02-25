@@ -21,6 +21,7 @@ pub fn extract(input: &str) -> Vec<ClassSuffixMatch> {
                 let class_import_request = ClassSuffixMatch {
                     suffix: String::from(suffix),
                     src_fn: String::from(SRC_FN),
+                    priority: 3,
                 };
                 result.push(class_import_request);
             }
@@ -43,7 +44,8 @@ mod tests {
             extract(sample_output),
             vec![ClassSuffixMatch {
                 suffix: String::from("JSONObject"),
-                src_fn: String::from(SRC_FN)
+                src_fn: String::from(SRC_FN),
+                priority: 3
             }]
         );
     }

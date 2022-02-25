@@ -4,7 +4,7 @@ use crate::source_dependencies::ParsedFile;
 
 use super::ClassSuffixMatch;
 
-mod error_is_not_a_member_of_package;
+mod error_is_not_a_member_of;
 mod error_object_not_found;
 mod error_symbol_is_missing_from_classpath;
 mod error_symbol_type_missing_from_classpath;
@@ -76,7 +76,7 @@ impl FileParseCache {
 pub fn extract_errors(input: &str) -> Vec<super::ActionRequest> {
     let mut file_parse_cache: FileParseCache = FileParseCache::new();
     let combined_vec: Vec<super::ActionRequest> = vec![
-        error_is_not_a_member_of_package::extract(input, &mut file_parse_cache),
+        error_is_not_a_member_of::extract(input, &mut file_parse_cache),
         error_object_not_found::extract(input, &mut file_parse_cache),
         error_symbol_is_missing_from_classpath::extract(input),
         error_symbol_type_missing_from_classpath::extract(input),
@@ -128,6 +128,7 @@ pub fn extract_errors(input: &str) -> Vec<super::ActionRequest> {
                 let suffix = ClassSuffixMatch {
                     suffix: o.class_name,
                     src_fn: o.src_fn.to_string(),
+                    priority: 0,
                 };
                 debug!("Found class suffix request: {:#?}", suffix);
                 super::ActionRequest::Suffix(suffix)
@@ -135,6 +136,7 @@ pub fn extract_errors(input: &str) -> Vec<super::ActionRequest> {
                 let suffix_match = ClassSuffixMatch {
                     suffix: suffix.to_string(),
                     src_fn: o.src_fn.to_string(),
+                    priority: 5,
                 };
                 debug!("Found class suffix request: {:#?}", suffix_match);
                 super::ActionRequest::Suffix(suffix_match)
