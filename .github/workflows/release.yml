@@ -4,19 +4,50 @@ on:
     branches:
       - main
 jobs:
-  rust-binaries:
-    runs-on: ${{ matrix.os }}
+  rust-binaries-linux:
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: true
       matrix:
-        os: [macos-latest, ubuntu-latest]
         include:
-          - os: macos-latest
-            platform: macos
-            artifact: bazelfe-macos
-          - os: ubuntu-latest
-            platform: linux
+          - platform: linux
             artifact: bazelfe-linux
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - run: rustup component add rustfmt
+      - run: rustup target add x86_64-unknown-linux-musl
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --target=x86_64-unknown-linux-musl
+      - name: Prepare bazel-runner output
+        run: ./.github/ci_scripts/prepare_output.sh bazel-runner-${{ matrix.platform }} staging-directory target/x86_64-unknown-linux-musl/release/bazel-runner
+      - name: Prepare jvm-indexer
+        run: ./.github/ci_scripts/prepare_output.sh jvm-indexer-${{ matrix.platform }} staging-directory target/x86_64-unknown-linux-musl/release/jvm-indexer
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --all-features --target=x86_64-unknown-linux-musl
+      - name: Prepare bazel-runner output
+        run: ./.github/ci_scripts/prepare_output.sh bazel-runner-with-daemon-${{ matrix.platform }} staging-directory target/x86_64-unknown-linux-musl/release/bazel-runner
+      - name: Prepare jvm-indexer
+        run: ./.github/ci_scripts/prepare_output.sh jvm-indexer-with-daemon-${{ matrix.platform }} staging-directory target/x86_64-unknown-linux-musl/release/jvm-indexer
+      - uses: actions/upload-artifact@master
+        with:
+          name: ${{ matrix.artifact }}
+          path: staging-directory
+
+  rust-binaries-macos:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: macos
+            artifact: bazelfe-macos
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -44,9 +75,12 @@ jobs:
           name: ${{ matrix.artifact }}
           path: staging-directory
 
+          rustup target add x86_64-unknown-linux-musl
+
+
   make_release:
     name: Make release
-    needs: rust-binaries
+    needs: [rust-binaries-linux, rust-binaries-macos]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
