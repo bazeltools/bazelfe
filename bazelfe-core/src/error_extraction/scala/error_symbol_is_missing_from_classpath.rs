@@ -64,17 +64,35 @@ pub fn extract(input: &str) -> Option<Vec<ScalaClassImportRequest>> {
             r"^(.*\.scala).*error: Symbol '(type|term) ([A-Za-z0-9.<>_]+)' is missing from the classpath.$"
         )
         .unwrap();
+        // why this started showing up, idk. scalac.?!
+        static ref NO_FILE_ERROR: Regex = Regex::new(
+            r"error: Symbol '(type|term) ([A-Za-z0-9.<>_]+)' is missing from the classpath.$"
+        )
+        .unwrap();
     }
 
     let mut result = None;
     for ln in input.lines() {
-        let captures = RE.captures(ln);
+        let captures = RE
+            .captures(ln)
+            .map(|captures| {
+                (
+                    captures.get(1).unwrap().as_str(),
+                    captures.get(3).unwrap().as_str(),
+                )
+            })
+            .or_else(|| {
+                NO_FILE_ERROR.captures(ln).map(|captures| {
+                    (
+                        "Unknown, non_existing file :(",
+                        captures.get(2).unwrap().as_str(),
+                    )
+                })
+            });
 
         match captures {
             None => (),
-            Some(captures) => {
-                let src_file_name = captures.get(1).unwrap().as_str();
-                let class_name = captures.get(3).unwrap().as_str();
+            Some((src_file_name, class_name)) => {
                 let class_import_request =
                     build_class_import_request(src_file_name.to_string(), class_name.to_string());
                 result = match result {
@@ -110,6 +128,27 @@ one error found";
             extract(sample_output),
             Some(vec![build_class_import_request(
                 String::from("src/main/scala/com/example/D.scala"),
+                "com.example.a.ATrait".to_string()
+            )])
+        );
+    }
+
+    #[test]
+    fn test_symbol_is_missing_from_classpath_error_no_file() {
+        let sample_output ="
+error: Symbol 'type com.example.a.ATrait' is missing from the classpath.
+This symbol is required by 'trait com.example.b.BTraitExtendsA'.
+Make sure that type ATrait is in your classpath and check for conflicting dependencies with `-Ylog-classpath`.
+A full rebuild may help if 'BTraitExtendsA.class' was compiled against an incompatible version of com.example.a.
+object DClass extends com.example.c.CTraitExtendsBTraitExtendsATrait
+                                    ^
+one error found
+one error found";
+
+        assert_eq!(
+            extract(sample_output),
+            Some(vec![build_class_import_request(
+                String::from("Unknown, non_existing file :("),
                 "com.example.a.ATrait".to_string()
             )])
         );
