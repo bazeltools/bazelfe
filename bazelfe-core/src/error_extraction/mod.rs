@@ -38,8 +38,13 @@ pub mod java;
 pub mod scala;
 
 pub fn extract_errors(target_kind: &Option<String>, input: &str) -> Vec<ActionRequest> {
+    info!("Extract errors seeeing target kind: {:#?}", target_kind);
     let matched = target_kind.as_ref().and_then(|kind| match kind.as_ref() {
-        "scala_library" => Some(scala::extract_errors(input)),
+        "scala_library" => {
+            let mut errors = scala::extract_errors(input);
+            errors.extend(java::extract_errors(input));
+            Some(errors)
+        },
         "scala_test" => Some(scala::extract_errors(input)),
         "java_library" => Some(java::extract_errors(input)),
         "java_test" => Some(java::extract_errors(input)),

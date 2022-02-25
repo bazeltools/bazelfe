@@ -221,11 +221,15 @@ impl HydratedInfo {
                                         file: Some(stdout),
                                         path_prefix: vec![],
                                         name: String::from("stdout"),
+                                        digest: String::default(),
+                                        length: -1
                                     }),
                                     stderr: ace.stderr.map(|stderr| build_event_stream::File {
                                         file: Some(stderr),
                                         path_prefix: vec![],
                                         name: String::from("stderr"),
+                                        digest: String::default(),
+                                        length: -1
                                     }),
                                     target_kind: rule_kind_lookup.get(&ace.label).cloned(),
                                     label: ace.label,
@@ -239,11 +243,15 @@ impl HydratedInfo {
                                         file: Some(stdout),
                                         path_prefix: vec![],
                                         name: String::from("stdout"),
+                                        digest: String::default(),
+                                        length: -1
                                     }),
                                     stderr: ace.stderr.map(|stderr| build_event_stream::File {
                                         file: Some(stderr),
                                         path_prefix: vec![],
                                         name: String::from("stderr"),
+                                        digest: String::default(),
+                                        length: -1
                                     }),
 
                                     target_kind: rule_kind_lookup.get(&ace.label).cloned(),
