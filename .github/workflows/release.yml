@@ -18,7 +18,7 @@ jobs:
             platform: linux-ubuntu-20.04
             artifact: bazelfe-linux-ubuntu-20.04
           - os: ubuntu-18.04
-            platform: linux-ubuntu-20.04
+            platform: linux-ubuntu-18.04
             artifact: bazelfe-linux-ubuntu-18.04
     steps:
       - uses: actions/checkout@v2
