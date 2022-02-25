@@ -4,50 +4,22 @@ on:
     branches:
       - main
 jobs:
-  rust-binaries-linux:
-    runs-on: ubuntu-latest
+  rust-binaries:
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: true
       matrix:
+        os: [macos-latest, ubuntu-20.04, ubuntu-18.04]
         include:
-          - platform: linux
-            artifact: bazelfe-linux
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-      - run: rustup component add rustfmt
-      - run: rustup target add x86_64-unknown-linux-musl
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --target=x86_64-unknown-linux-musl
-      - name: Prepare bazel-runner output
-        run: ./.github/ci_scripts/prepare_output.sh bazel-runner-${{ matrix.platform }} staging-directory target/x86_64-unknown-linux-musl/release/bazel-runner
-      - name: Prepare jvm-indexer
-        run: ./.github/ci_scripts/prepare_output.sh jvm-indexer-${{ matrix.platform }} staging-directory target/x86_64-unknown-linux-musl/release/jvm-indexer
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --all-features --target=x86_64-unknown-linux-musl
-      - name: Prepare bazel-runner output
-        run: ./.github/ci_scripts/prepare_output.sh bazel-runner-with-daemon-${{ matrix.platform }} staging-directory target/x86_64-unknown-linux-musl/release/bazel-runner
-      - name: Prepare jvm-indexer
-        run: ./.github/ci_scripts/prepare_output.sh jvm-indexer-with-daemon-${{ matrix.platform }} staging-directory target/x86_64-unknown-linux-musl/release/jvm-indexer
-      - uses: actions/upload-artifact@master
-        with:
-          name: ${{ matrix.artifact }}
-          path: staging-directory
-
-  rust-binaries-macos:
-    runs-on: macos-latest
-    strategy:
-      fail-fast: true
-      matrix:
-        include:
-          - platform: macos
+          - os: macos-latest
+            platform: macos
             artifact: bazelfe-macos
+          - os: ubuntu-20.04
+            platform: linux-ubuntu-20.04
+            artifact: bazelfe-linux-ubuntu-20.04
+          - os: ubuntu-18.04
+            platform: linux-ubuntu-20.04
+            artifact: bazelfe-linux-ubuntu-18.04
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -77,14 +49,19 @@ jobs:
 
   make_release:
     name: Make release
-    needs: [rust-binaries-linux, rust-binaries-macos]
+    needs: rust-binaries
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Download linux bazelfe
+      - name: Download linux ubuntu 20 bazelfe
         uses: actions/download-artifact@v1
         with:
-          name: bazelfe-linux
+          name: bazelfe-linux-ubuntu-20.04
+          path: downloads
+      - name: Download linux bazelfe 18
+        uses: actions/download-artifact@v1
+        with:
+          name: bazelfe-linux-ubuntu-18.04
           path: downloads
       - name: Download macos bazelfe
         uses: actions/download-artifact@v1
@@ -102,12 +79,18 @@ jobs:
             downloads/bazel-runner-macos.sha256
             downloads/bazel-runner-with-daemon-macos
             downloads/bazel-runner-with-daemon-macos.sha256
-            downloads/bazel-runner-linux
-            downloads/bazel-runner-linux.sha256
-            downloads/bazel-runner-with-daemon-linux
-            downloads/bazel-runner-with-daemon-linux.sha256
+            downloads/bazel-runner-linux-ubuntu-20.04
+            downloads/bazel-runner-linux-ubuntu-20.04.sha256
+            downloads/bazel-runner-with-daemon-linux-ubuntu-20.04
+            downloads/bazel-runner-with-daemon-linux-ubuntu-20.04.sha256
+            downloads/bazel-runner-linux-ubuntu-18.04
+            downloads/bazel-runner-linux-ubuntu-18.04.sha256
+            downloads/bazel-runner-with-daemon-linux-ubuntu-18.04
+            downloads/bazel-runner-with-daemon-linux-ubuntu-18.04.sha256
             downloads/jvm-indexer-macos
             downloads/jvm-indexer-macos.sha256
-            downloads/jvm-indexer-linux
-            downloads/jvm-indexer-linux.sha256
+            downloads/jvm-indexer-linux-ubuntu-20.04
+            downloads/jvm-indexer-linux-ubuntu-20.04.sha256
+            downloads/jvm-indexer-linux-ubuntu-18.04
+            downloads/jvm-indexer-linux-ubuntu-18.04.sha256
         id: "automatic_releases"
