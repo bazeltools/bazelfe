@@ -222,14 +222,14 @@ impl HydratedInfo {
                                         path_prefix: vec![],
                                         name: String::from("stdout"),
                                         digest: String::default(),
-                                        length: -1
+                                        length: -1,
                                     }),
                                     stderr: ace.stderr.map(|stderr| build_event_stream::File {
                                         file: Some(stderr),
                                         path_prefix: vec![],
                                         name: String::from("stderr"),
                                         digest: String::default(),
-                                        length: -1
+                                        length: -1,
                                     }),
                                     target_kind: rule_kind_lookup.get(&ace.label).cloned(),
                                     label: ace.label,
@@ -244,14 +244,14 @@ impl HydratedInfo {
                                         path_prefix: vec![],
                                         name: String::from("stdout"),
                                         digest: String::default(),
-                                        length: -1
+                                        length: -1,
                                     }),
                                     stderr: ace.stderr.map(|stderr| build_event_stream::File {
                                         file: Some(stderr),
                                         path_prefix: vec![],
                                         name: String::from("stderr"),
                                         digest: String::default(),
-                                        length: -1
+                                        length: -1,
                                     }),
 
                                     target_kind: rule_kind_lookup.get(&ace.label).cloned(),
@@ -360,6 +360,8 @@ mod tests {
                 stderr: Some(build_event_stream::File {
                     name: String::from("stderr"),
                     path_prefix: Vec::default(),
+                    digest: String::default(),
+                    length: -1,
                     file: Some(build_event_stream::file::File::Uri(String::from(
                         "path-to-stderr"
                     )))
@@ -368,6 +370,8 @@ mod tests {
                 stdout: Some(build_event_stream::File {
                     name: String::from("stdout"),
                     path_prefix: Vec::default(),
+                    digest: String::default(),
+                    length: -1,
                     file: Some(build_event_stream::file::File::Uri(String::from(
                         "path-to-stdout"
                     )))
@@ -414,6 +418,8 @@ mod tests {
                 label: String::from("foo_bar_baz"),
                 stderr: Some(build_event_stream::File {
                     name: String::from("stderr"),
+                    digest: String::default(),
+                    length: -1,
                     path_prefix: Vec::default(),
                     file: Some(build_event_stream::file::File::Uri(String::from(
                         "path-to-stderr"
@@ -422,6 +428,8 @@ mod tests {
 
                 stdout: Some(build_event_stream::File {
                     name: String::from("stdout"),
+                    digest: String::default(),
+                    length: -1,
                     path_prefix: Vec::default(),
                     file: Some(build_event_stream::file::File::Uri(String::from(
                         "path-to-stdout"
@@ -477,6 +485,8 @@ mod tests {
                 stderr: Some(build_event_stream::File {
                     name: String::from("stderr"),
                     path_prefix: Vec::default(),
+                    digest: String::default(),
+                    length: -1,
                     file: Some(build_event_stream::file::File::Uri(String::from(
                         "path-to-stderr"
                     )))
@@ -485,6 +495,8 @@ mod tests {
                 stdout: Some(build_event_stream::File {
                     name: String::from("stdout"),
                     path_prefix: Vec::default(),
+                    digest: String::default(),
+                    length: -1,
                     file: Some(build_event_stream::file::File::Uri(String::from(
                         "path-to-stdout"
                     )))

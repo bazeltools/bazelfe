@@ -394,6 +394,8 @@ mod tests {
             label: String::from("//src/main/com/example/foo:Bar"),
             stderr: Some(build_event_stream::File {
                 name: String::default(),
+                digest: String::default(),
+                length: -1,
                 path_prefix: Vec::default(),
                 file: Some(build_event_stream::file::File::Uri(String::from(
                     "remote_uri://foo/bar/baz",
@@ -402,6 +404,8 @@ mod tests {
 
             stdout: Some(build_event_stream::File {
                 name: String::default(),
+                digest: String::default(),
+                length: -1,
                 path_prefix: Vec::default(),
                 file: Some(build_event_stream::file::File::Uri(String::from(
                     "file:///foo/bar/baz",
@@ -502,6 +506,8 @@ mod tests {
                 stderr: Some(build_event_stream::File {
                     name: String::default(),
                     path_prefix: Vec::default(),
+                    digest: String::default(),
+                    length: -1,
                     file: Some(build_event_stream::file::File::Uri(String::from(
                         "remote_uri://foo/bar/baz",
                     ))),
@@ -510,6 +516,8 @@ mod tests {
                 stdout: Some(build_event_stream::File {
                     name: String::default(),
                     path_prefix: Vec::default(),
+                    digest: String::default(),
+                    length: -1,
                     file: Some(build_event_stream::file::File::Uri(format!(
                         "file://{}",
                         &(*tempfile_path).to_path_buf().to_str().unwrap().to_string()
@@ -624,6 +632,8 @@ mod tests {
             stderr: Some(build_event_stream::File {
                 name: String::default(),
                 path_prefix: Vec::default(),
+                digest: String::default(),
+                length: -1,
                 file: Some(build_event_stream::file::File::Uri(String::from(
                     "remote_uri://foo/bar/baz",
                 ))),
@@ -632,6 +642,8 @@ mod tests {
             stdout: Some(build_event_stream::File {
                 name: String::default(),
                 path_prefix: Vec::default(),
+                digest: String::default(),
+                length: -1,
                 file: Some(build_event_stream::file::File::Uri(format!(
                     "file://{}",
                     &(*tempfile_path).to_path_buf().to_str().unwrap().to_string()

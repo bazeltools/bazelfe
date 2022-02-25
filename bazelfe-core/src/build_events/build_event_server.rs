@@ -654,6 +654,7 @@ mod tests {
                             file_sets: vec![NamedSetOfFilesId {
                                 id: String::from("16"),
                             }],
+                            incomplete: false,
                         }],
                     }),
                 }
