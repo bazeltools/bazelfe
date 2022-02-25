@@ -216,7 +216,7 @@ impl<
         let mut final_exit_code = 0;
         let disable_action_stories_on_success = self.config.disable_action_stories_on_success;
         let mut total_actions_taken: u32 = 0;
-        while attempts < 15 {
+        while attempts < 60 {
             attempts += 1;
             self.process_build_failures.advance_epoch().await;
 
