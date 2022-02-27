@@ -4,6 +4,7 @@ use crate::source_dependencies::ParsedFile;
 
 use super::ClassSuffixMatch;
 
+mod continuing_with_a_stub;
 mod error_is_not_a_member_of;
 mod error_object_not_found;
 mod error_symbol_is_missing_from_classpath;
@@ -80,6 +81,7 @@ pub fn extract_errors(input: &str) -> Vec<super::ActionRequest> {
         error_object_not_found::extract(input, &mut file_parse_cache),
         error_symbol_is_missing_from_classpath::extract(input),
         error_symbol_type_missing_from_classpath::extract(input),
+        continuing_with_a_stub::extract(input),
         Some(error_value_not_found::extract(input)),
     ]
     .into_iter()
@@ -136,7 +138,6 @@ pub fn extract_errors(input: &str) -> Vec<super::ActionRequest> {
                 .class_name
                 .strip_prefix("<none>.")
                 .or_else(|| o.class_name.strip_prefix("<none>"))
-                .or_else(|| o.class_name.strip_prefix("<root>."))
             {
                 let suffix_match = ClassSuffixMatch {
                     suffix: suffix.to_string(),
@@ -145,6 +146,13 @@ pub fn extract_errors(input: &str) -> Vec<super::ActionRequest> {
                 };
                 debug!("Found class suffix request: {:#?}", suffix_match);
                 super::ActionRequest::Suffix(suffix_match)
+            } else if let Some(prefix) = o.class_name.strip_prefix("<root>.") {
+                let prefix_match = super::ClassImportRequest {
+                    class_name: prefix.to_string(),
+                    ..o.to_class_import_request()
+                };
+                debug!("Found class prefix request: {:#?}", prefix_match);
+                super::ActionRequest::Prefix(prefix_match)
             } else {
                 let r = o.to_class_import_request();
                 debug!("Found class import request: {:#?}", r);

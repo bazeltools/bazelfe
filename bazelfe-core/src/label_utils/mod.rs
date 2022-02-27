@@ -64,7 +64,11 @@ pub fn prepare_class_import_requests(
     class_import_requests
 }
 
-pub fn class_name_to_prefixes(class_name: &str, allow_all_minor_domains: bool) -> Vec<String> {
+pub fn class_name_to_prefixes(class_name: &str) -> Vec<String> {
+    class_name_to_prefixes_domain(class_name, 0)
+}
+
+pub fn class_name_to_prefixes_domain(class_name: &str, min_minor_domain: i32) -> Vec<String> {
     let mut long_running_string = String::new();
     let mut result = Vec::new();
     let mut loop_cnt = 0;
@@ -88,13 +92,9 @@ pub fn class_name_to_prefixes(class_name: &str, allow_all_minor_domains: bool) -
         // otherwise its just too generic and a dice roll for com, net and org.
         // otherwise it likely reflects an organization
         let required_loop_cnt = if is_major_domain {
-            1
+            min_minor_domain + 1
         } else {
-            if allow_all_minor_domains {
-                -1
-            } else {
-                0
-            }
+            min_minor_domain
         };
 
         if loop_cnt > required_loop_cnt && long_running_string != class_name {
@@ -118,7 +118,7 @@ pub fn expand_candidate_import_requests(
             let sub_attempts = if e.exact_only {
                 vec![e.class_name.clone()]
             } else {
-                let mut r = class_name_to_prefixes(&e.class_name, false);
+                let mut r = class_name_to_prefixes(&e.class_name);
                 r.push(e.class_name.clone());
                 r.reverse();
                 r
@@ -135,7 +135,7 @@ mod tests {
     #[test]
     fn test_class_name_to_prefixes() {
         assert_eq!(
-            class_name_to_prefixes("a.b.c.d.e", false),
+            class_name_to_prefixes("a.b.c.d.e"),
             vec![
                 String::from("a.b"),
                 String::from("a.b.c"),
@@ -144,17 +144,17 @@ mod tests {
         );
 
         let expected: Vec<String> = vec![];
-        assert_eq!(class_name_to_prefixes("abcd", false), expected);
+        assert_eq!(class_name_to_prefixes("abcd"), expected);
 
         assert_eq!(
-            class_name_to_prefixes("vegas.sparkExt.package", false),
+            class_name_to_prefixes("vegas.sparkExt.package"),
             vec![String::from("vegas.sparkExt")]
         );
 
-        assert_eq!(class_name_to_prefixes("com.google.foo", false), expected);
-        assert_eq!(class_name_to_prefixes("net.google.foo", false), expected);
+        assert_eq!(class_name_to_prefixes("com.google.foo"), expected);
+        assert_eq!(class_name_to_prefixes("net.google.foo"), expected);
 
-        assert_eq!(class_name_to_prefixes("org.google.foo", false), expected);
+        assert_eq!(class_name_to_prefixes("org.google.foo"), expected);
     }
 
     #[test]

@@ -121,7 +121,7 @@ pub fn expand_candidate_import_requests(action_requests: Vec<ActionRequest>) -> 
 
     for c in candidate_import_requests.iter() {
         if !c.exact_only {
-            let r = crate::label_utils::class_name_to_prefixes(&c.class_name, false);
+            let r = crate::label_utils::class_name_to_prefixes(&c.class_name);
             let len = r.len();
             for (offset, sub_pre) in r.into_iter().enumerate() {
                 let inner_offset = ((len - offset) as i32) * -1;
