@@ -79,7 +79,6 @@ fn extract_target_not_in_package(ln: &str) -> Option<BadDep<'_>> {
         used_in: captures.get(2).unwrap().as_str(),
     })
 }
-// stderr: String::from("ERROR: /Users/foo/dev/mine/myrepo/path/src/main/scala/BUILD:3:14: no such target '@third_party_jvm//3rdparty/jvm/foo:bar': target 'bar' not declared in package '3rdparty/jvm/foo' (did you mean 'jax'?) defined by /some/other/useless/path/BUILD and referenced by '//src/main/java/com/example/c:c'"),
 
 fn extract_suggest_replace(ln: &str) -> Option<BadDep<'_>> {
     lazy_static! {
@@ -94,12 +93,27 @@ fn extract_suggest_replace(ln: &str) -> Option<BadDep<'_>> {
     })
 }
 
+fn extract_no_suggest_replace(ln: &str) -> Option<BadDep<'_>> {
+    lazy_static! {
+        static ref RE: Regex = Regex::new(
+            r"ERROR:\s*[^:]*BUILD:\d*:\d*:\s*no such target '([^']*)': target '[^']*' not declared in package '[^']*'\s*defined by [^ ]*/BUILD and referenced by '([^']*)'$"
+        ).unwrap();
+    }
+
+    RE.captures(ln).map(|captures| BadDep {
+        bad_dep: captures.get(1).unwrap().as_str(),
+        used_in: captures.get(2).unwrap().as_str(),
+    })
+}
+
 fn extract_target_not_declared_in_package(
     bazel_progress_error_info: &ProgressEvt,
     command_stream: &mut Vec<BazelCorrectionCommand>,
 ) {
     for ln in bazel_progress_error_info.stderr.lines() {
-        let bad_dep = extract_target_not_in_package(ln).or_else(|| extract_suggest_replace(ln));
+        let bad_dep = extract_target_not_in_package(ln)
+            .or_else(|| extract_suggest_replace(ln))
+            .or_else(|| extract_no_suggest_replace(ln));
 
         match bad_dep {
             None => (),
@@ -358,6 +372,27 @@ mod tests {
     fn test_extract_target_not_declared_in_package_suggest_replace() {
         let sample_output = ProgressEvt {
             stderr: String::from("ERROR: /Users/foo/dev/mine/myrepo/path/src/main/scala/BUILD:3:14: no such target '@third_party_jvm//3rdparty/jvm/foo:bar': target 'bar' not declared in package '3rdparty/jvm/foo' (did you mean 'jax'?) defined by /some/other/useless/path/BUILD and referenced by '//src/main/java/com/example/c:c'"),
+            stdout: String::from("")
+        };
+
+        let mut results = vec![];
+        extract_target_not_declared_in_package(&sample_output, &mut results);
+        assert_eq!(
+            results,
+            vec![BazelCorrectionCommand::BuildozerRemoveDep(
+                BuildozerRemoveDepCmd {
+                    target_to_operate_on: String::from("//src/main/java/com/example/c:c"),
+                    dependency_to_remove: String::from("@third_party_jvm//3rdparty/jvm/foo:bar"),
+                    why: String::from("Dependency on does not exist"),
+                }
+            )]
+        );
+    }
+
+    #[test]
+    fn test_extract_target_not_declared_in_package_no_suggest_replace() {
+        let sample_output = ProgressEvt {
+            stderr: String::from("ERROR: /Users/foo/dev/mine/myrepo/path/src/main/scala/BUILD:3:14: no such target '@third_party_jvm//3rdparty/jvm/foo:bar': target 'bar' not declared in package '3rdparty/jvm/foo' defined by /some/other/useless/path/BUILD and referenced by '//src/main/java/com/example/c:c'"),
             stdout: String::from("")
         };
 
