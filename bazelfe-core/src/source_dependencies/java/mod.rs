@@ -16,7 +16,13 @@ fn is_valid_import_segment_item(c: char) -> bool {
 }
 
 pub fn parse_import(line_number: u32, input: &str) -> IResult<&str, Import> {
-    let (input, _) = tuple((multispace0, tag("import"), space1, multispace0))(input)?;
+    let (input, _) = tuple((
+        multispace0,
+        tag("import"),
+        space1,
+        opt(tuple((tag("static"), space1))),
+        multispace0,
+    ))(input)?;
 
     let (input, (extracted, opt_wildcard)) = map(
         tuple((
@@ -244,6 +250,19 @@ mod tests {
     #[test]
     fn test_underscores() {
         let sample_input = "import com.twit__ter.scalding.My_Richness;";
+        let expected_results = vec![Import {
+            line_number: 1,
+            prefix_section: "com.twit__ter.scalding.My_Richness".to_string(),
+            suffix: SelectorType::NoSelector,
+        }];
+
+        let parsed_result = parse_imports(sample_input).unwrap();
+        assert_eq!(parsed_result, expected_results);
+    }
+
+    #[test]
+    fn test_import_static() {
+        let sample_input = "import static com.twit__ter.scalding.My_Richness;";
         let expected_results = vec![Import {
             line_number: 1,
             prefix_section: "com.twit__ter.scalding.My_Richness".to_string(),
