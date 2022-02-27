@@ -22,10 +22,12 @@ struct BuildozerRemoveDepCmd {
     pub why: String,
 }
 
-fn extract_target_does_not_exist(
-    bazel_abort_error_info: &hydrated_stream::BazelAbortErrorInfo,
-    command_stream: &mut Vec<BazelCorrectionCommand>,
-) {
+struct BadDep<'a> {
+    bad_dep: &'a str,
+    used_in: &'a str,
+}
+
+fn extract_dep_not_exists(ln: &str) -> Option<BadDep<'_>> {
     lazy_static! {
         static ref RE: Regex = Regex::new(
             r"^\s*in deps attribute of [A-Za-z0-9_-]* rule (.*): target '(.*)' does not exist\s*$"
@@ -33,22 +35,29 @@ fn extract_target_does_not_exist(
         .unwrap();
     }
 
+    RE.captures(ln).map(|captures| BadDep {
+        bad_dep: captures.get(2).unwrap().as_str(),
+        used_in: captures.get(1).unwrap().as_str(),
+    })
+}
+
+fn extract_target_does_not_exist(
+    bazel_abort_error_info: &hydrated_stream::BazelAbortErrorInfo,
+    command_stream: &mut Vec<BazelCorrectionCommand>,
+) {
     if let Some(build_event_stream::aborted::AbortReason::AnalysisFailure) =
         bazel_abort_error_info.reason
     {
         for ln in bazel_abort_error_info.description.lines() {
-            let captures = RE.captures(ln);
+            let bad_dep = extract_dep_not_exists(ln);
 
-            match captures {
+            match bad_dep {
                 None => (),
-                Some(captures) => {
-                    let src_target = captures.get(1).unwrap().as_str();
-                    let offending_dependency = captures.get(2).unwrap().as_str();
-
+                Some(bad_dep) => {
                     let correction =
                         BazelCorrectionCommand::BuildozerRemoveDep(BuildozerRemoveDepCmd {
-                            target_to_operate_on: src_target.to_string(),
-                            dependency_to_remove: offending_dependency.to_string(),
+                            target_to_operate_on: bad_dep.used_in.to_string(),
+                            dependency_to_remove: bad_dep.bad_dep.to_string(),
                             why: String::from("Dependency on does not exist"),
                         });
                     command_stream.push(correction);
@@ -58,30 +67,47 @@ fn extract_target_does_not_exist(
     }
 }
 
+fn extract_target_not_in_package(ln: &str) -> Option<BadDep<'_>> {
+    lazy_static! {
+        static ref RE: Regex = Regex::new(
+            r".*no such target '([^']*)': target '.*' not declared in package '.*' defined by .* and referenced by '([^']*)'"
+        ).unwrap();
+    }
+
+    RE.captures(ln).map(|captures| BadDep {
+        bad_dep: captures.get(1).unwrap().as_str(),
+        used_in: captures.get(2).unwrap().as_str(),
+    })
+}
+// stderr: String::from("ERROR: /Users/foo/dev/mine/myrepo/path/src/main/scala/BUILD:3:14: no such target '@third_party_jvm//3rdparty/jvm/foo:bar': target 'bar' not declared in package '3rdparty/jvm/foo' (did you mean 'jax'?) defined by /some/other/useless/path/BUILD and referenced by '//src/main/java/com/example/c:c'"),
+
+fn extract_suggest_replace(ln: &str) -> Option<BadDep<'_>> {
+    lazy_static! {
+        static ref RE: Regex = Regex::new(
+            r"ERROR:\s*[^:]*BUILD:\d*:\d*:\s*no such target '([^']*)': target '[^']*' not declared in package '[^']*' \(did you mean '[^']*'\s*\?\)\s*defined by [^ ]*/BUILD and referenced by '([^']*)'$"
+        ).unwrap();
+    }
+
+    RE.captures(ln).map(|captures| BadDep {
+        bad_dep: captures.get(1).unwrap().as_str(),
+        used_in: captures.get(2).unwrap().as_str(),
+    })
+}
+
 fn extract_target_not_declared_in_package(
     bazel_progress_error_info: &ProgressEvt,
     command_stream: &mut Vec<BazelCorrectionCommand>,
 ) {
-    lazy_static! {
-        static ref RE: Regex = Regex::new(
-            r".*no such target '([^']*)': target '.*' not declared in package '.*' defined by .* and referenced by '([^']*)'"
-        )
-        .unwrap();
-    }
-
     for ln in bazel_progress_error_info.stderr.lines() {
-        let captures = RE.captures(ln);
+        let bad_dep = extract_target_not_in_package(ln).or_else(|| extract_suggest_replace(ln));
 
-        match captures {
+        match bad_dep {
             None => (),
-            Some(captures) => {
-                let src_target = captures.get(2).unwrap().as_str();
-                let offending_dependency = captures.get(1).unwrap().as_str();
-
+            Some(bad_dep) => {
                 let correction =
                     BazelCorrectionCommand::BuildozerRemoveDep(BuildozerRemoveDepCmd {
-                        target_to_operate_on: src_target.to_string(),
-                        dependency_to_remove: offending_dependency.to_string(),
+                        target_to_operate_on: bad_dep.used_in.to_string(),
+                        dependency_to_remove: bad_dep.bad_dep.to_string(),
                         why: String::from("Dependency on does not exist"),
                     });
                 command_stream.push(correction);
@@ -322,6 +348,27 @@ mod tests {
                 BuildozerRemoveDepCmd {
                     target_to_operate_on: String::from("//src/main/java/com/example/c:c"),
                     dependency_to_remove: String::from("//src/main/java/com/example/foo:foo"),
+                    why: String::from("Dependency on does not exist"),
+                }
+            )]
+        );
+    }
+
+    #[test]
+    fn test_extract_target_not_declared_in_package_suggest_replace() {
+        let sample_output = ProgressEvt {
+            stderr: String::from("ERROR: /Users/foo/dev/mine/myrepo/path/src/main/scala/BUILD:3:14: no such target '@third_party_jvm//3rdparty/jvm/foo:bar': target 'bar' not declared in package '3rdparty/jvm/foo' (did you mean 'jax'?) defined by /some/other/useless/path/BUILD and referenced by '//src/main/java/com/example/c:c'"),
+            stdout: String::from("")
+        };
+
+        let mut results = vec![];
+        extract_target_not_declared_in_package(&sample_output, &mut results);
+        assert_eq!(
+            results,
+            vec![BazelCorrectionCommand::BuildozerRemoveDep(
+                BuildozerRemoveDepCmd {
+                    target_to_operate_on: String::from("//src/main/java/com/example/c:c"),
+                    dependency_to_remove: String::from("@third_party_jvm//3rdparty/jvm/foo:bar"),
                     why: String::from("Dependency on does not exist"),
                 }
             )]
