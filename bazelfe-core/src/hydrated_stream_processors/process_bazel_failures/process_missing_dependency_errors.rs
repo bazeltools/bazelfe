@@ -809,17 +809,13 @@ mod tests {
                 ActionRequest::Prefix(ClassImportRequest {
                     class_name: String::from("com.example.foo.bar.baz"),
                     exact_only: false,
-                    src_fn: String::from(
-                        "scala::extract_not_a_member_of_package",
-                    ),
+                    src_fn: String::from("scala::extract_not_a_member_of_package"),
                     priority: 5,
                 }),
                 ActionRequest::Prefix(ClassImportRequest {
                     class_name: String::from("com.example.foo.bar.noof"),
                     exact_only: false,
-                    src_fn: String::from(
-                        "scala::extract_not_a_member_of_package",
-                    ),
+                    src_fn: String::from("scala::extract_not_a_member_of_package"),
                     priority: 5,
                 }),
             ],
@@ -857,25 +853,19 @@ mod tests {
                 ActionRequest::Prefix(ClassImportRequest {
                     class_name: String::from("com.example.foo.bar.baz"),
                     exact_only: false,
-                    src_fn: String::from(
-                        "scala::extract_not_a_member_of_package",
-                    ),
+                    src_fn: String::from("scala::extract_not_a_member_of_package"),
                     priority: 5,
                 }),
                 ActionRequest::Prefix(ClassImportRequest {
                     class_name: String::from("com.example.foo.bar.baz"),
                     exact_only: false,
-                    src_fn: String::from(
-                        "scala::extract_not_a_member_of_package",
-                    ),
+                    src_fn: String::from("scala::extract_not_a_member_of_package"),
                     priority: 5,
                 }),
                 ActionRequest::Prefix(ClassImportRequest {
                     class_name: String::from("com.example.foo.bar.noof"),
                     exact_only: false,
-                    src_fn: String::from(
-                        "scala::extract_not_a_member_of_package",
-                    ),
+                    src_fn: String::from("scala::extract_not_a_member_of_package"),
                     priority: 5,
                 }),
             ],

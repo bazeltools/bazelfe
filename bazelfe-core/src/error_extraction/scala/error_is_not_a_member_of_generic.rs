@@ -35,8 +35,7 @@ pub(in crate::error_extraction::scala) fn extract(
 
     let mut result = None;
     for ln in input.lines() {
-        let captures = MEMBER_OF_CLASS_OR_OBJECT
-            .captures(ln);
+        let captures = MEMBER_OF_CLASS_OR_OBJECT.captures(ln);
 
         match captures {
             None => (),
@@ -131,5 +130,4 @@ possible cause: maybe a semicolon is missing before `value myFunction'?
             )])
         );
     }
-
 }

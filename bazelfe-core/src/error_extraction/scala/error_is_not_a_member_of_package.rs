@@ -36,8 +36,7 @@ pub(in crate::error_extraction::scala) fn extract(
 
     let mut result = None;
     for ln in input.lines() {
-        let captures = MEMBER_OF_PACKAGE
-            .captures(ln);
+        let captures = MEMBER_OF_PACKAGE.captures(ln);
 
         match captures {
             None => (),
