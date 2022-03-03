@@ -17,7 +17,7 @@ fn build_class_import_request(
         src_file_name: source_file_name,
         class_name,
         exact_only: false,
-        src_fn: "extract_not_a_member_of_package_or_class_or_object",
+        src_fn: "extract_not_a_member_of_package",
         priority,
     }
 }
@@ -28,21 +28,15 @@ pub(in crate::error_extraction::scala) fn extract(
 ) -> Option<Vec<ScalaClassImportRequest>> {
     lazy_static! {
         static ref MEMBER_OF_PACKAGE: Regex = Regex::new(
-            r"^(.*\.scala):(\d+):.*error: \w* (\w*) is not a member of package ([A-Za-z0-9.<>_]+).*$"
+            r"^(.*\.scala):(\d+):.*error: \w* (\w*) is not a member of package ([A-Za-z0-9.<>_]+)\s*$"
         )
         .unwrap();
 
-        static ref MEMBER_OF_CLASS_OR_OBJECT: Regex = Regex::new(
-            r"^(.*\.scala):(\d+):.*error: \w* (\w*) is not a member of ([A-Za-z0-9.<>_]+).*$"
-        )
-        .unwrap();
     }
 
     let mut result = None;
     for ln in input.lines() {
-        let captures = MEMBER_OF_PACKAGE
-            .captures(ln)
-            .or_else(|| MEMBER_OF_CLASS_OR_OBJECT.captures(ln));
+        let captures = MEMBER_OF_PACKAGE.captures(ln);
 
         match captures {
             None => (),
@@ -159,32 +153,6 @@ one error found";
             Some(vec![build_class_import_request(
                 String::from("src/test/scala/com/foo/bar/Baz.scala"),
                 "com.example.foo.baz.non_aliased.Derp".to_string(),
-                5
-            )])
-        );
-    }
-
-    #[test]
-    fn test_not_a_member_of_class() {
-        let mut file_cache = super::super::FileParseCache::init_from_par(
-            String::from("src/main/java/com/example/Example.java"),
-            crate::source_dependencies::ParsedFile {
-                package_name: None,
-                imports: vec![],
-            },
-        );
-        let sample_output =
-            "src/test/scala/com/foo/bar/Baz.scala:21: error: value myFunction is not a member of com.example.foo.ObjectName
-possible cause: maybe a semicolon is missing before `value myFunction'?
-      .myFunction(data)
-       ^
-";
-
-        assert_eq!(
-            extract(sample_output, &mut file_cache),
-            Some(vec![build_class_import_request(
-                String::from("src/test/scala/com/foo/bar/Baz.scala"),
-                "com.example.foo.ObjectName.myFunction".to_string(),
                 5
             )])
         );
