@@ -16,8 +16,8 @@ fn build_class_import_request(
     ScalaClassImportRequest {
         src_file_name: source_file_name,
         class_name,
-        exact_only: false,
-        src_fn: "extract_not_a_member_of_package_or_class_or_object",
+        exact_only: true,
+        src_fn: "extract_not_a_member_of_generic",
         priority,
     }
 }
@@ -27,22 +27,16 @@ pub(in crate::error_extraction::scala) fn extract(
     file_parse_cache: &mut super::FileParseCache,
 ) -> Option<Vec<ScalaClassImportRequest>> {
     lazy_static! {
-        static ref MEMBER_OF_PACKAGE: Regex = Regex::new(
-            r"^(.*\.scala):(\d+):.*error: \w* (\w*) is not a member of package ([A-Za-z0-9.<>_]+).*$"
-        )
-        .unwrap();
-
         static ref MEMBER_OF_CLASS_OR_OBJECT: Regex = Regex::new(
-            r"^(.*\.scala):(\d+):.*error: \w* (\w*) is not a member of ([A-Za-z0-9.<>_]+).*$"
+            r"^(.*\.scala):(\d+):.*error: \w* (\w*) is not a member of ([A-Za-z0-9.<>_]+)\s*$"
         )
         .unwrap();
     }
 
     let mut result = None;
     for ln in input.lines() {
-        let captures = MEMBER_OF_PACKAGE
-            .captures(ln)
-            .or_else(|| MEMBER_OF_CLASS_OR_OBJECT.captures(ln));
+        let captures = MEMBER_OF_CLASS_OR_OBJECT
+            .captures(ln);
 
         match captures {
             None => (),
@@ -111,58 +105,6 @@ pub(in crate::error_extraction::scala) fn extract(
 mod tests {
 
     use super::*;
-    #[test]
-    fn test_not_a_member_of_package_error() {
-        let mut file_cache = super::super::FileParseCache::init_from_par(
-            String::from("src/main/java/com/example/Example.java"),
-            crate::source_dependencies::ParsedFile {
-                package_name: None,
-                imports: vec![],
-            },
-        );
-        let sample_output =
-            "src/main/scala/com/example/Example.scala:2: error: object foo is not a member of package com.example
-import com.example.foo.bar.Baz
-                   ^
-src/main/scala/com/example/Example.scala:2: warning: Unused import
-import com.example.foo.bar.Baz
-                           ^
-one warning found
-one error found";
-
-        assert_eq!(
-            extract(sample_output, &mut file_cache),
-            Some(vec![build_class_import_request(
-                String::from("src/main/scala/com/example/Example.scala"),
-                "com.example.foo".to_string(),
-                5
-            )])
-        );
-    }
-
-    #[test]
-    fn test_not_a_member_of_package_error_2() {
-        let mut file_cache = super::super::FileParseCache::init_from_par(
-            String::from("src/main/java/com/example/Example.java"),
-            crate::source_dependencies::ParsedFile {
-                package_name: None,
-                imports: vec![],
-            },
-        );
-        let sample_output =
-            "src/test/scala/com/foo/bar/Baz.scala:19: error: type Derp is not a member of package com.example.foo.baz.non_aliased
-    val derp: Dataset[aliased_name.Derp] =
-";
-
-        assert_eq!(
-            extract(sample_output, &mut file_cache),
-            Some(vec![build_class_import_request(
-                String::from("src/test/scala/com/foo/bar/Baz.scala"),
-                "com.example.foo.baz.non_aliased.Derp".to_string(),
-                5
-            )])
-        );
-    }
 
     #[test]
     fn test_not_a_member_of_class() {
@@ -190,30 +132,4 @@ possible cause: maybe a semicolon is missing before `value myFunction'?
         );
     }
 
-    #[test]
-    fn test_not_a_member_of_package_error_3() {
-        let mut file_cache = super::super::FileParseCache::init_from_par(
-            String::from("src/main/scala/com/example/doh/blah/Buzz.scala"),
-            crate::source_dependencies::ParsedFile {
-                package_name: None,
-                imports: vec![crate::source_dependencies::Import {
-                    line_number: 6,
-                    prefix_section: String::from("com.example.foo.bar.bazFn"),
-                    suffix: crate::source_dependencies::SelectorType::NoSelector,
-                }],
-            },
-        );
-        let sample_output =
-            "src/main/scala/com/example/doh/blah/Buzz.scala:6: error: object bar is not a member of package com.example.foo
-import com.example.foo.bar.bazFn";
-
-        assert_eq!(
-            extract(sample_output, &mut file_cache),
-            Some(vec![build_class_import_request(
-                String::from("src/main/scala/com/example/doh/blah/Buzz.scala"),
-                "com.example.foo.bar.bazFn".to_string(),
-                50
-            )])
-        );
-    }
 }
