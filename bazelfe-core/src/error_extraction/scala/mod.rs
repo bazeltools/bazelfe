@@ -151,6 +151,11 @@ pub fn extract_errors(input: &str) -> Vec<super::ActionRequest> {
                 super::ActionRequest::Prefix(r)
             }
         })
+    }).filter(|e| {
+        match e {
+            super::ActionRequest::Prefix(_) => true,
+            super::ActionRequest::Suffix(s) => s.suffix.chars().filter(|e| *e == '.').count() > 0,
+        }
     })
     .collect();
 
