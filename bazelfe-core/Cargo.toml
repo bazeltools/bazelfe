@@ -94,12 +94,12 @@ crossterm = {version = "0.23.0", optional = true}
 muncher = {version  = "0.7.0", optional = true}
 humantime = "2.1.0"
 tempfile = {version = "3.2.0", optional = true}
-anyhow = "1.0.54"
+anyhow = "1.0.56"
 
 
 [build-dependencies]
 vergen = "6.0"
-anyhow = "1.0.54"
+anyhow = "1.0.56"
 
 [dependencies.bazelfe-protos]
 path = "../bazelfe-protos"
