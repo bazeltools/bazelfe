@@ -14,6 +14,7 @@ use super::CurrentState;
 
 enum BazelCorrectionCommand {
     BuildozerRemoveDep(BuildozerRemoveDepCmd),
+    BuildozerRemoveDepLike(BuildozerRemoveDepLikeCmd),
 }
 #[derive(Clone, PartialEq, Debug)]
 struct BuildozerRemoveDepCmd {
@@ -22,9 +23,68 @@ struct BuildozerRemoveDepCmd {
     pub why: String,
 }
 
+#[derive(Clone, PartialEq, Debug)]
+struct BuildozerRemoveDepLikeCmd {
+    pub target_to_operate_on: String,
+    pub dep_like: String,
+    pub why: String,
+}
+
 struct BadDep<'a> {
     bad_dep: &'a str,
     used_in: &'a str,
+}
+
+fn extract_build_not_found(
+    bazel_progress_error_info: &ProgressEvt,
+    command_stream: &mut Vec<BazelCorrectionCommand>,
+) {
+    lazy_static! {
+        static ref FIRST_REGEX: Regex = Regex::new(
+            r"ERROR:.*:\d*:\d*: no such package '([^']*)':\s*BUILD file not found in any of the following directories. Add a BUILD file to a directory to mark it as a package.\s*$"
+        )
+        .unwrap();
+
+        static ref SECOND_REGEX: Regex = Regex::new(
+            r"^\s*-\s*[^ ]* and referenced by '([^']+)'\s*$"
+        )
+        .unwrap();
+    }
+
+    let mut prev_line: Option<String> = None;
+    for ln in bazel_progress_error_info.stderr.lines() {
+        if let Some(dep_like) = prev_line {
+            if let Some(operate_on) = SECOND_REGEX
+                .captures(ln)
+                .map(|captures| captures.get(1).unwrap().as_str())
+            {
+                // So this is really unfortunate, bazel doesn't report the name of the target missing
+                // if the whole build file is missing :(
+                //  so we are right now doing a hacky 2 step process:
+                // We can use a regex to substititue the old target for something else, so we point it at the root to a non-existant target
+                // then this can come back along and repair the pointer to the non-existant target.
+                // Alternatives to consider:
+                // 1) We should emit/use a file edit
+                // 2) Have a python/build file editor set of code on hand and just do it
+                // 3) We could use a special command to use a combination of print deps -- this might be the easiest option to do this better.
+                let correction =
+                    BazelCorrectionCommand::BuildozerRemoveDepLike(BuildozerRemoveDepLikeCmd {
+                        target_to_operate_on: operate_on.to_string(),
+                        dep_like: format!("//{}", dep_like),
+                        why: String::from("BUILD does not exist"),
+                    });
+                command_stream.push(correction);
+            }
+            prev_line = None
+        } else {
+            if let Some(missing_package) = FIRST_REGEX
+                .captures(ln)
+                .map(|captures| captures.get(1).unwrap().as_str())
+            {
+                prev_line = Some(missing_package.to_string())
+            }
+        }
+    }
 }
 
 fn extract_dep_not_exists(ln: &str) -> Option<BadDep<'_>> {
@@ -83,7 +143,7 @@ fn extract_target_not_in_package(ln: &str) -> Option<BadDep<'_>> {
 fn extract_suggest_replace(ln: &str) -> Option<BadDep<'_>> {
     lazy_static! {
         static ref RE: Regex = Regex::new(
-            r"ERROR:\s*[^:]*BUILD:\d*:\d*:\s*no such target '([^']*)': target '[^']*' not declared in package '[^']*' \(did you mean '[^']*'\s*\?\)\s*defined by [^ ]*/BUILD and referenced by '([^']*)'$"
+            r"ERROR:\s*[^:]*BUILD[^:]*:\d*:\d*:\s*no such target '([^']*)': target '[^']*' not declared in package '[^']*' \(did you mean '[^']*'\s*\?\)\s*defined by [^ ]*/BUILD and referenced by '([^']*)'$"
         ).unwrap();
     }
 
@@ -96,7 +156,7 @@ fn extract_suggest_replace(ln: &str) -> Option<BadDep<'_>> {
 fn extract_no_suggest_replace(ln: &str) -> Option<BadDep<'_>> {
     lazy_static! {
         static ref RE: Regex = Regex::new(
-            r"ERROR:\s*[^:]*BUILD:\d*:\d*:\s*no such target '([^']*)': target '[^']*' not declared in package '[^']*'\s*defined by [^ ]*/BUILD and referenced by '([^']*)'$"
+            r"ERROR:\s*[^:]*BUILD[^:]*:\d*:\d*:\s*no such target '([^']*)': target '[^']*' not declared in package '[^']*'\s*defined by [^ ]*/BUILD and referenced by '([^']*)'$"
         ).unwrap();
     }
 
@@ -256,6 +316,41 @@ async fn apply_candidates<T: Buildozer + Clone + Send + Sync + 'static>(
     }
     for correction_command in candidate_correction_commands.into_iter() {
         match correction_command {
+            BazelCorrectionCommand::BuildozerRemoveDepLike(buildozer_remove_deplike) => {
+                let dep_like = buildozer_remove_deplike.dep_like;
+                let target_to_operate_on = buildozer_remove_deplike.target_to_operate_on;
+                // otherwise... add the dependency with buildozer here
+                // then add it ot the local seen dependencies
+                info!(
+                    "Buildozer action: remove dep lie {:?}, from {:?}",
+                    dep_like, target_to_operate_on
+                );
+
+                if let Ok(deps_for_target) = buildozer.print_deps(&target_to_operate_on).await {
+                    for dep in deps_for_target.into_iter() {
+                        if dep.contains(&dep_like) {
+                            let buildozer_res = buildozer
+                                .remove_dependency(&target_to_operate_on, &dep)
+                                .await;
+                            match buildozer_res {
+                                Ok(_) => {
+                                    target_stories.push(super::TargetStory {
+                                        target: target_to_operate_on.clone(),
+                                        action: super::TargetStoryAction::RemovedDependency {
+                                            removed_what: dep.clone(),
+                                            why: buildozer_remove_deplike.why.clone(),
+                                        },
+                                        when: Instant::now(),
+                                    });
+                                }
+                                Err(_) => info!("Buildozer remove_dep command failed"),
+                            }
+                        }
+                    }
+                } else {
+                    info!("Buildozer print_deps command failed");
+                }
+            }
             BazelCorrectionCommand::BuildozerRemoveDep(buildozer_remove_dep) => {
                 let dependency_to_remove = buildozer_remove_dep.dependency_to_remove;
                 let target_to_operate_on = buildozer_remove_dep.target_to_operate_on;
@@ -305,6 +400,11 @@ pub async fn process_progress<T: Buildozer + Clone + Send + Sync + 'static>(
         &mut candidate_correction_commands,
     );
 
+    extract_build_not_found(
+        bazel_progress_error_info,
+        &mut candidate_correction_commands,
+    );
+
     apply_candidates(candidate_correction_commands, buildozer).await
 }
 
@@ -323,6 +423,30 @@ pub async fn process_build_abort_errors<T: Buildozer + Clone + Send + Sync + 'st
 mod tests {
 
     use super::*;
+
+    #[test]
+    fn test_extract_build_file_not_found() {
+        // This was referring to a random string put into the dependencies list of the target
+        let sample_output =ProgressEvt {
+            stderr: String::from("\u{1b}[31m\u{1b}[1mERROR: \u{1b}[0m/foo/bar/baz/src/test/scala/com/p/q/r/BUILD.bazel:3:11: no such package 'baz/src/test/scala': BUILD file not found in any of the following directories. Add a BUILD file to a directory to mark it as a package.\n- /foo/bar/baz/src/test/scala and referenced by '//baz/src/test/scala/com/p/q/r:m'"),
+            stdout: String::from("")
+
+        };
+
+        let mut results = vec![];
+        extract_build_not_found(&sample_output, &mut results);
+        assert_eq!(
+            results,
+            vec![BazelCorrectionCommand::BuildozerRemoveDepLike(
+                BuildozerRemoveDepLikeCmd {
+                    target_to_operate_on: String::from("//baz/src/test/scala/com/p/q/r:m"),
+                    dep_like: String::from("//baz/src/test/scala"),
+                    why: String::from("BUILD does not exist")
+                }
+            )]
+        );
+    }
+
     #[test]
     fn test_extract_target_does_not_exist() {
         // This was referring to a random string put into the dependencies list of the target

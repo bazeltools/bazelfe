@@ -150,7 +150,7 @@ impl Buildozer for BuildozerBinaryImpl {
         let _ = self
             .execute_command(vec![
                 &format!("remove deps {}", label_to_add),
-                target_to_operate_on,
+                &crate::label_utils::sanitize_label(target_to_operate_on.clone()),
             ])
             .await?;
         Ok(())
