@@ -290,6 +290,12 @@ impl<
                                     removed_what, why
                                 );
                             }
+                            TargetStoryAction::WouldHaveAddedDependency { what, why } => {
+                                eprintln!(
+                                    "\tWould have, but didn't Add Dependency {}\n\t\tReason: {}",
+                                    what, why
+                                );
+                            }
                             TargetStoryAction::Success => eprintln!("\tTarget suceeded"),
                             TargetStoryAction::RanUserAction {
                                 user_action_name,

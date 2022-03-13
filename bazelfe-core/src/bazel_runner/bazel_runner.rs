@@ -1,9 +1,11 @@
 use bazel_runner::configured_bazel_runner::ConfiguredBazelRunner;
 use std::env;
+use tokio::sync::Mutex;
 use tonic::transport::Server;
 
 use bazelfe_protos::*;
 
+use crate::bazel_query::{BazelQueryEngine, RealBazelQueryEngine};
 use crate::{bazel_command_line_parser::ParsedCommandLine, buildozer_driver};
 
 use crate::config::Config;
@@ -96,6 +98,15 @@ impl BazelRunner {
 
         debug!("Index loading complete..");
 
+        let bazel_query: Arc<Mutex<Box<dyn crate::jvm_indexer::bazel_query::BazelQuery>>> =
+            Arc::new(Mutex::new(Box::new(
+                crate::jvm_indexer::bazel_query::from_binary_path(
+                    &self.bazel_command_line.bazel_binary.clone(),
+                ),
+            )));
+
+        let bazel_query_engine: Arc<dyn BazelQueryEngine> =
+            Arc::new(RealBazelQueryEngine::new(bazel_query));
         let process_build_failures = Arc::new(ProcessBazelFailures::new(
             index_table.clone(),
             buildozer_driver::from_binary_path(
@@ -106,6 +117,7 @@ impl BazelRunner {
             ),
             crate::hydrated_stream_processors::process_bazel_failures::CommandLineRunnerImpl(),
             Arc::clone(&config),
+            Arc::clone(&bazel_query_engine),
         )?);
         let processors: Vec<Arc<dyn BazelEventHandler>> = vec![
             process_build_failures.clone(),

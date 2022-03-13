@@ -107,11 +107,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     .expect("Should have a bazel binary path when running query."),
             );
 
-            bazelfe_core::bazel_runner_daemon::query_graph::graph_query(
-                &bazel_query,
-                "deps(//...)",
-            )
-            .await?;
+            bazelfe_core::bazel_query::graph_query(&bazel_query, "deps(//...)", &[]).await?;
         }
         SubCommands::RunForkExecDaemon(daemon_args) => {
             bazelfe_core::bazel_runner_daemon::daemon_server::main_from_config(

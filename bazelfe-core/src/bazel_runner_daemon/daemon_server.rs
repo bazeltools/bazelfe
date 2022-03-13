@@ -186,9 +186,10 @@ impl TargetState {
             if self.src_file_to_target.contains_key(path) {
                 return Ok(());
             }
-            let dependencies_calculated = crate::bazel_runner_daemon::query_graph::graph_query(
+            let dependencies_calculated = crate::bazel_query::graph_query(
                 bazel_query.as_ref(),
                 &format!("deps({}:all, 1)", p.to_string_lossy()),
+                &[],
             )
             .await?;
 
@@ -208,12 +209,12 @@ impl TargetState {
                         .map(|e| e.value().is_empty())
                         .unwrap_or(true);
                     if need_query {
-                        let dependencies_calculated =
-                            crate::bazel_runner_daemon::query_graph::graph_query(
-                                bazel_query.as_ref(),
-                                &format!("rdeps(//..., {})", &rule.name),
-                            )
-                            .await?;
+                        let dependencies_calculated = crate::bazel_query::graph_query(
+                            bazel_query.as_ref(),
+                            &format!("rdeps(//..., {})", &rule.name),
+                            &[],
+                        )
+                        .await?;
 
                         self.ingest_new_deps(&dependencies_calculated).await;
                     } else {
