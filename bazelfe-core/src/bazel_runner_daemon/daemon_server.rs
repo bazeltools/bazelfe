@@ -119,6 +119,7 @@ impl TargetState {
                 eprintln!("Looking at src file {:#?}", src_file);
                 if let Some(path) = target_as_path(&src_file.name) {
                     let cur_id = TargetId(self.max_target_id.fetch_add(1, Ordering::AcqRel));
+                    eprintln!("Inserting known file {:#?}", path);
                     self.src_file_to_target.insert(path, cur_id);
                     self.label_string_to_id
                         .insert(src_file.name.clone(), cur_id);
@@ -167,7 +168,6 @@ impl TargetState {
         if self.src_file_to_target.contains_key(path) {
             return Ok(());
         }
-
         let mut cur_path = Some(path.as_path());
         loop {
             if let Some(p) = cur_path {
@@ -186,10 +186,15 @@ impl TargetState {
             if self.src_file_to_target.contains_key(path) {
                 return Ok(());
             }
+            eprintln!(
+                "Missing data for {:#?}, going to run query operations",
+                path
+            );
             let dependencies_calculated = crate::bazel_query::graph_query(
                 bazel_query.as_ref(),
                 &format!("deps({}:all, 1)", p.to_string_lossy()),
                 &[],
+                true,
             )
             .await?;
 
@@ -213,6 +218,7 @@ impl TargetState {
                             bazel_query.as_ref(),
                             &format!("rdeps(//..., {})", &rule.name),
                             &[],
+                            true,
                         )
                         .await?;
 
@@ -332,6 +338,10 @@ impl TargetCache {
             if event_kind.is_modify() && real_metadata.is_dir() {
                 continue;
             }
+            // Other events to folders is super noisy.
+            if event_kind.is_other() && real_metadata.is_dir() {
+                continue;
+            }
             if real_path.exists() && real_metadata.file_type() == src_metadata.file_type() {
                 let mut current_sha = None;
                 let mut do_insert = true;
@@ -354,7 +364,8 @@ impl TargetCache {
                 if do_insert {
                     self.hydrate_new_file_data(real_path.clone()).await;
                     eprintln!(
-                        "Noting changed file, at a given timestamp. {:#?}",
+                        "Noting changed file, Event kind: {:#?} at a given timestamp. {:#?}",
+                        event_kind,
                         (real_path.to_path_buf(), (ts, now_instant, &current_sha))
                     );
                     lock.insert(real_path.to_path_buf(), (ts, now_instant, current_sha));
@@ -730,6 +741,18 @@ pub async fn main(
 
     let notify_ignore_regexes = daemon_config.inotify_ignore_regexes.clone();
 
+    let mut ignore_builder = ignore::gitignore::GitignoreBuilder::new(&current_dir);
+
+    for f in vec![".gitignore", ".bazelignore"] {
+        let sub_path = current_dir.join(f);
+        if sub_path.exists() {
+            let _ = ignore_builder.add(sub_path);
+        }
+    }
+    let gitignore_match = ignore_builder
+        .build()
+        .expect("Should be able to build from gitignore");
+
     let mut root_watcher: RecommendedWatcher =
         RecommendedWatcher::new(move |res: notify::Result<notify::Event>| match res {
             Ok(event) => match event.kind {
@@ -745,6 +768,10 @@ pub async fn main(
                             .iter()
                             .find(|&p| p.is_match(file_name.to_string_lossy().as_ref()));
                         if is_ignored.is_some() {
+                            continue;
+                        }
+
+                        if gitignore_match.matched(path, path.is_dir()).is_ignore() {
                             continue;
                         }
 

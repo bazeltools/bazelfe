@@ -97,6 +97,7 @@ async fn spawn_bazel_attempt(
                         .iter()
                         .map(|e| match e.action {
                             TargetStoryAction::Success => 0,
+                            TargetStoryAction::WouldHaveAddedDependency { .. } => 0,
                             _ => 1,
                         })
                         .sum();

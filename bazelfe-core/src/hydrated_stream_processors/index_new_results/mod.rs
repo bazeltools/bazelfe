@@ -52,6 +52,11 @@ impl IndexNewResults {
                 if let Some(target_kind) = &tce.target_kind {
                     if target_kind.contains("_test") {
                         return Vec::default();
+                    } else if target_kind.contains("generated file")
+                        && tce.label.ends_with("_deploy.jar")
+                    {
+                        // java or scala deploy jar. don't index.
+                        return Vec::default();
                     }
                 }
                 let label = tce.label.clone();

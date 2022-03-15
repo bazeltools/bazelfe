@@ -221,6 +221,10 @@ async fn inner_process_missing_dependency_errors<'a, T: Buildozer>(
     let unsanitized_label = label;
     let label = crate::label_utils::sanitize_label(String::from(label));
 
+    let target_rdeps = bazel_query_engine
+        .r_deps(&label)
+        .await
+        .unwrap_or(HashSet::default());
     let mut total_added = 0;
     'req_point: for req in all_requests.into_iter() {
         let candidates = match &req {
@@ -318,13 +322,9 @@ async fn inner_process_missing_dependency_errors<'a, T: Buildozer>(
             }
         }
         if let Some(target) = target_to_add {
-            let would_create_circular_dep = bazel_query_engine
-                .dependency_link(&target, &label)
-                .await
-                .unwrap_or(false);
             // otherwise... add the dependency with buildozer here
             // then add it ot the local seen dependencies
-            if would_create_circular_dep {
+            if target_rdeps.contains(&target) {
                 debug!(
                     "SKIPPING Due to circular dependency risk: Buildozer action: add dependency {:?} to {:?}",
                     target, &label
@@ -338,13 +338,12 @@ async fn inner_process_missing_dependency_errors<'a, T: Buildozer>(
                     when: Instant::now(),
                 });
             } else {
-                debug!(
+                info!(
                     "Buildozer action: add dependency {:?} to {:?}",
                     target, &label
                 );
                 previous_added_for_req.insert(target.clone());
 
-                total_added += 1;
                 buildozer.add_dependency(&label, &target).await.unwrap();
                 target_stories.push(super::TargetStory {
                     target: unsanitized_label.to_string(),
@@ -354,13 +353,17 @@ async fn inner_process_missing_dependency_errors<'a, T: Buildozer>(
                     },
                     when: Instant::now(),
                 });
+            }
 
-                local_previous_seen.insert(target.clone());
-                if total_added < 5 {
-                    continue 'req_point;
-                } else {
-                    break 'req_point;
-                }
+            // most of this code is common, if there was a circular dep bit of code, then chances are it was important to us.
+
+            total_added += 1;
+
+            local_previous_seen.insert(target.clone());
+            if total_added < 5 {
+                continue 'req_point;
+            } else {
+                break 'req_point;
             }
         }
     }
@@ -381,10 +384,8 @@ mod tests {
     use tokio::sync::Mutex;
 
     use crate::{
-        build_events::hydrated_stream::BazelAbortErrorInfo,
         buildozer_driver::ExecuteResultError,
         error_extraction::{ActionRequest, ClassImportRequest, ClassSuffixMatch},
-        jvm_indexer::bazel_query::BazelQueryBinaryImpl,
     };
 
     use super::*;
@@ -399,6 +400,13 @@ mod tests {
             edge_dest: &str,
         ) -> Result<bool, Box<dyn std::error::Error>> {
             Ok(false)
+        }
+
+        async fn r_deps(
+            self: &Self,
+            target: &str,
+        ) -> Result<HashSet<String>, Box<dyn std::error::Error>> {
+            Ok(HashSet::default())
         }
     }
 
