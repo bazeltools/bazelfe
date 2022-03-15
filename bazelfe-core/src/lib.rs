@@ -4,6 +4,7 @@ extern crate lazy_static;
 extern crate log;
 
 pub mod bazel_command_line_parser;
+pub mod bazel_query;
 pub mod bazel_runner;
 #[cfg(feature = "bazelfe-daemon")]
 pub mod bazel_runner_daemon;

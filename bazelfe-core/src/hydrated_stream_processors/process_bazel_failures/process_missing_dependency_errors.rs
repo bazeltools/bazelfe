@@ -2,12 +2,14 @@ use std::{
     collections::{HashMap, HashSet},
     path::Path,
     path::PathBuf,
+    sync::Arc,
     time::Instant,
 };
 
 use lazy_static::lazy_static;
 
 use crate::{
+    bazel_query::BazelQueryEngine,
     build_events::hydrated_stream::ActionFailedErrorInfo,
     buildozer_driver::Buildozer,
     error_extraction::{self, ActionRequest},
@@ -162,6 +164,7 @@ pub async fn process_missing_dependency_errors<T: Buildozer>(
     action_failed_error_info: &ActionFailedErrorInfo,
     index_table: &index_table::IndexTable,
     epoch: usize,
+    bazel_query_engine: Arc<dyn BazelQueryEngine>,
 ) -> super::Response {
     if epoch <= current_state.epoch {
         return super::Response::new(Vec::default());
@@ -184,6 +187,7 @@ pub async fn process_missing_dependency_errors<T: Buildozer>(
             all_requests,
             ignore_dep_references,
             &mut current_state.added_target_for_class,
+            bazel_query_engine,
         )
         .await;
 
@@ -199,14 +203,15 @@ pub async fn process_missing_dependency_errors<T: Buildozer>(
     current_state.epoch = epoch;
     response
 }
-async fn inner_process_missing_dependency_errors<T: Buildozer>(
+async fn inner_process_missing_dependency_errors<'a, T: Buildozer>(
     buildozer: T,
-    label: &str,
-    target_kind: &Option<String>,
-    index_table: &index_table::IndexTable,
+    label: &'a str,
+    target_kind: &'a Option<String>,
+    index_table: &'a index_table::IndexTable,
     all_requests: Vec<ActionRequest>,
     ignore_dep_references: HashSet<String>,
-    previous_added: &mut HashMap<ActionRequest, HashSet<String>>,
+    previous_added: &'a mut HashMap<ActionRequest, HashSet<String>>,
+    bazel_query_engine: Arc<dyn BazelQueryEngine>,
 ) -> (super::Response, HashSet<String>, HashSet<String>) {
     let mut local_previous_seen: HashSet<String> = HashSet::new();
     let mut local_previous_seen_prefix: HashSet<String> = HashSet::new();
@@ -216,6 +221,10 @@ async fn inner_process_missing_dependency_errors<T: Buildozer>(
     let unsanitized_label = label;
     let label = crate::label_utils::sanitize_label(String::from(label));
 
+    let target_rdeps = bazel_query_engine
+        .r_deps(&label)
+        .await
+        .unwrap_or(HashSet::default());
     let mut total_added = 0;
     'req_point: for req in all_requests.into_iter() {
         let candidates = match &req {
@@ -315,22 +324,40 @@ async fn inner_process_missing_dependency_errors<T: Buildozer>(
         if let Some(target) = target_to_add {
             // otherwise... add the dependency with buildozer here
             // then add it ot the local seen dependencies
-            debug!(
-                "Buildozer action: add dependency {:?} to {:?}",
-                target, &label
-            );
-            previous_added_for_req.insert(target.clone());
+            if target_rdeps.contains(&target) {
+                debug!(
+                    "SKIPPING Due to circular dependency risk: Buildozer action: add dependency {:?} to {:?}",
+                    target, &label
+                );
+                target_stories.push(super::TargetStory {
+                    target: unsanitized_label.to_string(),
+                    action: super::TargetStoryAction::WouldHaveAddedDependency {
+                        what: target.clone(),
+                        why: format!("Would have added this dependency, but we detected the target already depends on this target. Were going to add because: {}", why),
+                    },
+                    when: Instant::now(),
+                });
+            } else {
+                info!(
+                    "Buildozer action: add dependency {:?} to {:?}",
+                    target, &label
+                );
+                previous_added_for_req.insert(target.clone());
+
+                buildozer.add_dependency(&label, &target).await.unwrap();
+                target_stories.push(super::TargetStory {
+                    target: unsanitized_label.to_string(),
+                    action: super::TargetStoryAction::AddedDependency {
+                        added_what: target.clone(),
+                        why: why.clone(),
+                    },
+                    when: Instant::now(),
+                });
+            }
+
+            // most of this code is common, if there was a circular dep bit of code, then chances are it was important to us.
 
             total_added += 1;
-            buildozer.add_dependency(&label, &target).await.unwrap();
-            target_stories.push(super::TargetStory {
-                target: unsanitized_label.to_string(),
-                action: super::TargetStoryAction::AddedDependency {
-                    added_what: target.clone(),
-                    why: why.clone(),
-                },
-                when: Instant::now(),
-            });
 
             local_previous_seen.insert(target.clone());
             if total_added < 5 {
@@ -362,6 +389,26 @@ mod tests {
     };
 
     use super::*;
+
+    #[derive(Debug)]
+    struct NoOpMBazelQueryEngine();
+    #[async_trait::async_trait]
+    impl BazelQueryEngine for NoOpMBazelQueryEngine {
+        async fn dependency_link(
+            self: &Self,
+            edge_src: &str,
+            edge_dest: &str,
+        ) -> Result<bool, Box<dyn std::error::Error>> {
+            Ok(false)
+        }
+
+        async fn r_deps(
+            self: &Self,
+            target: &str,
+        ) -> Result<HashSet<String>, Box<dyn std::error::Error>> {
+            Ok(HashSet::default())
+        }
+    }
 
     static RELIES_ON_CWD: Lazy<Mutex<()>> = Lazy::new(Mutex::default);
 
@@ -691,6 +738,7 @@ mod tests {
             &action_failed_error_info,
             &index_table,
             1,
+            Arc::new(NoOpMBazelQueryEngine()),
         )
         .await;
 
@@ -744,6 +792,7 @@ mod tests {
                 all_requests,
                 ignore_dep_references,
                 &mut previous_added,
+                Arc::new(NoOpMBazelQueryEngine()),
             )
             .await;
 

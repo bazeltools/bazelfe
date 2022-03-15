@@ -2,6 +2,8 @@ use std::{collections::HashMap, collections::HashSet, sync::Arc, time::Instant};
 
 use tokio::sync::{Mutex, RwLock};
 
+use crate::bazel_query::BazelQueryEngine;
+use crate::jvm_indexer::bazel_query::BazelQuery;
 use crate::{
     build_events::hydrated_stream, buildozer_driver::Buildozer, config::Config, index_table,
 };
@@ -23,6 +25,10 @@ pub use command_line_runner::CommandLineRunnerImpl;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TargetStoryAction {
+    WouldHaveAddedDependency {
+        what: String,
+        why: String,
+    },
     AddedDependency {
         added_what: String,
         why: String,
@@ -82,6 +88,7 @@ pub struct ProcessBazelFailures<T: Buildozer, U: CommandLineRunner> {
     command_line_runner: U,
     _config: Arc<Config>,
     user_defined_action_cache: Arc<UserDefinedActionsStateCache>,
+    bazel_query_engine: Arc<dyn BazelQueryEngine>,
 }
 
 #[async_trait::async_trait]
@@ -100,6 +107,7 @@ impl<T: Buildozer, U: CommandLineRunner> ProcessBazelFailures<T, U> {
         buildozer: T,
         command_line_runner: U,
         config: Arc<Config>,
+        bazel_query_engine: Arc<dyn BazelQueryEngine>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let user_defined_action_cache =
             Arc::new(UserDefinedActionsStateCache::from_config(&config)?);
@@ -111,6 +119,7 @@ impl<T: Buildozer, U: CommandLineRunner> ProcessBazelFailures<T, U> {
             epoch: Arc::new(RwLock::new(0)),
             _config: config,
             user_defined_action_cache,
+            bazel_query_engine,
         })
     }
 
@@ -157,6 +166,7 @@ impl<T: Buildozer, U: CommandLineRunner> ProcessBazelFailures<T, U> {
                         action_failed_error_info,
                         &self.index_table,
                         epoch,
+                        Arc::clone(&self.bazel_query_engine),
                     )
                     .await;
 

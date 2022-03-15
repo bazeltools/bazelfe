@@ -1,7 +1,5 @@
 use std::path::PathBuf;
 
-pub mod query_graph;
-
 pub mod daemon_manager;
 pub mod daemon_server;
 

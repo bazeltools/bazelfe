@@ -97,6 +97,7 @@ async fn spawn_bazel_attempt(
                         .iter()
                         .map(|e| match e.action {
                             TargetStoryAction::Success => 0,
+                            TargetStoryAction::WouldHaveAddedDependency { .. } => 0,
                             _ => 1,
                         })
                         .sum();
@@ -288,6 +289,12 @@ impl<
                                 eprintln!(
                                     "\tRemoved Dependency {}\n\t\tReason: {}",
                                     removed_what, why
+                                );
+                            }
+                            TargetStoryAction::WouldHaveAddedDependency { what, why } => {
+                                eprintln!(
+                                    "\tWould have, but didn't Add Dependency {}\n\t\tReason: {}",
+                                    what, why
                                 );
                             }
                             TargetStoryAction::Success => eprintln!("\tTarget suceeded"),
