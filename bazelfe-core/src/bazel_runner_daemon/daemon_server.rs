@@ -670,15 +670,37 @@ pub async fn main(
 
     let current_dir = current_dir;
 
+    let mut ignore_builder = ignore::gitignore::GitignoreBuilder::new(&current_dir);
+
+    for f in vec![".gitignore", ".bazelignore"] {
+        let sub_path = current_dir.join(f);
+        if sub_path.exists() {
+            let _ = ignore_builder.add(sub_path);
+        }
+    }
+    let gitignore_match = Arc::new(
+        ignore_builder
+            .build()
+            .expect("Should be able to build from gitignore"),
+    );
+
     use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
     let (flume_tx, flume_rx) = flume::unbounded::<notify::Event>();
     let copy_shared = Arc::clone(&target_cache);
+    let copy_gitignored = Arc::clone(&gitignore_match);
 
     println!("Starting tarpc");
     let _ = tokio::task::spawn(async move {
         while let Ok(event) = flume_rx.recv_async().await {
             use notify::EventKind;
+            let filtered_paths: Vec<PathBuf> = event
+                .paths
+                .iter()
+                .filter(|path| !copy_gitignored.matched(path, path.is_dir()).is_ignore())
+                .cloned()
+                .collect();
+
             let should_process = match &event.kind {
                 EventKind::Any => true,
                 EventKind::Access(access_type) => match access_type {
@@ -694,7 +716,7 @@ pub async fn main(
                 EventKind::Other => true,
             };
 
-            if should_process {
+            if should_process && !filtered_paths.is_empty() {
                 copy_shared
                     .register_new_files(event.paths, event.kind.clone())
                     .await;
@@ -732,6 +754,10 @@ pub async fn main(
         if is_ignored.is_some() {
             continue;
         }
+
+        if gitignore_match.matched(&path, path.is_dir()).is_ignore() {
+            continue;
+        }
         eprintln!("Watching {:#?}", path);
 
         core_watcher.watch(&path, RecursiveMode::Recursive).unwrap();
@@ -740,18 +766,6 @@ pub async fn main(
     let core_watcher = Arc::new(std::sync::Mutex::new(core_watcher));
 
     let notify_ignore_regexes = daemon_config.inotify_ignore_regexes.clone();
-
-    let mut ignore_builder = ignore::gitignore::GitignoreBuilder::new(&current_dir);
-
-    for f in vec![".gitignore", ".bazelignore"] {
-        let sub_path = current_dir.join(f);
-        if sub_path.exists() {
-            let _ = ignore_builder.add(sub_path);
-        }
-    }
-    let gitignore_match = ignore_builder
-        .build()
-        .expect("Should be able to build from gitignore");
 
     let mut root_watcher: RecommendedWatcher =
         RecommendedWatcher::new(move |res: notify::Result<notify::Event>| match res {
