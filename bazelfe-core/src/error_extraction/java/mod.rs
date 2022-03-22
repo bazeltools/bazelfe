@@ -87,5 +87,7 @@ pub fn extract_errors(input: &str) -> Vec<super::ActionRequest> {
             .into_iter()
             .map(super::ActionRequest::Suffix),
     );
+
+    debug!("Extracted java errors: {:#?}", combined_vec);
     combined_vec
 }
