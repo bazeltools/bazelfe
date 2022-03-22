@@ -35,6 +35,39 @@ struct BadDep<'a> {
     used_in: &'a str,
 }
 
+fn extract_external_build_not_found(
+    bazel_progress_error_info: &ProgressEvt,
+    command_stream: &mut Vec<BazelCorrectionCommand>,
+) {
+    lazy_static! {
+        static ref RE: Regex = Regex::new(
+            r".*ERROR:.*:\d*:\d*: no such package '([^']*)': BUILD file not found in directory '[^']*' of external repository @[^.]*. Add a BUILD file to a directory to mark it as a package. and referenced by '([^']+)'\s*$"
+        )
+        .unwrap();
+    }
+
+    for ln in bazel_progress_error_info.stderr.lines() {
+        let bad_dep = RE.captures(ln).map(|captures| BadDep {
+            bad_dep: captures.get(1).unwrap().as_str(),
+            used_in: captures.get(2).unwrap().as_str(),
+        });
+
+        match bad_dep {
+            None => (),
+            Some(bad_dep) => {
+                let correction =
+                    BazelCorrectionCommand::BuildozerRemoveDepLike(BuildozerRemoveDepLikeCmd {
+                        target_to_operate_on: bad_dep.used_in.to_string(),
+                        dep_like: bad_dep.bad_dep.to_string(),
+                        why: String::from("BUILD does not exist"),
+                    });
+
+                command_stream.push(correction);
+            }
+        }
+    }
+}
+
 fn extract_build_not_found(
     bazel_progress_error_info: &ProgressEvt,
     command_stream: &mut Vec<BazelCorrectionCommand>,
@@ -405,6 +438,11 @@ pub async fn process_progress<T: Buildozer + Clone + Send + Sync + 'static>(
         &mut candidate_correction_commands,
     );
 
+    extract_external_build_not_found(
+        bazel_progress_error_info,
+        &mut candidate_correction_commands,
+    );
+
     apply_candidates(candidate_correction_commands, buildozer).await
 }
 
@@ -423,6 +461,29 @@ pub async fn process_build_abort_errors<T: Buildozer + Clone + Send + Sync + 'st
 mod tests {
 
     use super::*;
+
+    #[test]
+    fn test_extract_external_build_not_found() {
+        // This was referring to a random string put into the dependencies list of the target
+        let sample_output =ProgressEvt {
+            stderr: String::from("\u{1b}[31m\u{1b}[1mERROR: \u{1b}[0m/foo/bar/baz/src/test/scala/com/p/q/r/BUILD.bazel:3:11: no such package '@third_party_jvm//3rdparty/jvm/net/jpountz/lz4': BUILD file not found in directory '3rdparty/jvm/net/jpountz/lz4' of external repository @third_party_jvm. Add a BUILD file to a directory to mark it as a package. and referenced by '//baz/src/test/scala/com/p/q/r:m'"),
+            stdout: String::from("")
+
+        };
+
+        let mut results = vec![];
+        extract_external_build_not_found(&sample_output, &mut results);
+        assert_eq!(
+            results,
+            vec![BazelCorrectionCommand::BuildozerRemoveDepLike(
+                BuildozerRemoveDepLikeCmd {
+                    target_to_operate_on: String::from("//baz/src/test/scala/com/p/q/r:m"),
+                    dep_like: String::from("@third_party_jvm//3rdparty/jvm/net/jpountz/lz4"),
+                    why: String::from("BUILD does not exist")
+                }
+            )]
+        );
+    }
 
     #[test]
     fn test_extract_build_file_not_found() {
