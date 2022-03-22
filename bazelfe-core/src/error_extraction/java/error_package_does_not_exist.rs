@@ -45,11 +45,11 @@ pub(in crate::error_extraction) fn extract(
                 let src_line_number: u32 = captures.get(2).unwrap().as_str().parse().unwrap();
                 let package = captures.get(3).unwrap().as_str();
 
-                let mut class_import_request = None;
+                let mut class_import_request = Vec::default();
                 if let Some(file_data) = file_parse_cache.load_file(src_file_name) {
                     for e in file_data.imports.iter() {
                         if e.line_number == src_line_number {
-                            class_import_request = Some(build_class_import_request(
+                            class_import_request.push(build_class_import_request(
                                 src_file_name.to_string(),
                                 e.prefix_section.to_string(),
                                 30,
@@ -61,7 +61,7 @@ pub(in crate::error_extraction) fn extract(
                     match crate::source_dependencies::java::parse_imports(target_line) {
                         Ok(matched) => {
                             if let Some(e) = matched.into_iter().next() {
-                                class_import_request = Some(build_class_import_request(
+                                class_import_request.push(build_class_import_request(
                                     src_file_name.to_string(),
                                     e.prefix_section.to_string(),
                                     30,
@@ -72,18 +72,29 @@ pub(in crate::error_extraction) fn extract(
                     }
                 }
 
-                let class_import_request = match class_import_request {
-                    None => build_class_import_request(
+                if class_import_request.is_empty() {
+                    if let Some(file_data) = file_parse_cache.load_file(src_file_name) {
+                        if let Some(pkg) = file_data.package_name.as_ref() {
+                            class_import_request.push(JavaClassImportRequest {
+                                src_file_name: src_file_name.to_string(),
+                                class_name: format!("{}.{}", pkg, package.to_string()),
+                                exact_only: true,
+                                src_fn: "package_does_not_exist",
+                                priority: 2,
+                            });
+                        }
+                    }
+
+                    class_import_request.push(build_class_import_request(
                         src_file_name.to_string(),
                         package.to_string(),
                         2,
-                    ),
-                    Some(r) => r,
-                };
+                    ));
+                }
                 result = match result {
-                    None => Some(vec![class_import_request]),
+                    None => Some(class_import_request),
                     Some(ref mut inner) => {
-                        inner.push(class_import_request);
+                        inner.append(&mut class_import_request);
                         result
                     }
                 };
@@ -146,6 +157,44 @@ mod tests {
                 "com.google.common.base.Preconditions".to_string(),
                 30
             )])
+        );
+    }
+
+    #[test]
+    fn test_not_a_member_of_package_inner_class() {
+        let mut file_cache = super::super::FileParseCache::init_from_par(
+            String::from("src/main/java/com/example/Example.java"),
+            crate::source_dependencies::ParsedFile {
+                package_name: Some(String::from("com.example")),
+                imports: vec![crate::source_dependencies::Import {
+                    line_number: 3,
+                    prefix_section: String::from("com.google.common.base.Preconditions"),
+                    suffix: crate::source_dependencies::SelectorType::NoSelector,
+                }],
+            },
+        );
+
+        // non existant path.
+        let sample_output =
+            "src/main/java/com/example/Example.java:33: error: package FooBarBaz does not exist
+        FooBarBaz.;
+    ";
+        assert_eq!(
+            extract(sample_output, &mut file_cache),
+            Some(vec![
+                JavaClassImportRequest {
+                    src_file_name: String::from("src/main/java/com/example/Example.java"),
+                    class_name: String::from("com.example.FooBarBaz"),
+                    exact_only: true,
+                    src_fn: "package_does_not_exist",
+                    priority: 2,
+                },
+                build_class_import_request(
+                    String::from("src/main/java/com/example/Example.java"),
+                    "FooBarBaz".to_string(),
+                    2
+                )
+            ])
         );
     }
 
