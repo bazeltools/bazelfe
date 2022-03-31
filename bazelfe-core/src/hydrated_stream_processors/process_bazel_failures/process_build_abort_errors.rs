@@ -123,13 +123,13 @@ fn extract_build_not_found(
 fn extract_dep_not_exists(ln: &str) -> Option<BadDep<'_>> {
     lazy_static! {
         static ref RE: Regex = Regex::new(
-            r"^\s*in deps attribute of [A-Za-z0-9_-]* rule (.*): target '(.*)' does not exist\s*$"
+            r"^\s*in deps attribute of [A-Za-z0-9_-]* rule (.*): (target|rule) '(.*)' does not exist(\s*|\..*)"
         )
         .unwrap();
     }
 
     RE.captures(ln).map(|captures| BadDep {
-        bad_dep: captures.get(2).unwrap().as_str(),
+        bad_dep: captures.get(3).unwrap().as_str(),
         used_in: captures.get(1).unwrap().as_str(),
     })
 }
@@ -503,6 +503,52 @@ mod tests {
                     target_to_operate_on: String::from("//baz/src/test/scala/com/p/q/r:m"),
                     dep_like: String::from("//baz/src/test/scala"),
                     why: String::from("BUILD does not exist")
+                }
+            )]
+        );
+    }
+
+    #[test]
+    fn test_extract_rule_does_not_exist() {
+        // This was referring to a random string put into the dependencies list of the target
+        let sample_output = hydrated_stream::BazelAbortErrorInfo {
+            description: String::from("in deps attribute of java_library rule //src/main/java/com/example:Example: rule '//src/main/java/com/example:asdfasdf' does not exist"),
+            reason: Some(build_event_stream::aborted::AbortReason::AnalysisFailure),
+            label: None
+        };
+
+        let mut results = vec![];
+        extract_target_does_not_exist(&sample_output, &mut results);
+        assert_eq!(
+            results,
+            vec![BazelCorrectionCommand::BuildozerRemoveDep(
+                BuildozerRemoveDepCmd {
+                    target_to_operate_on: String::from("//src/main/java/com/example:Example"),
+                    dependency_to_remove: String::from("//src/main/java/com/example:asdfasdf"),
+                    why: String::from("Dependency on does not exist"),
+                }
+            )]
+        );
+    }
+
+    #[test]
+    fn test_extract_rule_does_not_exist_macro() {
+        // This was referring to a random string put into the dependencies list of the target
+        let sample_output = hydrated_stream::BazelAbortErrorInfo {
+            description: String::from("in deps attribute of java_library rule //src/main/java/com/example:Example: rule '//src/main/java/com/example:asdfasdf' does not exist. Since this rule was created by the macro 'junit_tests', the error might have been caused by the macro implementation"),
+            reason: Some(build_event_stream::aborted::AbortReason::AnalysisFailure),
+            label: None
+        };
+
+        let mut results = vec![];
+        extract_target_does_not_exist(&sample_output, &mut results);
+        assert_eq!(
+            results,
+            vec![BazelCorrectionCommand::BuildozerRemoveDep(
+                BuildozerRemoveDepCmd {
+                    target_to_operate_on: String::from("//src/main/java/com/example:Example"),
+                    dependency_to_remove: String::from("//src/main/java/com/example:asdfasdf"),
+                    why: String::from("Dependency on does not exist"),
                 }
             )]
         );

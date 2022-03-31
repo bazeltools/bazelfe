@@ -66,8 +66,11 @@ pub fn extract_errors(target_kind: &Option<String>, input: &str) -> Vec<ActionRe
             Some(errors)
         }
         "scala_test" => Some(scala::extract_errors(input)),
+        "scala_binary" => Some(scala::extract_errors(input)),
         "java_library" => Some(java::extract_errors(input)),
         "java_test" => Some(java::extract_errors(input)),
+        "java_binary" => Some(java::extract_errors(input)),
+
         _ => None,
     });
 

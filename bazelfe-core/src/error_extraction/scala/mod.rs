@@ -134,6 +134,16 @@ pub fn extract_errors(input: &str) -> Vec<super::ActionRequest> {
                 };
                 debug!("Found class suffix request: {:#?}", suffix);
                 super::ActionRequest::Suffix(suffix)
+            } else if let Some(prefix) = o.class_name.strip_prefix("<root>.") {
+                let prefix_match = crate::error_extraction::ClassImportRequest {
+                    class_name: prefix.to_string(),
+                    exact_only: false,
+                    src_fn: o.src_fn.to_string(),
+                    priority: o.priority,
+                };
+
+                debug!("Found class root prefix request: {:#?}", prefix_match);
+                super::ActionRequest::Prefix(prefix_match)
             } else if let Some(suffix) = o
                 .class_name
                 .strip_prefix("<none>.")

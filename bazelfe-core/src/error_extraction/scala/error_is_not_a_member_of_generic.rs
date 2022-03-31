@@ -28,7 +28,7 @@ pub(in crate::error_extraction::scala) fn extract(
 ) -> Option<Vec<ScalaClassImportRequest>> {
     lazy_static! {
         static ref MEMBER_OF_CLASS_OR_OBJECT: Regex = Regex::new(
-            r"^(.*\.scala):(\d+):.*error: \w* (\w*) is not a member of ([A-Za-z0-9.<>_]+)\s*$"
+            r"^(.*\.scala):(\d+):.*error: \w* (\w*) is not a member of ([A-Za-z0-9.<>_\[\]]+)\s*$"
         )
         .unwrap();
     }
