@@ -97,7 +97,12 @@ impl BuildozerBinaryImpl {
 #[async_trait]
 impl Buildozer for BuildozerBinaryImpl {
     async fn print_deps(&self, label: &String) -> Result<Vec<String>> {
-        let (_raw_args, cmd_result) = self.execute_command(vec!["print deps", label]).await?;
+        let (_raw_args, cmd_result) = self
+            .execute_command(vec![
+                "print deps",
+                &crate::label_utils::sanitize_label(label.clone()),
+            ])
+            .await?;
 
         Ok(cmd_result
             .records
@@ -135,7 +140,7 @@ impl Buildozer for BuildozerBinaryImpl {
         let _ = self
             .execute_command(vec![
                 &format!("add deps {}", label_to_add),
-                &target_to_operate_on.to_string(),
+                &crate::label_utils::sanitize_label(target_to_operate_on.to_string()).to_string(),
             ])
             .await?;
         Ok(())
