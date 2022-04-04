@@ -1,5 +1,6 @@
 use crate::{
-    build_events::build_event_server::bazel_event::ProgressEvt, label_utils::sanitize_label,
+    build_events::build_event_server::bazel_event::ProgressEvt, buildozer_driver::BazelAttrTarget,
+    label_utils::sanitize_label,
 };
 use bazelfe_protos::*;
 use lazy_static::lazy_static;
@@ -359,29 +360,33 @@ async fn apply_candidates<T: Buildozer + Clone + Send + Sync + 'static>(
                     dep_like, target_to_operate_on
                 );
 
-                if let Ok(deps_for_target) = buildozer.print_deps(&target_to_operate_on).await {
-                    for dep in deps_for_target.into_iter() {
-                        if dep.contains(&dep_like) {
-                            let buildozer_res = buildozer
-                                .remove_dependency(&target_to_operate_on, &dep)
-                                .await;
-                            match buildozer_res {
-                                Ok(_) => {
-                                    target_stories.push(super::TargetStory {
-                                        target: target_to_operate_on.clone(),
-                                        action: super::TargetStoryAction::RemovedDependency {
-                                            removed_what: dep.clone(),
-                                            why: buildozer_remove_deplike.why.clone(),
-                                        },
-                                        when: Instant::now(),
-                                    });
+                for attr in vec![BazelAttrTarget::Deps, BazelAttrTarget::RuntimeDeps] {
+                    if let Ok(deps_for_target) =
+                        buildozer.print_attr(&attr, &target_to_operate_on).await
+                    {
+                        for dep in deps_for_target.into_iter() {
+                            if dep.contains(&dep_like) {
+                                let buildozer_res = buildozer
+                                    .remove_from(&attr, &target_to_operate_on, &dep)
+                                    .await;
+                                match buildozer_res {
+                                    Ok(_) => {
+                                        target_stories.push(super::TargetStory {
+                                            target: target_to_operate_on.clone(),
+                                            action: super::TargetStoryAction::RemovedDependency {
+                                                removed_what: dep.clone(),
+                                                why: buildozer_remove_deplike.why.clone(),
+                                            },
+                                            when: Instant::now(),
+                                        });
+                                    }
+                                    Err(_) => info!("Buildozer remove_dep command failed"),
                                 }
-                                Err(_) => info!("Buildozer remove_dep command failed"),
                             }
                         }
+                    } else {
+                        info!("Buildozer print_deps command failed");
                     }
-                } else {
-                    info!("Buildozer print_deps command failed");
                 }
             }
             BazelCorrectionCommand::BuildozerRemoveDep(buildozer_remove_dep) => {
@@ -394,7 +399,11 @@ async fn apply_candidates<T: Buildozer + Clone + Send + Sync + 'static>(
                     dependency_to_remove, target_to_operate_on
                 );
                 let buildozer_res = buildozer
-                    .remove_dependency(&target_to_operate_on, &dependency_to_remove)
+                    .remove_from(
+                        &BazelAttrTarget::Deps,
+                        &target_to_operate_on,
+                        &dependency_to_remove,
+                    )
                     .await;
                 match buildozer_res {
                     Ok(_) => {

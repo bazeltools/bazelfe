@@ -1,6 +1,9 @@
 use lazy_static::lazy_static;
 
-use crate::{build_events::hydrated_stream, buildozer_driver::Buildozer};
+use crate::{
+    build_events::hydrated_stream,
+    buildozer_driver::{BazelAttrTarget, Buildozer},
+};
 use regex::Regex;
 use std::time::Instant;
 
@@ -73,7 +76,11 @@ async fn apply_candidates<T: Buildozer + Clone + Send + Sync + 'static>(
                     dependency_to_remove, target_to_operate_on
                 );
                 let buildozer_res = buildozer
-                    .remove_dependency(&target_to_operate_on, &dependency_to_remove)
+                    .remove_from(
+                        &BazelAttrTarget::Deps,
+                        &target_to_operate_on,
+                        &dependency_to_remove,
+                    )
                     .await;
                 match buildozer_res {
                     Ok(_) => {
