@@ -23,22 +23,37 @@ impl std::convert::From<std::io::Error> for ExecuteResultError {
 }
 pub type Result<T> = std::result::Result<T, ExecuteResultError>;
 
-// #[derive(Clone, PartialEq, Debug)]
-// pub enum ExecuteResult {
-//     Error(ExecuteResultError),
-//     Success(devtools::buildozer::Output),
-// }
+#[derive(Debug, Clone, PartialOrd, PartialEq, Eq)]
+pub enum BazelAttrTarget {
+    Deps,
+    RuntimeDeps,
+    Other(String),
+}
 
+impl BazelAttrTarget {
+    pub fn as_str<'a>(self: &'a Self) -> &'a str {
+        match self {
+            BazelAttrTarget::Deps => "deps",
+            BazelAttrTarget::RuntimeDeps => "runtime_deps",
+            BazelAttrTarget::Other(o) => o.as_str(),
+        }
+    }
+}
 #[async_trait]
 pub trait Buildozer: Clone + Send + Sync + std::fmt::Debug + 'static {
-    async fn print_deps(&self, label: &String) -> Result<Vec<String>>;
-    async fn add_dependency(&self, target_to_operate_on: &str, label_to_add: &String)
-        -> Result<()>;
-
-    async fn remove_dependency(
+    async fn print_attr(&self, attr: &BazelAttrTarget, label: &String) -> Result<Vec<String>>;
+    async fn add_to(
         &self,
+        to_what: &BazelAttrTarget,
         target_to_operate_on: &String,
         label_to_add: &String,
+    ) -> Result<()>;
+
+    async fn remove_from(
+        &self,
+        from_what: &BazelAttrTarget,
+        target_to_operate_on: &String,
+        label_to_remove: &String,
     ) -> Result<()>;
 }
 
@@ -96,10 +111,10 @@ impl BuildozerBinaryImpl {
 
 #[async_trait]
 impl Buildozer for BuildozerBinaryImpl {
-    async fn print_deps(&self, label: &String) -> Result<Vec<String>> {
+    async fn print_attr(&self, attr: &BazelAttrTarget, label: &String) -> Result<Vec<String>> {
         let (_raw_args, cmd_result) = self
             .execute_command(vec![
-                "print deps",
+                &format!("print {}", attr.as_str()),
                 &crate::label_utils::sanitize_label(label.clone()),
             ])
             .await?;
@@ -131,30 +146,34 @@ impl Buildozer for BuildozerBinaryImpl {
             .collect())
     }
 
-    async fn add_dependency(
+    async fn add_to(
         &self,
-        target_to_operate_on: &str,
+        to_what: &BazelAttrTarget,
+        target_to_operate_on: &String,
         label_to_add: &String,
     ) -> Result<()> {
+        let buildozer_cmd = format!("add {} {}", to_what.as_str(), label_to_add);
         // buildozer 'add deps //base' //pkg:rule //pkg:rule2
         let _ = self
             .execute_command(vec![
-                &format!("add deps {}", label_to_add),
-                &crate::label_utils::sanitize_label(target_to_operate_on.to_string()).to_string(),
+                &buildozer_cmd,
+                &crate::label_utils::sanitize_label(target_to_operate_on.clone()),
             ])
             .await?;
         Ok(())
     }
 
-    async fn remove_dependency(
+    async fn remove_from(
         &self,
+        from_what: &BazelAttrTarget,
         target_to_operate_on: &String,
-        label_to_add: &String,
+        label_to_remove: &String,
     ) -> Result<()> {
+        let buildozer_cmd = format!("remove {} {}", from_what.as_str(), label_to_remove);
         // buildozer 'add deps //base' //pkg:rule //pkg:rule2
         let _ = self
             .execute_command(vec![
-                &format!("remove deps {}", label_to_add),
+                &buildozer_cmd,
                 &crate::label_utils::sanitize_label(target_to_operate_on.clone()),
             ])
             .await?;

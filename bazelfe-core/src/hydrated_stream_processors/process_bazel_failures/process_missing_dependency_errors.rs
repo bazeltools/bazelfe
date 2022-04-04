@@ -11,7 +11,7 @@ use lazy_static::lazy_static;
 use crate::{
     bazel_query::BazelQueryEngine,
     build_events::hydrated_stream::ActionFailedErrorInfo,
-    buildozer_driver::Buildozer,
+    buildozer_driver::{BazelAttrTarget, Buildozer},
     error_extraction::{self, ActionRequest},
     index_table,
 };
@@ -83,7 +83,7 @@ pub async fn load_up_ignore_references<T: Buildozer + Clone + Send + Sync + 'sta
 ) -> HashSet<String> {
     let mut to_ignore = HashSet::new();
     let d = buildozer
-        .print_deps(&action_failed_error_info.label)
+        .print_attr(&BazelAttrTarget::Deps, &action_failed_error_info.label)
         .await
         .unwrap();
     d.into_iter().for_each(|dep| {
@@ -267,14 +267,20 @@ async fn inner_process_missing_dependency_errors<'a, T: Buildozer>(
         };
 
         for prev in previous_added_for_req.iter() {
-            let prev_deps = buildozer.print_deps(&label).await.unwrap();
+            let prev_deps = buildozer
+                .print_attr(&BazelAttrTarget::Deps, &label)
+                .await
+                .unwrap();
 
             if prev_deps.contains(prev) {
                 debug!(
                     "Buildozer action: remove dependency {:?} to {:?}",
                     prev, &label
                 );
-                buildozer.remove_dependency(&label, prev).await.unwrap();
+                buildozer
+                    .remove_from(&BazelAttrTarget::Deps, &label, prev)
+                    .await
+                    .unwrap();
 
                 target_stories.push(super::TargetStory {
                     target: unsanitized_label.to_string(),
@@ -344,7 +350,10 @@ async fn inner_process_missing_dependency_errors<'a, T: Buildozer>(
                 );
                 previous_added_for_req.insert(target.clone());
 
-                buildozer.add_dependency(&label, &target).await.unwrap();
+                buildozer
+                    .add_to(&BazelAttrTarget::Deps, &label, &target)
+                    .await
+                    .unwrap();
                 target_stories.push(super::TargetStory {
                     target: unsanitized_label.to_string(),
                     action: super::TargetStoryAction::AddedDependency {
@@ -970,12 +979,17 @@ mod tests {
 
     #[async_trait::async_trait]
     impl Buildozer for FakeBuildozer {
-        async fn print_deps(&self, _label: &String) -> Result<Vec<String>, ExecuteResultError> {
+        async fn print_attr(
+            &self,
+            _attr: &BazelAttrTarget,
+            _label: &String,
+        ) -> Result<Vec<String>, ExecuteResultError> {
             Ok(Vec::default())
         }
-        async fn add_dependency(
+        async fn add_to(
             &self,
-            target_to_operate_on: &str,
+            to_what: &BazelAttrTarget,
+            target_to_operate_on: &String,
             label_to_add: &String,
         ) -> Result<(), ExecuteResultError> {
             if self
@@ -996,8 +1010,9 @@ mod tests {
             Ok(())
         }
 
-        async fn remove_dependency(
+        async fn remove_from(
             &self,
+            from_what: &BazelAttrTarget,
             target_to_operate_on: &String,
             label_to_add: &String,
         ) -> Result<(), ExecuteResultError> {
