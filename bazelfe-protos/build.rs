@@ -22,6 +22,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &[
             "proto/bazel_tools/request_files_service.proto",
             "proto/bazel_tools/upstream_service.proto",
+            "proto/bazel_tools/daemon_service.proto",
         ],
         &["proto/remote-apis", "proto/bazel_tools", "proto/googleapis"],
     )?;

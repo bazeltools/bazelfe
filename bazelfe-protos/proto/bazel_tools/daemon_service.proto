@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package bazel_tools;
+
+option java_package = "io.bazeltools";
+option java_outer_classname = "DaemonServer";
+
+service DaemonService {
+    rpc RequestInstant(RequestInstanceRequest) returns (RequestInstanceResponse);
+    rpc RecentlyChangedFiles(RecentlyChangedFilesRequest) returns (RecentlyChangedFilesResponse);
+    rpc WaitForFiles(WaitForFilesFilesRequest) returns (WaitForFilesFilesResponse);
+    rpc TargetsFromFiles(TargetsFromFilesRequest) returns (TargetsFromFilesResponse);
+    rpc RecentlyInvalidatedTargets(RecentlyInvalidatedTargetsRequest) returns (RecentlyInvalidatedTargetsResponse);
+    rpc Ping(PingRequest) returns (PingResponse);
+}
+
+
+message RequestInstanceRequest {
+}
+message RequestInstanceResponse {
+  Instant value = 1;
+}
+
+
+message RecentlyChangedFilesRequest {
+  Instant value = 1;
+}
+message RecentlyChangedFilesResponse {
+  repeated FileStatus value = 1;
+}
+
+
+message WaitForFilesFilesRequest {
+  Instant value = 1;
+}
+message WaitForFilesFilesResponse {
+  repeated FileStatus value = 1;
+}
+
+message TargetsFromFilesRequest {
+  repeated FileStatus files = 1;
+  uint32 distance = 2;
+  bool was_in_query = 3;
+}
+
+message TargetsFromFilesResponse {
+  oneof response {
+    Targets targets = 1;
+    bool in_query = 2;
+  }
+}
+
+
+message RecentlyInvalidatedTargetsRequest {
+  uint32 distance = 2;
+}
+
+message RecentlyInvalidatedTargetsResponse {
+  Targets targets = 1;
+}
+
+message PingRequest {
+}
+
+message PingResponse {
+  ExecutableId executable_id = 1;
+}
+
+message Target {
+  oneof target_response {
+    string build_label = 1;
+    string test_label = 2;
+  }
+}
+
+message Targets {
+  repeated Target targets = 1;
+}
+
+
+message Instant {
+  uint64 value = 1;
+}
+
+message FileStatus {
+  string path = 1;
+  Instant updated = 2;
+}
+
+
+message ExecutableId {
+  string build_timestamp = 1;
+  string git_branch = 2;
+  string git_sha = 3;
+}
