@@ -15,10 +15,12 @@ use crate::{
     },
 };
 use crate::{build_events::build_event_server::bazel_event, config::Config};
+use bazelfe_protos::bazel_tools::daemon_service::daemon_service_client::DaemonServiceClient;
 use std::sync::Arc;
 use thiserror::Error;
 
 use tokio::sync::{Mutex, RwLock};
+use tonic::transport::Channel;
 
 use super::processor_activity::*;
 
@@ -145,7 +147,7 @@ pub struct ConfiguredBazelRunner<
     config: Arc<Config>,
     pub configured_bazel: ConfiguredBazel,
     #[cfg(feature = "bazelfe-daemon")]
-    pub runner_daemon: Option<crate::bazel_runner_daemon::daemon_service::RunnerDaemonClient>,
+    pub runner_daemon: Option<DaemonServiceClient<Channel>>,
     _index_table: crate::index_table::IndexTable,
     pub bazel_command_line: ParsedCommandLine,
     process_build_failures: Arc<ProcessBazelFailures<T, U>>,
@@ -190,7 +192,7 @@ impl<
         config: Arc<Config>,
         configured_bazel: ConfiguredBazel,
         #[cfg(feature = "bazelfe-daemon")] runner_daemon: Option<
-            crate::bazel_runner_daemon::daemon_service::RunnerDaemonClient,
+            DaemonServiceClient<Channel>,
         >,
         index_table: crate::index_table::IndexTable,
         bazel_command_line: ParsedCommandLine,
@@ -246,7 +248,7 @@ impl<
             &mut self.bazel_command_line,
             &self.config.command_line_rewriter,
             #[cfg(feature = "bazelfe-daemon")]
-            &self.runner_daemon,
+            &mut self.runner_daemon,
         )
         .await?;
 

@@ -1,23 +1,23 @@
 syntax = "proto3";
 
-package bazel_tools;
+package bazel_tools.daemon_service;
 
-option java_package = "io.bazeltools";
+option java_package = "io.bazeltools.daemon_service";
 option java_outer_classname = "DaemonServer";
 
 service DaemonService {
-    rpc RequestInstant(RequestInstanceRequest) returns (RequestInstanceResponse);
+    rpc RequestInstant(RequestInstantRequest) returns (RequestInstantResponse);
     rpc RecentlyChangedFiles(RecentlyChangedFilesRequest) returns (RecentlyChangedFilesResponse);
-    rpc WaitForFiles(WaitForFilesFilesRequest) returns (WaitForFilesFilesResponse);
+    rpc WaitForFiles(WaitForFilesRequest) returns (WaitForFilesResponse);
     rpc TargetsFromFiles(TargetsFromFilesRequest) returns (TargetsFromFilesResponse);
     rpc RecentlyInvalidatedTargets(RecentlyInvalidatedTargetsRequest) returns (RecentlyInvalidatedTargetsResponse);
     rpc Ping(PingRequest) returns (PingResponse);
 }
 
 
-message RequestInstanceRequest {
+message RequestInstantRequest {
 }
-message RequestInstanceResponse {
+message RequestInstantResponse {
   Instant value = 1;
 }
 
@@ -30,10 +30,10 @@ message RecentlyChangedFilesResponse {
 }
 
 
-message WaitForFilesFilesRequest {
+message WaitForFilesRequest {
   Instant value = 1;
 }
-message WaitForFilesFilesResponse {
+message WaitForFilesResponse {
   repeated FileStatus value = 1;
 }
 

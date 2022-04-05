@@ -3,6 +3,7 @@ use std::path::PathBuf;
 pub mod daemon_manager;
 pub mod daemon_server;
 
+use bazelfe_protos::bazel_tools::daemon_service::ExecutableId;
 use fork::Fork;
 use thiserror::Error;
 #[derive(Error, Debug)]
@@ -115,72 +116,6 @@ where
                 }
             }),
         Err(n) => Err(SpawnFailure::PrimaryForkFailure(n)),
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Eq, serde::Deserialize, serde::Serialize)]
-pub struct ExecutableId {
-    build_timestamp: String,
-    git_branch: String,
-    git_sha: String,
-}
-
-pub mod daemon_service {
-    use serde::{Deserialize, Serialize};
-    use std::path::PathBuf;
-
-    #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Hash)]
-    pub struct FileStatus(pub PathBuf, pub u128);
-
-    #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
-    pub enum TargetsFromFilesResponse {
-        Targets(Vec<Targets>),
-        InQuery,
-    }
-
-    #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
-    pub enum Targets {
-        Test(TestTarget),
-        Build(BuildTarget),
-    }
-    impl Targets {
-        pub fn target_label(&self) -> &String {
-            match self {
-                Targets::Test(t) => &t.target_label,
-                Targets::Build(b) => &b.target_label,
-            }
-        }
-        pub fn is_test(&self) -> bool {
-            match self {
-                Targets::Test(_) => true,
-                Targets::Build(_) => false,
-            }
-        }
-    }
-    #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
-    pub struct TestTarget {
-        pub target_label: String,
-    }
-
-    #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
-    pub struct BuildTarget {
-        pub target_label: String,
-    }
-
-    #[tarpc::service]
-    pub trait RunnerDaemon {
-        async fn request_instant() -> u128;
-        async fn recently_changed_files(instant: u128) -> Vec<FileStatus>;
-        async fn wait_for_files(instant: u128) -> Vec<FileStatus>;
-        async fn targets_from_files(
-            files: Vec<FileStatus>,
-            distance: u32,
-            was_in_query: bool,
-        ) -> TargetsFromFilesResponse;
-
-        async fn recently_invalidated_targets(distance: u32) -> Vec<Targets>;
-
-        async fn ping() -> super::ExecutableId;
     }
 }
 

@@ -4,7 +4,10 @@ use crate::{
     config::command_line_rewriter::TestActionMode,
 };
 
+use bazelfe_protos::bazel_tools::daemon_service::daemon_service_client::DaemonServiceClient;
+use bazelfe_protos::bazel_tools::daemon_service::RecentlyInvalidatedTargetsRequest;
 use thiserror::Error;
+use tonic::transport::Channel;
 
 #[derive(Error, Debug)]
 pub enum RewriteCommandLineError {
@@ -15,9 +18,7 @@ pub enum RewriteCommandLineError {
 pub async fn rewrite_command_line(
     bazel_command_line: &mut ParsedCommandLine,
     command_line_rewriter: &CommandLineRewriter,
-    #[cfg(feature = "bazelfe-daemon")] daemon_client: &Option<
-        crate::bazel_runner_daemon::daemon_service::RunnerDaemonClient,
-    >,
+    #[cfg(feature = "bazelfe-daemon")] daemon_client: &mut Option<DaemonServiceClient<Channel>>,
 ) -> Result<(), RewriteCommandLineError> {
     if bazel_command_line.action
         == Some(crate::bazel_command_line_parser::Action::BuiltIn(
@@ -38,16 +39,19 @@ pub async fn rewrite_command_line(
             #[allow(unused)]
             TestActionMode::SuggestTestTarget(cfg) => {
                 #[cfg(feature = "bazelfe-daemon")]
-                if let Some(daemon_cli) = daemon_client.as_ref() {
+                if let Some(daemon_cli) = daemon_client.as_mut() {
                     let mut invalidated_targets = vec![];
 
                     for distance in 0..(cfg.distance_to_expand + 1) {
                         let recently_invalidated_targets = daemon_cli
-                            .recently_invalidated_targets(tarpc::context::current(), distance)
+                            .recently_invalidated_targets(RecentlyInvalidatedTargetsRequest {
+                                distance,
+                            })
                             .await;
                         invalidated_targets.extend(
                             recently_invalidated_targets
                                 .into_iter()
+                                .map(|e| e.into_inner().targets.unwrap_or(Default::default()))
                                 .map(|e| (distance, e)),
                         );
                     }
@@ -58,12 +62,17 @@ pub async fn rewrite_command_line(
                         use std::collections::HashSet;
                         let mut seen_targets: HashSet<String> = HashSet::default();
                         let mut buf = String::from("");
-                        invalidated_targets.into_iter().for_each(|(_, targets)| {
-                            targets.iter().for_each(|target| {
-                                if target.is_test() && !seen_targets.contains(target.target_label())
-                                {
-                                    seen_targets.insert(target.target_label().clone());
-                                    buf.push_str(&format!("\n|{}", target.target_label()));
+                        invalidated_targets.into_iter().for_each(|(_, mut targets)| {
+                            targets.targets.iter_mut().for_each(|target| {
+                                match target.target_response.take().unwrap() {
+                                    bazelfe_protos::bazel_tools::daemon_service::target::TargetResponse::BuildLabel(_) => (),
+                                    bazelfe_protos::bazel_tools::daemon_service::target::TargetResponse::TestLabel(label) => {
+                                        if(!seen_targets.contains(&label))
+                                        {
+                                            seen_targets.insert(label.clone());
+                                            buf.push_str(&format!("\n|{}", label));
+                                        }
+                                    },
                                 }
                             });
                         });
@@ -72,7 +81,7 @@ pub async fn rewrite_command_line(
                             "Daemon hasn't noticed any changes to suggest test targets".to_string()
                         } else {
                             format!(
-                                r#"Suggestions: 
+                                r#"Suggestions:
                             |{}
                             |"#,
                                 buf

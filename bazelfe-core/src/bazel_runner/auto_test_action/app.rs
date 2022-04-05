@@ -1,8 +1,7 @@
 use std::{collections::HashMap, path::PathBuf, time::Instant};
 
-use crate::bazel_runner_daemon::daemon_service::FileStatus;
-
 use super::util::{StatefulList, TabsState};
+use bazelfe_protos::bazel_tools::daemon_service;
 use bazelfe_protos::*;
 
 #[derive(Debug)]
@@ -85,8 +84,8 @@ pub struct App<'a> {
     pub progress: f64,
     pub action_logs: StatefulList<super::ActionTargetStateScrollEntry>,
     pub progress_receiver: flume::Receiver<String>,
-    pub file_change_receiver: flume::Receiver<Vec<(FileStatus, Instant)>>,
-    pub dirty_files: HashMap<PathBuf, Instant>,
+    pub file_change_receiver: flume::Receiver<Vec<(daemon_service::FileStatus, Instant)>>,
+    pub dirty_files: HashMap<String, Instant>,
     pub bazel_status_rx: flume::Receiver<super::BazelStatus>,
     pub bazel_status: super::BazelStatus,
     pub build_status_rx: flume::Receiver<super::BuildStatus>,
@@ -102,7 +101,7 @@ impl<'a> App<'a> {
     pub fn new(
         title: &'a str,
         progress_receiver: flume::Receiver<String>,
-        file_change_receiver: flume::Receiver<Vec<(FileStatus, Instant)>>,
+        file_change_receiver: flume::Receiver<Vec<(daemon_service::FileStatus, Instant)>>,
         action_event_rx: flume::Receiver<super::ActionTargetStateScrollEntry>,
         bazel_status_rx: flume::Receiver<super::BazelStatus>,
         build_status_rx: flume::Receiver<super::BuildStatus>,
@@ -260,7 +259,7 @@ impl<'a> App<'a> {
         while let Ok(r) = self.file_change_receiver.try_recv() {
             self.dirty_files.clear();
             for (k, v) in r {
-                let entry = self.dirty_files.entry(k.0);
+                let entry = self.dirty_files.entry(k.path);
                 entry
                     .and_modify(|prev| {
                         if *prev < v {
