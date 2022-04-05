@@ -1,6 +1,5 @@
-use crate::bazel_runner_daemon::daemon_service::FileStatus;
-
 use super::{app::App, ui};
+use bazelfe_protos::bazel_tools::daemon_service::FileStatus;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event as CEvent, KeyCode, KeyEvent},
     execute,

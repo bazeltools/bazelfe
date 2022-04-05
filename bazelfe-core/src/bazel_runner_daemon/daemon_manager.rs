@@ -3,7 +3,11 @@ use std::{error::Error, path::Path};
 
 use crate::config::DaemonConfig;
 use anyhow::{anyhow, Context};
+use bazelfe_protos::bazel_tools::daemon_service::daemon_service_client::DaemonServiceClient;
+use bazelfe_protos::bazel_tools::daemon_service::PingRequest;
 use serde::{Deserialize, Serialize};
+use tonic::transport::{Channel, Endpoint};
+use tower::service_fn;
 
 use super::DaemonPaths;
 
@@ -72,8 +76,8 @@ mod signal_mgr {
 
 async fn maybe_connect_to_server(
     paths: &DaemonPaths,
-    executable_id: &super::ExecutableId,
-) -> Result<Option<super::daemon_service::RunnerDaemonClient>, Box<dyn Error>> {
+    executable_id: &bazelfe_protos::bazel_tools::daemon_service::ExecutableId,
+) -> Result<Option<DaemonServiceClient<Channel>>, Box<dyn Error>> {
     if !paths.pid_path.exists() {
         return Ok(None);
     }
@@ -98,18 +102,26 @@ async fn maybe_connect_to_server(
     }
 
     use tokio::net::UnixStream;
-    use tokio_serde::formats::Bincode;
-    use tokio_util::codec::LengthDelimitedCodec;
-    let codec_builder = LengthDelimitedCodec::builder();
 
-    let conn = UnixStream::connect(&paths.socket_path).await?;
+    let socket_path = paths.socket_path.clone();
+    // URL is unused
+    let channel = Endpoint::try_from("http://[::]:50051")?
+        .connect_with_connector(service_fn(move |_: tonic::transport::Uri| {
+            // Connect to a Uds socket
+            UnixStream::connect(socket_path.clone())
+        }))
+        .await?;
 
-    let transport = tarpc::serde_transport::new(codec_builder.new_framed(conn), Bincode::default());
-    let cli = super::daemon_service::RunnerDaemonClient::new(Default::default(), transport).spawn();
+    let mut cli = DaemonServiceClient::new(channel);
 
-    match cli.ping(tarpc::context::current()).await {
+    match cli.ping(PingRequest {}).await {
         Ok(remote_id) => {
-            if executable_id == &remote_id {
+            if executable_id
+                == &remote_id
+                    .into_inner()
+                    .executable_id
+                    .expect("Should be defined")
+            {
                 Ok(Some(cli))
             } else {
                 try_kill_server(paths).await;
@@ -169,7 +181,7 @@ fn configure_communication_ptr(daemon_config: &DaemonConfig) -> Result<PathBuf, 
 pub async fn connect_to_server(
     daemon_config: &DaemonConfig,
     bazel_binary_path: &Path,
-) -> Result<Option<super::daemon_service::RunnerDaemonClient>, Box<dyn Error>> {
+) -> Result<Option<DaemonServiceClient<Channel>>, Box<dyn Error>> {
     if !daemon_config.enabled {
         debug!("Daemon isn't requested/needed. Noop.");
         return Ok(None);

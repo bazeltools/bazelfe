@@ -54,6 +54,38 @@ pub mod build {
 }
 
 pub mod bazel_tools {
+    pub mod daemon_service {
+        tonic::include_proto!("bazel_tools.daemon_service");
+        impl Copy for Instant {}
+
+        pub trait TargetUtils {
+            fn target_label(&self) -> &str;
+            fn is_test(&self) -> bool;
+        }
+        impl TargetUtils for Target {
+            fn is_test(&self) -> bool {
+                if let Some(res) = self.target_response.as_ref() {
+                    match res {
+                        target::TargetResponse::BuildLabel(_) => false,
+                        target::TargetResponse::TestLabel(_) => true,
+                    }
+                } else {
+                    false
+                }
+            }
+
+            fn target_label(&self) -> &str {
+                if let Some(res) = self.target_response.as_ref() {
+                    match res {
+                        target::TargetResponse::BuildLabel(label) => label.as_str(),
+                        target::TargetResponse::TestLabel(label) => label.as_str(),
+                    }
+                } else {
+                    ""
+                }
+            }
+        }
+    }
     tonic::include_proto!("bazel_tools");
 }
 

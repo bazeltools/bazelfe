@@ -1,6 +1,8 @@
+use bazelfe_protos::bazel_tools::daemon_service::daemon_service_server::DaemonService;
 use bazelfe_protos::*;
 use std::path::Path;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use std::{
     collections::{HashMap, HashSet},
     ops::{Add, Sub},
@@ -8,26 +10,23 @@ use std::{
     sync::atomic::{AtomicU32, AtomicUsize},
     time::Duration,
 };
+use tokio_stream::wrappers::UnixListenerStream;
+use tonic::{Request, Response};
 
+use bazel_tools::daemon_service;
 use dashmap::DashMap;
-use std::{error::Error, sync::Arc};
-use tarpc::serde_transport as transport;
-use tarpc::server::Channel;
+use std::error::Error;
 use tokio::{sync::Mutex, task::JoinHandle};
 
+use crate::config::daemon_config::NotifyRegexes;
 use crate::config::DaemonConfig;
-use crate::{
-    bazel_runner_daemon::daemon_service::RunnerDaemon, config::daemon_config::NotifyRegexes,
-};
 use std::time::Instant;
 use tokio::net::UnixListener;
-use tokio_serde::formats::Bincode;
-use tokio_util::codec::LengthDelimitedCodec;
 
 #[derive(Debug, Clone)]
 struct Daemon {
-    config: Arc<DaemonConfig>,
-    bazel_binary_path: PathBuf,
+    _config: Arc<DaemonConfig>,
+    _bazel_binary_path: PathBuf,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -74,13 +73,13 @@ impl Default for TargetState {
 }
 
 // If data arrives too quickly, we may start reporting times in the future!
-static mut CURRENT_TIME: u128 = 0;
-fn monotonic_current_time() -> u128 {
+static mut CURRENT_TIME: u64 = 0;
+fn monotonic_current_time() -> daemon_service::Instant {
     let ret = unsafe { CURRENT_TIME };
     unsafe {
         CURRENT_TIME += 1;
     }
-    ret
+    daemon_service::Instant { value: ret }
 }
 fn target_as_path(s: &String) -> Option<PathBuf> {
     let pb = PathBuf::from(s.replace(":", "/").replace("//", ""));
@@ -163,12 +162,12 @@ impl TargetState {
     pub async fn hydrate_new_file_data(
         self: Arc<TargetState>,
         bazel_query: Arc<Mutex<Box<dyn BazelQuery>>>,
-        path: &PathBuf,
+        path: &Path,
     ) -> Result<(), Box<dyn Error>> {
         if self.src_file_to_target.contains_key(path) {
             return Ok(());
         }
-        let mut cur_path = Some(path.as_path());
+        let mut cur_path = Some(path);
         loop {
             if let Some(p) = cur_path {
                 if p.join("BUILD").exists() || p.join("WORKSPACE").exists() {
@@ -237,13 +236,14 @@ use crate::jvm_indexer::bazel_query::BazelQuery;
 #[derive(Debug)]
 struct TargetCache {
     target_state: Arc<TargetState>,
-    last_files_updated: Arc<Mutex<HashMap<PathBuf, (u128, Instant, Option<Vec<u8>>)>>>,
+    last_files_updated:
+        Arc<Mutex<HashMap<PathBuf, (daemon_service::Instant, Instant, Option<Vec<u8>>)>>>,
     inotify_ignore_regexes: NotifyRegexes,
     pending_hydrations: Arc<AtomicUsize>,
     bazel_query: Arc<Mutex<Box<dyn BazelQuery>>>,
-    inotify_receiver: Arc<flume::Receiver<u128>>,
-    inotify_sender: Arc<flume::Sender<u128>>,
-    last_update_ts: Arc<Mutex<u128>>,
+    inotify_receiver: Arc<flume::Receiver<daemon_service::Instant>>,
+    inotify_sender: Arc<flume::Sender<daemon_service::Instant>>,
+    last_update_ts: Arc<Mutex<daemon_service::Instant>>,
 }
 
 impl TargetCache {
@@ -251,7 +251,8 @@ impl TargetCache {
         daemon_config: &DaemonConfig,
         bazel_query: &Arc<Mutex<Box<dyn BazelQuery>>>,
     ) -> Self {
-        let (inotify_event_occured, inotify_receiver) = flume::unbounded::<u128>();
+        let (inotify_event_occured, inotify_receiver) =
+            flume::unbounded::<daemon_service::Instant>();
 
         Self {
             target_state: Default::default(),
@@ -383,14 +384,17 @@ impl TargetCache {
         }
     }
 
-    pub async fn wait_for_files(&self, instant: u128) -> Vec<super::daemon_service::FileStatus> {
+    pub async fn wait_for_files(
+        &self,
+        instant: daemon_service::Instant,
+    ) -> Vec<daemon_service::FileStatus> {
         let start_time = Instant::now();
         let max_wait = Duration::from_millis(20);
         let spin_wait = Duration::from_millis(3);
 
         loop {
             if *self.last_update_ts.lock().await > instant {
-                debug!("Last update timing indicates we should just try get recent files as of instant: {}", instant);
+                debug!("Last update timing indicates we should just try get recent files as of instant: {}", instant.value);
                 return self.get_recent_files(instant).await;
             }
 
@@ -410,13 +414,19 @@ impl TargetCache {
         }
     }
 
-    pub async fn get_recent_files(&self, instant: u128) -> Vec<super::daemon_service::FileStatus> {
+    pub async fn get_recent_files(
+        &self,
+        instant: daemon_service::Instant,
+    ) -> Vec<daemon_service::FileStatus> {
         let lock = self.last_files_updated.lock().await;
 
         lock.iter()
             .filter_map(|(k, (v, _, _))| {
                 if *v > instant {
-                    Some(super::daemon_service::FileStatus(k.clone(), *v))
+                    Some(daemon_service::FileStatus {
+                        path: k.to_string_lossy().to_string(),
+                        updated: Some(*v),
+                    })
                 } else {
                     None
                 }
@@ -430,65 +440,102 @@ struct DaemonServerInstance {
     pub executable_id: Arc<super::ExecutableId>,
     pub most_recent_call: Arc<AtomicUsize>,
     pub target_cache: Arc<TargetCache>,
-    pub daemon_config: Arc<DaemonConfig>,
-    pub bazel_binary_path: Arc<PathBuf>,
+    pub _daemon_config: Arc<DaemonConfig>,
+    pub _bazel_binary_path: Arc<PathBuf>,
 }
 
-#[tarpc::server]
-impl super::daemon_service::RunnerDaemon for DaemonServerInstance {
+#[tonic::async_trait]
+impl DaemonService for DaemonServerInstance {
     async fn wait_for_files(
-        self,
-        _: tarpc::context::Context,
-        instant: u128,
-    ) -> Vec<super::daemon_service::FileStatus> {
+        &self,
+        request: Request<daemon_service::WaitForFilesRequest>,
+    ) -> Result<Response<daemon_service::WaitForFilesResponse>, tonic::Status> {
+        let request = request.into_inner();
+        let since_when = request
+            .value
+            .unwrap_or(daemon_service::Instant { value: 0 });
+
         self.most_recent_call
             .fetch_add(1, std::sync::atomic::Ordering::Release);
-        self.target_cache.wait_for_files(instant).await
+        let files = self.target_cache.wait_for_files(since_when).await;
+
+        Ok(Response::new(daemon_service::WaitForFilesResponse {
+            value: files,
+        }))
     }
 
     async fn recently_changed_files(
-        self,
-        _: tarpc::context::Context,
-        instant: u128,
-    ) -> Vec<super::daemon_service::FileStatus> {
+        &self,
+        request: Request<daemon_service::RecentlyChangedFilesRequest>,
+    ) -> Result<Response<daemon_service::RecentlyChangedFilesResponse>, tonic::Status> {
         self.most_recent_call
             .fetch_add(1, std::sync::atomic::Ordering::Release);
-        self.target_cache.get_recent_files(instant).await
+
+        let instant = request.into_inner().value.unwrap_or_default();
+        let files = self.target_cache.get_recent_files(instant).await;
+        Ok(Response::new(
+            daemon_service::RecentlyChangedFilesResponse { value: files },
+        ))
     }
 
-    async fn ping(self, _: tarpc::context::Context) -> super::ExecutableId {
+    async fn ping(
+        &self,
+        _: Request<daemon_service::PingRequest>,
+    ) -> Result<Response<daemon_service::PingResponse>, tonic::Status> {
         self.most_recent_call
             .fetch_add(1, std::sync::atomic::Ordering::Release);
-        self.executable_id.as_ref().clone()
+
+        Ok(Response::new(daemon_service::PingResponse {
+            executable_id: Some(self.executable_id.as_ref().clone()),
+        }))
     }
 
     async fn recently_invalidated_targets(
-        self,
-        ctx: tarpc::context::Context,
-        distance: u32,
-    ) -> Vec<super::daemon_service::Targets> {
+        &self,
+        request: Request<daemon_service::RecentlyInvalidatedTargetsRequest>,
+    ) -> Result<Response<daemon_service::RecentlyInvalidatedTargetsResponse>, tonic::Status> {
         self.most_recent_call
             .fetch_add(1, std::sync::atomic::Ordering::Release);
 
-        let recent_files = self.target_cache.get_recent_files(0).await;
-        match self
-            .targets_from_files(ctx, recent_files, distance, true)
-            .await
+        let request = request.into_inner();
+
+        let recent_files = self
+            .target_cache
+            .get_recent_files(daemon_service::Instant { value: 0 })
+            .await;
+        let targets = match self
+            .targets_from_files(Request::new(daemon_service::TargetsFromFilesRequest {
+                files: recent_files,
+                distance: request.distance,
+                was_in_query: true,
+            }))
+            .await?
+            .into_inner()
+            .response
+            .unwrap_or(daemon_service::targets_from_files_response::Response::InQuery(true))
         {
-            super::daemon_service::TargetsFromFilesResponse::Targets(t) => t,
-            super::daemon_service::TargetsFromFilesResponse::InQuery => Vec::default(),
-        }
+            daemon_service::targets_from_files_response::Response::InQuery(_) => Vec::default(),
+            daemon_service::targets_from_files_response::Response::Targets(t) => t.targets,
+        };
+
+        Ok(Response::new(
+            daemon_service::RecentlyInvalidatedTargetsResponse {
+                targets: Some(daemon_service::Targets { targets }),
+            },
+        ))
     }
 
     async fn targets_from_files(
-        self,
-        _: tarpc::context::Context,
-        files: Vec<super::daemon_service::FileStatus>,
-        distance: u32,
-        was_in_query: bool,
-    ) -> super::daemon_service::TargetsFromFilesResponse {
+        &self,
+        request: Request<daemon_service::TargetsFromFilesRequest>,
+    ) -> Result<Response<daemon_service::TargetsFromFilesResponse>, tonic::Status> {
         self.most_recent_call
             .fetch_add(1, std::sync::atomic::Ordering::Release);
+
+        let request = request.into_inner();
+        let was_in_query = request.was_in_query;
+        let distance = request.distance;
+        let files = request.files;
 
         let start_time = Instant::now();
         while self
@@ -498,16 +545,20 @@ impl super::daemon_service::RunnerDaemon for DaemonServerInstance {
             > 0
         {
             if start_time.elapsed() > Duration::from_millis(100) || !was_in_query {
-                return super::daemon_service::TargetsFromFilesResponse::InQuery;
+                return Ok(Response::new(daemon_service::TargetsFromFilesResponse {
+                    response: Some(
+                        daemon_service::targets_from_files_response::Response::InQuery(true),
+                    ),
+                }));
             }
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
         let target_ids = files.iter().filter_map(|f| {
-            let path = &f.0;
+            let path = &f.path;
             self.target_cache
                 .target_state
                 .src_file_to_target
-                .get(path)
+                .get(&PathBuf::from(path))
                 .map(|e| *e.value())
         });
 
@@ -538,60 +589,66 @@ impl super::daemon_service::RunnerDaemon for DaemonServerInstance {
             match target_data.value() {
                 TargetType::Rule(r) => {
                     if r.is_test {
-                        result_targets.push(super::daemon_service::Targets::Test(
-                            super::daemon_service::TestTarget {
-                                target_label: r.target_label.clone(),
-                            },
-                        ));
+                        result_targets.push(daemon_service::Target {
+                            target_response: Some(
+                                daemon_service::target::TargetResponse::TestLabel(
+                                    r.target_label.clone(),
+                                ),
+                            ),
+                        });
                     } else {
-                        result_targets.push(super::daemon_service::Targets::Build(
-                            super::daemon_service::BuildTarget {
-                                target_label: r.target_label.clone(),
-                            },
-                        ));
+                        result_targets.push(daemon_service::Target {
+                            target_response: Some(
+                                daemon_service::target::TargetResponse::BuildLabel(
+                                    r.target_label.clone(),
+                                ),
+                            ),
+                        });
                     }
                 }
                 TargetType::Src(_) => {}
             }
         }
-        super::daemon_service::TargetsFromFilesResponse::Targets(result_targets)
+
+        return Ok(Response::new(daemon_service::TargetsFromFilesResponse {
+            response: Some(
+                daemon_service::targets_from_files_response::Response::Targets(
+                    daemon_service::Targets {
+                        targets: result_targets,
+                    },
+                ),
+            ),
+        }));
     }
 
-    async fn request_instant(self, _: tarpc::context::Context) -> u128 {
-        monotonic_current_time()
+    async fn request_instant(
+        &self,
+        _: Request<daemon_service::RequestInstantRequest>,
+    ) -> Result<Response<daemon_service::RequestInstantResponse>, tonic::Status> {
+        Ok(Response::new(daemon_service::RequestInstantResponse {
+            value: Some(monotonic_current_time()),
+        }))
     }
 }
 
-async fn start_tarpc_server<F>(
+async fn start_server(
     path: &PathBuf,
-    daemon_server_builder: F,
-) -> Result<JoinHandle<()>, Box<dyn Error>>
-where
-    F: Fn() -> DaemonServerInstance + Send + 'static,
-{
+    daemon_server_builder: DaemonServerInstance,
+) -> Result<JoinHandle<()>, Box<dyn Error>> {
     let bind_path = PathBuf::from(path);
-    let stream = UnixListener::bind(bind_path)?;
-    let codec_builder = LengthDelimitedCodec::builder();
+    let uds = UnixListener::bind(bind_path)?;
+    let uds_stream = UnixListenerStream::new(uds);
 
     Ok(tokio::spawn(async move {
-        loop {
-            if let Ok((conn, _)) = stream.accept().await {
-                let framed = codec_builder.new_framed(conn);
-                let transport = transport::new(framed, Bincode::default());
-
-                eprintln!("Client connected!");
-                let fut = tarpc::server::BaseChannel::with_defaults(transport)
-                    .execute(daemon_server_builder().serve());
-
-                tokio::spawn(async move {
-                    fut.await;
-                });
-            } else {
-                eprintln!("Socket dead, quitting.");
-
-                break;
-            }
-        }
+        tonic::transport::Server::builder()
+            .add_service(
+                daemon_service::daemon_service_server::DaemonServiceServer::new(
+                    daemon_server_builder,
+                ),
+            )
+            .serve_with_incoming(uds_stream)
+            .await
+            .unwrap()
     }))
 }
 
@@ -658,14 +715,18 @@ pub async fn main(
 
     let captured_daemon_config = Arc::new(daemon_config.clone());
     let captured_bazel_binary_path = Arc::new(bazel_binary_path.to_path_buf());
-    println!("Starting tarpc");
-    start_tarpc_server(&paths.socket_path, move || DaemonServerInstance {
-        executable_id: executable_id.clone(),
-        most_recent_call: captured_most_recent_call.clone(),
-        target_cache: captured_target_cache.clone(),
-        daemon_config: captured_daemon_config.clone(),
-        bazel_binary_path: captured_bazel_binary_path.clone(),
-    })
+    println!("Starting Grpc service");
+
+    start_server(
+        &paths.socket_path,
+        DaemonServerInstance {
+            executable_id: executable_id.clone(),
+            most_recent_call: captured_most_recent_call.clone(),
+            target_cache: captured_target_cache.clone(),
+            _daemon_config: captured_daemon_config.clone(),
+            _bazel_binary_path: captured_bazel_binary_path.clone(),
+        },
+    )
     .await?;
 
     let current_dir = current_dir;
@@ -690,7 +751,7 @@ pub async fn main(
     let copy_shared = Arc::clone(&target_cache);
     let copy_gitignored = Arc::clone(&gitignore_match);
 
-    println!("Starting tarpc");
+    println!("Starting inotify watchers");
     let _ = tokio::task::spawn(async move {
         while let Ok(event) = flume_rx.recv_async().await {
             use notify::EventKind;

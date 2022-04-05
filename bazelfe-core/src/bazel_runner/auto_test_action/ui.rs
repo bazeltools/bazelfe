@@ -202,7 +202,7 @@ where
                     format!("{:<14}", format!("{} ago", format_duration(elapsed))),
                     time_style,
                 ),
-                Span::raw(pb.to_string_lossy()),
+                Span::raw(pb.clone()),
             ])];
             ListItem::new(content)
         })

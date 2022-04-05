@@ -5,15 +5,17 @@ mod progress_tab_updater;
 mod ui;
 mod util;
 
-use std::{collections::HashSet, path::PathBuf, sync::Arc, time::Instant};
+use std::time;
+use std::{collections::HashSet, path::PathBuf, sync::Arc};
 
 use crate::bazel_command_line_parser::BuiltInAction;
-use crate::{
-    bazel_command_line_parser::CustomAction, bazel_runner_daemon::daemon_service::FileStatus,
-    buildozer_driver,
-};
+use crate::{bazel_command_line_parser::CustomAction, buildozer_driver};
 
+use bazelfe_protos::bazel_tools::daemon_service;
+use bazelfe_protos::bazel_tools::daemon_service::TargetsFromFilesRequest;
 use thiserror::Error;
+
+use daemon_service::TargetUtils;
 
 #[derive(Debug, Clone, Copy)]
 pub enum BazelStatus {
@@ -50,7 +52,7 @@ pub struct ActionTargetStateScrollEntry {
     pub complete_type: CompleteKind,
     pub success: bool,
     pub label: String,
-    pub when: Instant,
+    pub when: std::time::Instant,
     pub target_kind: Option<String>,
     pub bazel_run_id: usize,
     pub files: Vec<build_event_stream::File>,
@@ -71,15 +73,17 @@ pub async fn maybe_auto_test_mode<
             crate::bazel_command_line_parser::Action::BuiltIn(BuiltInAction::Test),
         );
 
-        let daemon_cli = if let Some(daemon_cli) = configured_bazel_runner.runner_daemon.as_ref() {
-            Ok(daemon_cli)
-        } else {
-            Err(AutoTestActionError::NoDaemon)
-        }?;
+        let mut daemon_cli =
+            if let Some(daemon_cli) = configured_bazel_runner.runner_daemon.as_ref() {
+                Ok(daemon_cli.clone())
+            } else {
+                Err(AutoTestActionError::NoDaemon)
+            }?;
         let (bazel_status_tx, bazel_status_rx) = flume::unbounded::<BazelStatus>();
         let (build_status_tx, build_status_rx) = flume::unbounded::<BuildStatus>();
         let (progress_pump_sender, progress_receiver) = flume::unbounded::<String>();
-        let (changed_file_tx, changed_file_rx) = flume::unbounded::<Vec<(FileStatus, Instant)>>();
+        let (changed_file_tx, changed_file_rx) =
+            flume::unbounded::<Vec<(daemon_service::FileStatus, time::Instant)>>();
         let (action_event_tx, action_event_rx) = flume::unbounded::<ActionTargetStateScrollEntry>();
 
         let progress_tab_updater =
@@ -90,10 +94,10 @@ pub async fn maybe_auto_test_mode<
             .aes
             .add_event_handler(Arc::new(progress_tab_updater));
 
-        let mut invalid_since_when: u128 = 0;
+        let mut invalid_since_when: Option<daemon_service::Instant> = None;
         let mut cur_distance = 1;
         let max_distance = 3;
-        let mut dirty_files: Vec<(FileStatus, Instant)> = Vec::default();
+        let mut dirty_files: Vec<(daemon_service::FileStatus, time::Instant)> = Vec::default();
 
         let main_running = command_line_driver::main(
             progress_receiver,
@@ -103,7 +107,7 @@ pub async fn maybe_auto_test_mode<
             build_status_rx,
         )?;
         let mut bazel_in_query = false;
-        let mut successful_files: HashSet<FileStatus> = HashSet::default();
+        let mut successful_files: HashSet<daemon_service::FileStatus> = HashSet::default();
         'outer_loop: loop {
             dirty_files.retain(|(e, _)| !successful_files.contains(e));
             let _ = changed_file_tx.send_async(dirty_files.clone()).await;
@@ -124,55 +128,67 @@ pub async fn maybe_auto_test_mode<
             }
 
             let recent_changed_files = daemon_cli
-                .wait_for_files(tarpc::context::current(), invalid_since_when)
-                .await?;
+                .wait_for_files(daemon_service::WaitForFilesRequest {
+                    value: invalid_since_when,
+                })
+                .await?
+                .into_inner()
+                .value;
 
             if !recent_changed_files.is_empty() {
                 invalid_since_when = daemon_cli
-                    .request_instant(tarpc::context::current())
-                    .await?;
+                    .request_instant(daemon_service::RequestInstantRequest {})
+                    .await?
+                    .into_inner()
+                    .value;
 
-                let mut visited_files: HashSet<PathBuf> = HashSet::default();
+                // This should probably be a pathbuf, but we are using string so it works nicely with protobuf
+                let mut visited_files: HashSet<String> = HashSet::default();
                 let mut visited_targets: HashSet<String> = HashSet::default();
 
-                let now = Instant::now();
+                let now = time::Instant::now();
                 dirty_files.extend(recent_changed_files.into_iter().map(|e| (e, now)));
-                dirty_files.sort_by_key(|(e, _)| e.1);
+                dirty_files.sort_by_key(|(e, _)| e.updated);
                 dirty_files.reverse();
 
                 let _ = changed_file_tx.send_async(dirty_files.clone()).await;
 
                 'dirty_file_loop: for (f, _) in dirty_files.iter() {
-                    if visited_files.contains(&f.0) {
+                    if visited_files.contains(&f.path) {
                         continue 'dirty_file_loop;
                     }
-                    visited_files.insert(f.0.clone());
+                    visited_files.insert(f.path.clone());
                     'inner_loop: loop {
                         let changed_targets_resp = daemon_cli
-                            .targets_from_files(
-                                tarpc::context::current(),
-                                vec![f.clone()],
-                                cur_distance,
-                                bazel_in_query,
-                            )
+                            .targets_from_files(TargetsFromFilesRequest {
+                                files: vec![f.clone()],
+                                distance: cur_distance,
+                                was_in_query: bazel_in_query,
+                            })
                             .await?;
 
-                        let mut changed_targets = match changed_targets_resp {
-                            crate::bazel_runner_daemon::daemon_service::TargetsFromFilesResponse::InQuery => {
-                                let _ = bazel_status_tx.send_async(BazelStatus::InQuery).await;
-                                bazel_in_query = true;
-                                continue 'inner_loop;
-                            }
-                            crate::bazel_runner_daemon::daemon_service::TargetsFromFilesResponse::Targets(t) => {
-                                bazel_in_query = false;
+                        let mut changed_targets = if let Some(target_response) =
+                            changed_targets_resp.into_inner().response
+                        {
+                            match target_response {
+                                bazel_tools::daemon_service::targets_from_files_response::Response::Targets(t) => {
+                                    bazel_in_query = false;
                                             let _ = bazel_status_tx.send_async(BazelStatus::Idle).await;
-                                            t
+                                    t.targets
+                                },
+                                bazel_tools::daemon_service::targets_from_files_response::Response::InQuery(_) => {
+                                    let _ = bazel_status_tx.send_async(BazelStatus::InQuery).await;
+                                        bazel_in_query = true;
+                                        continue 'inner_loop;
+                                },
                             }
+                        } else {
+                            Vec::default()
                         };
 
                         changed_targets.retain(|e| !visited_targets.contains(e.target_label()));
                         changed_targets.iter().for_each(|e| {
-                            visited_targets.insert(e.target_label().clone());
+                            visited_targets.insert(e.target_label().to_string());
                         });
 
                         if !changed_targets.is_empty() {
@@ -189,7 +205,7 @@ pub async fn maybe_auto_test_mode<
                                 configured_bazel_runner
                                     .bazel_command_line
                                     .remaining_args
-                                    .push(t.target_label().clone());
+                                    .push(t.target_label().to_string());
                             }
 
                             let _ = bazel_status_tx.send_async(BazelStatus::Build).await;
@@ -214,7 +230,7 @@ pub async fn maybe_auto_test_mode<
                                     configured_bazel_runner
                                         .bazel_command_line
                                         .remaining_args
-                                        .push(t.target_label().clone());
+                                        .push(t.target_label().to_string());
                                 }
                             }
 
