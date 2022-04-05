@@ -191,9 +191,7 @@ impl<
     pub fn new(
         config: Arc<Config>,
         configured_bazel: ConfiguredBazel,
-        #[cfg(feature = "bazelfe-daemon")] runner_daemon: Option<
-            DaemonServiceClient<Channel>,
-        >,
+        #[cfg(feature = "bazelfe-daemon")] runner_daemon: Option<DaemonServiceClient<Channel>>,
         index_table: crate::index_table::IndexTable,
         bazel_command_line: ParsedCommandLine,
         process_build_failures: Arc<ProcessBazelFailures<T, U>>,

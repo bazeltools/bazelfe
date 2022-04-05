@@ -1,7 +1,4 @@
-use bazelfe_protos::bazel_tools::daemon_service::daemon_service_server::{
-    DaemonService, DaemonServiceServer,
-};
-use bazelfe_protos::bazel_tools::daemon_service::WaitForFilesRequest;
+use bazelfe_protos::bazel_tools::daemon_service::daemon_service_server::DaemonService;
 use bazelfe_protos::*;
 use std::path::Path;
 use std::sync::atomic::Ordering;
@@ -14,7 +11,6 @@ use std::{
     time::Duration,
 };
 use tokio_stream::wrappers::UnixListenerStream;
-use tonic::transport::Channel;
 use tonic::{Request, Response};
 
 use bazel_tools::daemon_service;
@@ -26,13 +22,11 @@ use crate::config::daemon_config::NotifyRegexes;
 use crate::config::DaemonConfig;
 use std::time::Instant;
 use tokio::net::UnixListener;
-use tokio_serde::formats::Bincode;
-use tokio_util::codec::LengthDelimitedCodec;
 
 #[derive(Debug, Clone)]
 struct Daemon {
-    config: Arc<DaemonConfig>,
-    bazel_binary_path: PathBuf,
+    _config: Arc<DaemonConfig>,
+    _bazel_binary_path: PathBuf,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -168,12 +162,12 @@ impl TargetState {
     pub async fn hydrate_new_file_data(
         self: Arc<TargetState>,
         bazel_query: Arc<Mutex<Box<dyn BazelQuery>>>,
-        path: &PathBuf,
+        path: &Path,
     ) -> Result<(), Box<dyn Error>> {
         if self.src_file_to_target.contains_key(path) {
             return Ok(());
         }
-        let mut cur_path = Some(path.as_path());
+        let mut cur_path = Some(path);
         loop {
             if let Some(p) = cur_path {
                 if p.join("BUILD").exists() || p.join("WORKSPACE").exists() {
@@ -446,8 +440,8 @@ struct DaemonServerInstance {
     pub executable_id: Arc<super::ExecutableId>,
     pub most_recent_call: Arc<AtomicUsize>,
     pub target_cache: Arc<TargetCache>,
-    pub daemon_config: Arc<DaemonConfig>,
-    pub bazel_binary_path: Arc<PathBuf>,
+    pub _daemon_config: Arc<DaemonConfig>,
+    pub _bazel_binary_path: Arc<PathBuf>,
 }
 
 #[tonic::async_trait]
@@ -726,8 +720,8 @@ pub async fn main(
             executable_id: executable_id.clone(),
             most_recent_call: captured_most_recent_call.clone(),
             target_cache: captured_target_cache.clone(),
-            daemon_config: captured_daemon_config.clone(),
-            bazel_binary_path: captured_bazel_binary_path.clone(),
+            _daemon_config: captured_daemon_config.clone(),
+            _bazel_binary_path: captured_bazel_binary_path.clone(),
         },
     )
     .await?;

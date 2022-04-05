@@ -136,7 +136,7 @@ mod tests {
             &mut passthrough_command_line,
             &CommandLineRewriter::default(),
             #[cfg(feature = "bazelfe-daemon")]
-            &None,
+            &mut None,
         )
         .await
         .unwrap();
@@ -169,7 +169,7 @@ mod tests {
             &mut passthrough_command_line,
             &rewrite_config,
             #[cfg(feature = "bazelfe-daemon")]
-            &None,
+            &mut None,
         )
         .await
         .unwrap();
@@ -203,7 +203,7 @@ mod tests {
             &mut passthrough_command_line,
             &rewrite_config,
             #[cfg(feature = "bazelfe-daemon")]
-            &None,
+            &mut None,
         )
         .await;
 
