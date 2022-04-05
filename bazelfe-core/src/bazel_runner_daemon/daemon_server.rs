@@ -450,12 +450,14 @@ impl DaemonService for DaemonServerInstance {
         &self,
         request: Request<daemon_service::WaitForFilesRequest>,
     ) -> Result<Response<daemon_service::WaitForFilesResponse>, tonic::Status> {
+        let request = request.into_inner();
+        let since_when = request
+            .value
+            .unwrap_or(daemon_service::Instant { value: 0 });
+
         self.most_recent_call
             .fetch_add(1, std::sync::atomic::Ordering::Release);
-        let files = self
-            .target_cache
-            .wait_for_files(request.into_inner().value.unwrap())
-            .await;
+        let files = self.target_cache.wait_for_files(since_when).await;
 
         Ok(Response::new(daemon_service::WaitForFilesResponse {
             value: files,
@@ -623,8 +625,9 @@ impl DaemonService for DaemonServerInstance {
         &self,
         _: Request<daemon_service::RequestInstantRequest>,
     ) -> Result<Response<daemon_service::RequestInstantResponse>, tonic::Status> {
-        todo!()
-        // Ok(Response::new(daemon_service::RequestInstantResponse { value: monotonic_current_time() }))
+        Ok(Response::new(daemon_service::RequestInstantResponse {
+            value: Some(monotonic_current_time()),
+        }))
     }
 }
 
@@ -712,7 +715,7 @@ pub async fn main(
 
     let captured_daemon_config = Arc::new(daemon_config.clone());
     let captured_bazel_binary_path = Arc::new(bazel_binary_path.to_path_buf());
-    println!("Starting tarpc");
+    println!("Starting Grpc service");
 
     start_server(
         &paths.socket_path,
@@ -748,7 +751,7 @@ pub async fn main(
     let copy_shared = Arc::clone(&target_cache);
     let copy_gitignored = Arc::clone(&gitignore_match);
 
-    println!("Starting tarpc");
+    println!("Starting inotify watchers");
     let _ = tokio::task::spawn(async move {
         while let Ok(event) = flume_rx.recv_async().await {
             use notify::EventKind;
