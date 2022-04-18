@@ -1,4 +1,5 @@
 use super::error_processor::ErrorProcessor;
+use super::IndexerConfig;
 use super::{command_line_rewriter::CommandLineRewriter, DaemonConfig};
 use serde::{Deserialize, Deserializer};
 
@@ -10,6 +11,9 @@ pub struct Config {
     /// Where to load/store the index on disk
     /// In several use cases this might be dynamically fetched/generated, this can be overridden on the command line.
     pub index_input_location: Option<std::path::PathBuf>,
+
+    #[serde(rename = "IndexerConfig", default = "IndexerConfig::default")]
+    pub indexer_config: IndexerConfig,
 
     /// Where to find buildozer on disk
     pub buildozer_path: Option<std::path::PathBuf>,

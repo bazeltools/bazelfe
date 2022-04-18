@@ -1,4 +1,6 @@
 mod error_processor;
+use std::path::PathBuf;
+
 pub use error_processor::ErrorProcessor;
 mod base_config;
 pub use base_config::Config;
@@ -9,8 +11,40 @@ pub use command_line_rewriter::CommandLineRewriter;
 pub mod daemon_config;
 pub use daemon_config::DaemonConfig;
 
+mod indexer_config;
+pub use indexer_config::IndexerConfig;
+
 pub fn parse_config(input: &str) -> Result<Config, toml::de::Error> {
     toml::from_str(input)
+}
+
+pub async fn load_config_file(
+    command_line_path: &Option<&String>,
+) -> Result<Config, Box<dyn std::error::Error>> {
+    use std::str::FromStr;
+    let mut path: Option<String> = None;
+    if let Some(p) = command_line_path {
+        let pbuf = PathBuf::from_str(p)?;
+        if !pbuf.exists() {
+            panic!("Expected to find config at path {}, but it didn't exist", p);
+        }
+        path = Some((*p).clone())
+    };
+
+    if path == None {
+        if let Ok(home_dir) = std::env::var("HOME") {
+            let cur_p = PathBuf::from(format!("{}/.bazelfe_config", home_dir));
+            if cur_p.exists() {
+                path = Some(cur_p.to_str().unwrap().to_string());
+            }
+        }
+    }
+
+    if let Some(path) = path {
+        Ok(parse_config(&std::fs::read_to_string(path)?)?)
+    } else {
+        Ok(Config::default())
+    }
 }
 
 #[cfg(test)]

@@ -1,8 +1,8 @@
-use std::path::PathBuf;
+use std::{collections::HashSet, path::PathBuf};
 
 use bazelfe_protos::build_event_stream;
 
-use crate::{build_events::hydrated_stream, index_table};
+use crate::{build_events::hydrated_stream, config::IndexerConfig, index_table};
 
 #[derive(Clone, Debug)]
 
@@ -27,6 +27,7 @@ impl Response {
 #[derive(Clone, Debug)]
 pub struct IndexNewResults {
     index_table: index_table::IndexTable,
+    blacklist_target_kind: HashSet<String>,
 }
 
 #[async_trait::async_trait]
@@ -40,8 +41,16 @@ impl super::BazelEventHandler for IndexNewResults {
     }
 }
 impl IndexNewResults {
-    pub fn new(index_table: index_table::IndexTable) -> Self {
-        Self { index_table }
+    pub fn new(index_table: index_table::IndexTable, indexer_config: &IndexerConfig) -> Self {
+        let mut blacklist_target_kind: HashSet<String> = Default::default();
+
+        for t in indexer_config.blacklist_rule_kind.iter() {
+            blacklist_target_kind.insert(t.clone());
+        }
+        Self {
+            index_table,
+            blacklist_target_kind,
+        }
     }
     pub async fn process(
         &self,
@@ -50,12 +59,12 @@ impl IndexNewResults {
         let r = match event {
             hydrated_stream::HydratedInfo::TargetComplete(tce) => {
                 if let Some(target_kind) = &tce.target_kind {
-                    if target_kind.contains("_test") {
-                        return Vec::default();
-                    } else if target_kind.contains("generated file")
-                        && tce.label.ends_with("_deploy.jar")
+                    if (target_kind.contains("_test")
+                        || (target_kind.contains("generated file")
+                            && tce.label.ends_with("_deploy.jar")))
+                        || self.blacklist_target_kind.contains(target_kind)
                     {
-                        // java or scala deploy jar. don't index.
+                        // Deploy jar, test thing or just in a blacklist of rules
                         return Vec::default();
                     }
                 }
