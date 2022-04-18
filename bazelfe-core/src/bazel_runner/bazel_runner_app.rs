@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use std::ffi::OsString;
 
-use bazelfe_core::config::Config;
+use bazelfe_core::config::{load_config_file, Config};
 use bazelfe_core::{bazel_command_line_parser::parse_bazel_command_line, bazel_runner};
 
 #[derive(Parser, Debug)]
@@ -26,35 +26,6 @@ struct Opt {
 
     #[clap(long)]
     config: Option<String>,
-}
-
-async fn load_config_file(opt: &Opt) -> Result<Config, Box<dyn std::error::Error>> {
-    use std::str::FromStr;
-    let mut path: Option<String> = None;
-    if let Some(p) = &opt.config {
-        let pbuf = PathBuf::from_str(p)?;
-        if !pbuf.exists() {
-            panic!("Expected to find config at path {}, but it didn't exist", p);
-        }
-        path = Some(p.clone())
-    };
-
-    if path == None {
-        if let Ok(home_dir) = std::env::var("HOME") {
-            let cur_p = PathBuf::from(format!("{}/.bazelfe_config", home_dir));
-            if cur_p.exists() {
-                path = Some(cur_p.to_str().unwrap().to_string());
-            }
-        }
-    }
-
-    if let Some(path) = path {
-        Ok(bazelfe_core::config::parse_config(
-            &std::fs::read_to_string(path)?,
-        )?)
-    } else {
-        Ok(Config::default())
-    }
 }
 
 fn passthrough_to_bazel(opt: Opt) {
@@ -149,7 +120,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     builder.init();
 
-    let mut config = load_config_file(&opt).await?;
+    let mut config = load_config_file(&opt.config.as_ref()).await?;
 
     config.buildozer_path = Some(opt.buildozer_path);
 

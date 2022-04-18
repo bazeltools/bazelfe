@@ -1,3 +1,4 @@
+use bazelfe_core::config::load_config_file;
 use clap::Parser;
 #[macro_use]
 extern crate log;
@@ -49,6 +50,9 @@ struct Opt {
     /// Where to find the bazel to invoke, if its just on your path `which bazel` could be passed here.
     #[clap(long, parse(from_os_str))]
     bazel_binary_path: PathBuf,
+
+    #[clap(long)]
+    config: Option<String>,
 
     /// Where the output index should be stored
     #[clap(long, env = "INDEX_OUTPUT_LOCATION", parse(from_os_str))]
@@ -226,6 +230,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     };
+
+    let config = load_config_file(&opt.config.as_ref()).await?;
 
     let mut rng = rand::thread_rng();
     let mut builder = pretty_env_logger::formatted_timed_builder();
@@ -583,7 +589,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let target_completed_tracker = TargetCompletedTracker::new(all_found_targets);
 
     let processors: Vec<Arc<dyn BazelEventHandler>> = vec![
-        Arc::new(IndexNewResults::new(index_table.clone())),
+        Arc::new(IndexNewResults::new(
+            index_table.clone(),
+            &config.indexer_config,
+        )),
         Arc::new(target_completed_tracker.clone()),
     ];
     let aes = EventStreamListener::new(processors);

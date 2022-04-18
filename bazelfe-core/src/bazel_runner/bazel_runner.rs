@@ -119,9 +119,13 @@ impl BazelRunner {
             Arc::clone(&config),
             Arc::clone(&bazel_query_engine),
         )?);
+
         let processors: Vec<Arc<dyn BazelEventHandler>> = vec![
             process_build_failures.clone(),
-            Arc::new(IndexNewResults::new(index_table.clone())),
+            Arc::new(IndexNewResults::new(
+                index_table.clone(),
+                &config.indexer_config,
+            )),
         ];
         let aes = EventStreamListener::new(processors);
 
