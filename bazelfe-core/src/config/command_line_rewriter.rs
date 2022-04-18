@@ -7,12 +7,6 @@ pub struct EmptyTestToLocalRepoCfg {
 }
 
 #[derive(Deserialize, Debug, PartialEq, Eq, Clone)]
-pub struct FileToTargetRewrite {
-    #[serde(default = "default_test_box_rewrite_mode")]
-    pub fallthrough: Box<TestActionMode>,
-}
-
-#[derive(Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct SuggestTestTargetConfig {
     #[serde(default = "default_distance_to_use")]
     pub distance_to_expand: u32,
@@ -38,7 +32,6 @@ pub enum TestActionMode {
     EmptyTestToLocalRepo(EmptyTestToLocalRepoCfg),
     EmptyTestToFail,
     SuggestTestTarget(SuggestTestTargetConfig),
-    FileToTarget(FileToTargetRewrite),
     Passthrough,
 }
 
@@ -56,10 +49,6 @@ impl Default for CommandLineRewriter {
 
 fn default_test_rewrite_mode() -> TestActionMode {
     TestActionMode::Passthrough
-}
-
-fn default_test_box_rewrite_mode() -> Box<TestActionMode> {
-    Box::new(TestActionMode::Passthrough)
 }
 
 #[cfg(test)]
@@ -82,31 +71,6 @@ mod tests {
             CommandLineRewriter {
                 test: TestActionMode::EmptyTestToLocalRepo(EmptyTestToLocalRepoCfg {
                     command_to_use: String::from("foo")
-                })
-            }
-        );
-    }
-
-    #[test]
-    fn with_fallback() {
-        let command_line_rewriter: CommandLineRewriter = toml::from_str(
-            r#"
-        [test]
-            type = 'FileToTarget'
-            fallthrough = { type = 'EmptyTestToLocalRepo', command_to_use = "foo"}
-        "#,
-        )
-        .unwrap();
-
-        assert_eq!(
-            command_line_rewriter,
-            CommandLineRewriter {
-                test: TestActionMode::FileToTarget(FileToTargetRewrite {
-                    fallthrough: Box::new(TestActionMode::EmptyTestToLocalRepo(
-                        EmptyTestToLocalRepoCfg {
-                            command_to_use: String::from("foo")
-                        }
-                    ))
                 })
             }
         );

@@ -1,3 +1,4 @@
+use crate::bazel_command_line_parser::CustomAction;
 use crate::config::CommandLineRewriter;
 use crate::{
     bazel_command_line_parser::{BuiltInAction, ParsedCommandLine},
@@ -23,6 +24,14 @@ pub async fn rewrite_command_line(
     #[cfg(feature = "bazelfe-daemon")] daemon_client: &mut Option<DaemonServiceClient<Channel>>,
 ) -> Result<(), RewriteCommandLineError> {
     if bazel_command_line.action
+        == Some(crate::bazel_command_line_parser::Action::Custom(
+            CustomAction::TestFile,
+        ))
+    {
+        return test_file_to_target::run(bazel_command_line).await;
+    }
+
+    if bazel_command_line.action
         == Some(crate::bazel_command_line_parser::Action::BuiltIn(
             BuiltInAction::Test,
         ))
@@ -42,13 +51,6 @@ pub async fn rewrite_command_line(
                 }
                 TestActionMode::Passthrough => {}
 
-                TestActionMode::FileToTarget(cfg) => {
-                    let took_action =
-                        test_file_to_target::rewrite_test_command(bazel_command_line).await?;
-                    if !took_action {
-                        test_action_modes.push(&cfg.fallthrough);
-                    }
-                }
                 #[allow(unused)]
                 TestActionMode::SuggestTestTarget(cfg)
                     if bazel_command_line.remaining_args.is_empty() =>
