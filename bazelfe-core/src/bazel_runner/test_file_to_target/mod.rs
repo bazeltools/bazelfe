@@ -27,7 +27,7 @@ pub async fn rewrite_test_command(
     for p in on_disk_files.into_iter() {
         let mut cur_parent = p.parent();
         while let Some(parent) = cur_parent {
-            if (parent.join("BUILD.bazel").exists() || parent.join("BUILD").exists()) {
+            if parent.join("BUILD.bazel").exists() || parent.join("BUILD").exists() {
                 break;
             }
             cur_parent = parent.parent();
