@@ -3,7 +3,7 @@ use std::{collections::HashMap, collections::HashSet, sync::Arc, time::Instant};
 use tokio::sync::{Mutex, RwLock};
 
 use crate::bazel_query::BazelQueryEngine;
-use crate::jvm_indexer::bazel_query::BazelQuery;
+
 use crate::{
     build_events::hydrated_stream, buildozer_driver::Buildozer, config::Config, index_table,
 };

@@ -405,15 +405,15 @@ mod tests {
     impl BazelQueryEngine for NoOpMBazelQueryEngine {
         async fn dependency_link(
             self: &Self,
-            edge_src: &str,
-            edge_dest: &str,
+            _edge_src: &str,
+            _edge_dest: &str,
         ) -> Result<bool, Box<dyn std::error::Error>> {
             Ok(false)
         }
 
         async fn r_deps(
             self: &Self,
-            target: &str,
+            _target: &str,
         ) -> Result<HashSet<String>, Box<dyn std::error::Error>> {
             Ok(HashSet::default())
         }
@@ -988,7 +988,7 @@ mod tests {
         }
         async fn add_to(
             &self,
-            to_what: &BazelAttrTarget,
+            _to_what: &BazelAttrTarget,
             target_to_operate_on: &String,
             label_to_add: &String,
         ) -> Result<(), ExecuteResultError> {
@@ -1012,7 +1012,7 @@ mod tests {
 
         async fn remove_from(
             &self,
-            from_what: &BazelAttrTarget,
+            _from_what: &BazelAttrTarget,
             target_to_operate_on: &String,
             label_to_add: &String,
         ) -> Result<(), ExecuteResultError> {

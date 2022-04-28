@@ -469,7 +469,7 @@ where
 
         if let Some(tx) = cloned_v {
             let inner = request.into_inner();
-            info!("life cycle event: {:?}", inner);
+            debug!("life cycle event: {:?}", inner);
 
             tx.send(BuildEventAction::LifecycleEvent(inner))
                 .await

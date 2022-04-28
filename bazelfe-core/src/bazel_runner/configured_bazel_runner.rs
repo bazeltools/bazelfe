@@ -15,12 +15,12 @@ use crate::{
     },
 };
 use crate::{build_events::build_event_server::bazel_event, config::Config};
-use bazelfe_protos::bazel_tools::daemon_service::daemon_service_client::DaemonServiceClient;
+
 use std::sync::Arc;
 use thiserror::Error;
 
 use tokio::sync::{Mutex, RwLock};
-use tonic::transport::Channel;
+
 
 use super::processor_activity::*;
 

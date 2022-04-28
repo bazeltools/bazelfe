@@ -14,6 +14,9 @@ jobs:
           - os: macos-latest
             platform: macos
             artifact: bazelfe-macos
+          - os: macos-latest
+            platform: macos-arm64
+            artifact: bazelfe-macos-arm64
           - os: ubuntu-20.04
             platform: linux-ubuntu-20.04
             artifact: bazelfe-linux-ubuntu-20.04
@@ -46,10 +49,32 @@ jobs:
         with:
           name: ${{ matrix.artifact }}
           path: staging-directory
-
+  rust-crossbuild-macos-arm64:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - run: rustup component add rustfmt
+      - run: rustup target add aarch64-apple-darwin
+      - run: SDKROOT=$(xcrun -sdk macosx --show-sdk-path) MACOSX_DEPLOYMENT_TARGET=$(xcrun -sdk macosx --show-sdk-platform-version) cargo build --target=aarch64-apple-darwin --release
+      - name: Prepare bazel-runner output
+        run: ./.github/ci_scripts/prepare_output.sh bazel-runner-macos-arm64 staging-directory target/aarch64-apple-darwin/release/bazel-runner
+      - name: Prepare jvm-indexer
+        run: ./.github/ci_scripts/prepare_output.sh jvm-indexer-macos-arm64 staging-directory target/aarch64-apple-darwin/release/jvm-indexer
+      - run: SDKROOT=$(xcrun -sdk macosx --show-sdk-path) MACOSX_DEPLOYMENT_TARGET=$(xcrun -sdk macosx --show-sdk-platform-version) cargo build --target=aarch64-apple-darwin --release --all-features
+      - name: Prepare bazel-runner output
+        run: ./.github/ci_scripts/prepare_output.sh bazel-runner-with-daemon-macos-arm64 staging-directory target/aarch64-apple-darwin/release/bazel-runner
+      - name: Prepare jvm-indexer
+        run: ./.github/ci_scripts/prepare_output.sh jvm-indexer-with-daemon-macos-arm64 staging-directory target/aarch64-apple-darwin/release/jvm-indexer
+      - uses: actions/upload-artifact@master
+        with:
+          name: bazelfe-macos-arm64
+          path: staging-directory
   make_release:
     name: Make release
-    needs: rust-binaries
+    needs: [rust-binaries, rust-crossbuild-macos-arm64]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -68,6 +93,11 @@ jobs:
         with:
           name: bazelfe-macos
           path: downloads
+      - name: Download macos arm64 bazelfe
+        uses: actions/download-artifact@v1
+        with:
+          name: bazelfe-macos-arm64
+          path: downloads
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
@@ -79,6 +109,10 @@ jobs:
             downloads/bazel-runner-macos.sha256
             downloads/bazel-runner-with-daemon-macos
             downloads/bazel-runner-with-daemon-macos.sha256
+            downloads/bazel-runner-macos-arm64
+            downloads/bazel-runner-macos-arm64.sha256
+            downloads/bazel-runner-with-daemon-macos-arm64
+            downloads/bazel-runner-with-daemon-macos-arm64.sha256
             downloads/bazel-runner-linux-ubuntu-20.04
             downloads/bazel-runner-linux-ubuntu-20.04.sha256
             downloads/bazel-runner-with-daemon-linux-ubuntu-20.04
@@ -89,6 +123,8 @@ jobs:
             downloads/bazel-runner-with-daemon-linux-ubuntu-18.04.sha256
             downloads/jvm-indexer-macos
             downloads/jvm-indexer-macos.sha256
+            downloads/jvm-indexer-macos-arm64
+            downloads/jvm-indexer-macos-arm64.sha256
             downloads/jvm-indexer-linux-ubuntu-20.04
             downloads/jvm-indexer-linux-ubuntu-20.04.sha256
             downloads/jvm-indexer-linux-ubuntu-18.04

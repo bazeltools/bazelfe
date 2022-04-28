@@ -1,4 +1,4 @@
-use std::{collections::HashSet, marker::PhantomData, sync::Arc};
+use std::{collections::HashSet, sync::Arc};
 
 use crate::jvm_indexer::bazel_query::BazelQuery;
 use ::prost::Message;
