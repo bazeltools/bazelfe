@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use std::ffi::OsString;
 
-use bazelfe_core::config::{load_config_file, Config};
+use bazelfe_core::config::{load_config_file};
 use bazelfe_core::{bazel_command_line_parser::parse_bazel_command_line, bazel_runner};
 
 #[derive(Parser, Debug)]

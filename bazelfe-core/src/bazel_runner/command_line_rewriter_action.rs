@@ -5,10 +5,10 @@ use crate::{
     config::command_line_rewriter::TestActionMode,
 };
 
-use bazelfe_protos::bazel_tools::daemon_service::daemon_service_client::DaemonServiceClient;
-use bazelfe_protos::bazel_tools::daemon_service::RecentlyInvalidatedTargetsRequest;
+
+
 use thiserror::Error;
-use tonic::transport::Channel;
+
 
 use super::test_file_to_target;
 
