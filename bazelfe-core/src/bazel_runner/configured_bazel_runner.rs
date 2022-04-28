@@ -21,7 +21,6 @@ use thiserror::Error;
 
 use tokio::sync::{Mutex, RwLock};
 
-
 use super::processor_activity::*;
 
 pub struct ConfiguredBazel {
@@ -147,7 +146,11 @@ pub struct ConfiguredBazelRunner<
     config: Arc<Config>,
     pub configured_bazel: ConfiguredBazel,
     #[cfg(feature = "bazelfe-daemon")]
-    pub runner_daemon: Option<DaemonServiceClient<Channel>>,
+    pub runner_daemon: Option<
+        bazelfe_protos::bazel_tools::daemon_service::daemon_service_client::DaemonServiceClient<
+            tonic::transport::Channel,
+        >,
+    >,
     _index_table: crate::index_table::IndexTable,
     pub bazel_command_line: ParsedCommandLine,
     process_build_failures: Arc<ProcessBazelFailures<T, U>>,
@@ -191,7 +194,11 @@ impl<
     pub fn new(
         config: Arc<Config>,
         configured_bazel: ConfiguredBazel,
-        #[cfg(feature = "bazelfe-daemon")] runner_daemon: Option<DaemonServiceClient<Channel>>,
+        #[cfg(feature = "bazelfe-daemon")] runner_daemon: Option<
+            bazelfe_protos::bazel_tools::daemon_service::daemon_service_client::DaemonServiceClient<
+                tonic::transport::Channel,
+            >,
+        >,
         index_table: crate::index_table::IndexTable,
         bazel_command_line: ParsedCommandLine,
         process_build_failures: Arc<ProcessBazelFailures<T, U>>,

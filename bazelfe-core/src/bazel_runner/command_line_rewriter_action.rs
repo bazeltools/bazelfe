@@ -5,10 +5,11 @@ use crate::{
     config::command_line_rewriter::TestActionMode,
 };
 
-
-
+#[cfg(feature = "bazelfe-daemon")]
+use bazelfe_protos::bazel_tools::daemon_service::daemon_service_client::DaemonServiceClient;
 use thiserror::Error;
-
+#[cfg(feature = "bazelfe-daemon")]
+use tonic::transport::Channel;
 
 use super::test_file_to_target;
 
@@ -61,7 +62,7 @@ pub async fn rewrite_command_line(
 
                         for distance in 0..(cfg.distance_to_expand + 1) {
                             let recently_invalidated_targets = daemon_cli
-                                .recently_invalidated_targets(RecentlyInvalidatedTargetsRequest {
+                                .recently_invalidated_targets(bazelfe_protos::bazel_tools::daemon_service::RecentlyInvalidatedTargetsRequest {
                                     distance,
                                 })
                                 .await;

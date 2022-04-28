@@ -53,7 +53,11 @@ impl BazelQueryBinaryImpl {
     async fn execute_command(&self, command: &Vec<String>) -> ExecuteResult {
         let mut cmd = Command::new(&self.bazel_executable_path);
 
-        debug!("{} {}", &self.bazel_executable_path.to_string_lossy(), command.join(" "));
+        debug!(
+            "{} {}",
+            &self.bazel_executable_path.to_string_lossy(),
+            command.join(" ")
+        );
 
         let command_result = match cmd.args(command).output().await {
             Err(e) => return e.into(),
@@ -61,11 +65,13 @@ impl BazelQueryBinaryImpl {
         };
         let exit_code = command_result.status.code().unwrap_or(-1);
 
+        let stdout = BazelQueryBinaryImpl::decode_str(&command_result.stdout);
+        let stderr = BazelQueryBinaryImpl::decode_str(&command_result.stderr);
 
-        let stdout =  BazelQueryBinaryImpl::decode_str(&command_result.stdout);
-        let stderr =  BazelQueryBinaryImpl::decode_str(&command_result.stderr);
-
-        debug!("Exit Code: {} Stdout: {}, stderr: {}", exit_code, stdout, stderr);
+        debug!(
+            "Exit Code: {} Stdout: {}, stderr: {}",
+            exit_code, stdout, stderr
+        );
 
         ExecuteResult {
             exit_code,

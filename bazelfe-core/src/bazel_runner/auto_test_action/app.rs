@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf, time::Instant};
+use std::{collections::HashMap, time::Instant};
 
 use super::util::{StatefulList, TabsState};
 use bazelfe_protos::bazel_tools::daemon_service;

@@ -6,7 +6,7 @@ mod ui;
 mod util;
 
 use std::time;
-use std::{collections::HashSet, path::PathBuf, sync::Arc};
+use std::{collections::HashSet, sync::Arc};
 
 use crate::bazel_command_line_parser::BuiltInAction;
 use crate::{bazel_command_line_parser::CustomAction, buildozer_driver};
