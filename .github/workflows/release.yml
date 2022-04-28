@@ -14,9 +14,6 @@ jobs:
           - os: macos-latest
             platform: macos
             artifact: bazelfe-macos
-          - os: macos-latest
-            platform: macos-arm64
-            artifact: bazelfe-macos-arm64
           - os: ubuntu-20.04
             platform: linux-ubuntu-20.04
             artifact: bazelfe-linux-ubuntu-20.04
