@@ -12,7 +12,11 @@ fn err(e_string: String) -> Result<(), RewriteCommandLineError> {
         super::UserReportError(e_string),
     ))
 }
-pub async fn run(command_line: &mut ParsedCommandLine) -> Result<(), RewriteCommandLineError> {
+pub async fn run<B: BazelQuery>(
+    command_line: &mut ParsedCommandLine,
+    replace_action: BuiltInAction,
+    bazel_query: B,
+) -> Result<(), RewriteCommandLineError> {
     let mut on_disk_files = Vec::default();
     for command_line_opts in command_line.remaining_args.iter() {
         let pb = PathBuf::from(command_line_opts);
@@ -31,8 +35,6 @@ pub async fn run(command_line: &mut ParsedCommandLine) -> Result<(), RewriteComm
     if on_disk_files.is_empty() {
         return err(format!("No files on disk specified to run"));
     }
-
-    let bazel_query = crate::jvm_indexer::bazel_query::from_binary_path(&command_line.bazel_binary);
 
     let mut targets: HashSet<String> = HashSet::default();
 
@@ -83,7 +85,7 @@ pub async fn run(command_line: &mut ParsedCommandLine) -> Result<(), RewriteComm
     command_line.remaining_args.extend(targets.into_iter());
 
     command_line.action = Some(crate::bazel_command_line_parser::Action::BuiltIn(
-        BuiltInAction::Test,
+        replace_action,
     ));
     Ok(())
 }

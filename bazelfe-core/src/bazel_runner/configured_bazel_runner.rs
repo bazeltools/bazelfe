@@ -249,11 +249,15 @@ impl<
     }
 
     pub async fn run(mut self) -> Result<i32, ConfiguredBazelRunnerError> {
+        let bq = crate::jvm_indexer::bazel_query::from_binary_path(
+            &self.bazel_command_line.bazel_binary,
+        );
         super::command_line_rewriter_action::rewrite_command_line(
             &mut self.bazel_command_line,
             &self.config.command_line_rewriter,
             #[cfg(feature = "bazelfe-daemon")]
             &mut self.runner_daemon,
+            bq,
         )
         .await?;
 
