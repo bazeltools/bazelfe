@@ -56,14 +56,14 @@ async-stream = "0.3.3"
 async-trait = "0.1.53"
 byteorder = "1.4.3"
 bytes = "1.1.0"
-clap = { version = "3.1.12", features = ["derive", "env"] }
+clap = { version = "3.1.18", features = ["derive", "env"] }
 ctrlc = "3.2.2"
 exec = "0.3.1"
 lazy_static = "1.4.0"
-log = "0.4.16"
+log = "0.4.17"
 nom = "7.1.1"
 pretty_env_logger = "0.4.0"
-prost = "0.10.1"
+prost = "0.10.3"
 prost-types = "0.10.1"
 rand = "0.8.5"
 regex = "1.5.5"
@@ -76,7 +76,7 @@ shellwords = "1.1.0"
 zip = "0.6.2"
 thiserror = "1.0.31"
 fork = { version = "0.1.19", optional = true }
-serde_json = "1.0.79"
+serde_json = "1.0.81"
 stdio-override = { version = "0.1.3", optional = true }
 libc = "0.2.124"
 crossbeam-channel = { version = "0.5.4", optional = true }
@@ -112,7 +112,7 @@ version = "0.3.21"
 
 [dependencies.tokio]
 features = ["full"]
-version = "1.18.0"
+version = "1.18.2"
 
 [dependencies.tokio-stream]
 features = ["net"]
@@ -120,7 +120,7 @@ version = "0.1.8"
 
 [dependencies.tonic]
 features = ["tls"]
-version = "0.7.1"
+version = "0.7.2"
 
 [dev-dependencies]
 once_cell = "1.10.0"
