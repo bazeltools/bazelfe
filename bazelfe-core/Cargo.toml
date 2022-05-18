@@ -99,7 +99,7 @@ tower = "0.4.12"
 
 
 [build-dependencies]
-vergen = "7.0.0"
+vergen = "7.1.0"
 anyhow = "1.0.57"
 
 [dependencies.bazelfe-protos]
