@@ -1,5 +1,6 @@
 use crate::bazel_command_line_parser::CustomAction;
 use crate::config::CommandLineRewriter;
+use crate::jvm_indexer::bazel_query::BazelQuery;
 use crate::{
     bazel_command_line_parser::{BuiltInAction, ParsedCommandLine},
     config::command_line_rewriter::TestActionMode,
@@ -19,17 +20,28 @@ pub enum RewriteCommandLineError {
     UserErrorReport(super::UserReportError),
 }
 
-pub async fn rewrite_command_line(
+pub async fn rewrite_command_line<B: BazelQuery>(
     bazel_command_line: &mut ParsedCommandLine,
     command_line_rewriter: &CommandLineRewriter,
     #[cfg(feature = "bazelfe-daemon")] daemon_client: &mut Option<DaemonServiceClient<Channel>>,
+    bazel_query: B,
 ) -> Result<(), RewriteCommandLineError> {
     if bazel_command_line.action
         == Some(crate::bazel_command_line_parser::Action::Custom(
             CustomAction::TestFile,
         ))
     {
-        return test_file_to_target::run(bazel_command_line).await;
+        return test_file_to_target::run(bazel_command_line, BuiltInAction::Test, bazel_query)
+            .await;
+    }
+
+    if bazel_command_line.action
+        == Some(crate::bazel_command_line_parser::Action::Custom(
+            CustomAction::BuildFile,
+        ))
+    {
+        return test_file_to_target::run(bazel_command_line, BuiltInAction::Build, bazel_query)
+            .await;
     }
 
     if bazel_command_line.action
@@ -142,6 +154,7 @@ mod tests {
 
     use crate::bazel_command_line_parser::*;
     use crate::config::command_line_rewriter::*;
+    use crate::jvm_indexer::bazel_query::ExecuteResult;
     use std::path::PathBuf;
     #[tokio::test]
     async fn test_passthrough_args() {
@@ -158,6 +171,7 @@ mod tests {
             &CommandLineRewriter::default(),
             #[cfg(feature = "bazelfe-daemon")]
             &mut None,
+            TestBazelQuery::success("good".into()),
         )
         .await
         .unwrap();
@@ -191,6 +205,7 @@ mod tests {
             &rewrite_config,
             #[cfg(feature = "bazelfe-daemon")]
             &mut None,
+            TestBazelQuery::success("good".into()),
         )
         .await
         .unwrap();
@@ -205,6 +220,27 @@ mod tests {
                 remaining_args: vec!["//...".to_string()],
             }
         );
+    }
+
+    #[derive(Debug)]
+    struct TestBazelQuery(ExecuteResult);
+    impl TestBazelQuery {
+        pub fn success(str: String) -> TestBazelQuery {
+            TestBazelQuery(ExecuteResult {
+                exit_code: 0,
+                stdout: str,
+                stdout_raw: Default::default(),
+                stderr: "".into(),
+                stderr_raw: Default::default(),
+            })
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl BazelQuery for TestBazelQuery {
+        async fn execute(&self, _args: &Vec<String>) -> ExecuteResult {
+            self.0.clone()
+        }
     }
 
     #[tokio::test]
@@ -225,6 +261,7 @@ mod tests {
             &rewrite_config,
             #[cfg(feature = "bazelfe-daemon")]
             &mut None,
+            TestBazelQuery::success("good".into()),
         )
         .await;
 
@@ -232,11 +269,93 @@ mod tests {
 
         match ret {
             Ok(_) => panic!("Expected to get an error condition from the call"),
-            Err(e) => match e {
-                RewriteCommandLineError::UserErrorReport(err) => {
-                    assert_eq!(true, err.0.contains("No test target specified"));
-                }
-            },
+            Err(RewriteCommandLineError::UserErrorReport(err)) => {
+                assert_eq!(true, err.0.contains("No test target specified"));
+            }
         }
+    }
+
+    #[tokio::test]
+    async fn test_test_file_rewrite() {
+        let temp_dir = tempfile::tempdir_in(".").expect("should be able to make a tempdir");
+        let build_path = temp_dir.path().join("BUILD");
+        let scala_path = temp_dir.path().join("foo.scala");
+
+        std::fs::File::create(&build_path).expect("should have created BUILD");
+        std::fs::File::create(&scala_path).expect("should have created foo.scala");
+
+        let mut passthrough_command_line = ParsedCommandLine {
+            bazel_binary: PathBuf::from("bazel"),
+            startup_options: Vec::default(),
+            action: Some(Action::Custom(CustomAction::TestFile)),
+            action_options: Vec::default(),
+            remaining_args: vec![
+                temp_dir
+                    .path()
+                    .file_name()
+                    .expect("tmp dir isn't empty")
+                    .to_string_lossy()
+                    .to_string()
+                    + "/foo.scala",
+            ],
+        };
+
+        let rewrite_config = Default::default();
+        let ret = rewrite_command_line(
+            &mut passthrough_command_line,
+            &rewrite_config,
+            #[cfg(feature = "bazelfe-daemon")]
+            &mut None,
+            TestBazelQuery::success("foo\nbar".into()),
+        )
+        .await;
+
+        assert!(ret.is_ok(), "{:#?}", ret.err());
+        assert_eq!(
+            passthrough_command_line.action,
+            Some(Action::BuiltIn(BuiltInAction::Test))
+        )
+    }
+
+    #[tokio::test]
+    async fn test_build_file_rewrite() {
+        let temp_dir = tempfile::tempdir_in(".").expect("should be able to make a tempdir");
+        let build_path = temp_dir.path().join("BUILD");
+        let scala_path = temp_dir.path().join("foo.scala");
+
+        std::fs::File::create(&build_path).expect("should have created BUILD");
+        std::fs::File::create(&scala_path).expect("should have created foo.scala");
+
+        let mut passthrough_command_line = ParsedCommandLine {
+            bazel_binary: PathBuf::from("bazel"),
+            startup_options: Vec::default(),
+            action: Some(Action::Custom(CustomAction::BuildFile)),
+            action_options: Vec::default(),
+            remaining_args: vec![
+                temp_dir
+                    .path()
+                    .file_name()
+                    .expect("tmp dir isn't empty")
+                    .to_string_lossy()
+                    .to_string()
+                    + "/foo.scala",
+            ],
+        };
+
+        let rewrite_config = Default::default();
+        let ret = rewrite_command_line(
+            &mut passthrough_command_line,
+            &rewrite_config,
+            #[cfg(feature = "bazelfe-daemon")]
+            &mut None,
+            TestBazelQuery::success("foo\nbar".into()),
+        )
+        .await;
+
+        assert!(ret.is_ok(), "{:#?}", ret.err());
+        assert_eq!(
+            passthrough_command_line.action,
+            Some(Action::BuiltIn(BuiltInAction::Build))
+        )
     }
 }

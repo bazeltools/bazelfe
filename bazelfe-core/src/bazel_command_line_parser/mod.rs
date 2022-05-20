@@ -59,12 +59,14 @@ impl BazelOption {
 pub enum CustomAction {
     AutoTest,
     TestFile,
+    BuildFile,
 }
 impl CustomAction {
     pub fn action_for_options(&self) -> BuiltInAction {
         match self {
             CustomAction::AutoTest => BuiltInAction::Test,
             CustomAction::TestFile => BuiltInAction::Test,
+            CustomAction::BuildFile => BuiltInAction::Build,
         }
     }
 }
@@ -96,6 +98,7 @@ impl FromStr for Action {
         match input {
             "autotest" => Ok(Action::Custom(CustomAction::AutoTest)),
             "test_file" => Ok(Action::Custom(CustomAction::TestFile)),
+            "build_file" => Ok(Action::Custom(CustomAction::BuildFile)),
             _ => Err(()),
         }
     }
