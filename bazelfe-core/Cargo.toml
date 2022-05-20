@@ -89,13 +89,16 @@ flume = { version = "0.10.12", optional = true }
 trim-margin = { version = "0.1.0", optional = true }
 dashmap = { version = "5.2.0", optional = true }
 tui = { version = "0.18.0", default_features = false, features = ["crossterm"], optional = true }
-crossterm = { version = "0.23.2", optional = true }
+crossterm = { version = "0.23.2" }
 muncher = { version = "0.7.0", optional = true }
 humantime = "2.1.0"
 tempfile = { version = "3.3.0", optional = true }
 anyhow = "1.0.57"
 ignore = "0.4.18"
 tower = "0.4.12"
+tokio-signal = "0.2.9"
+mio = "0.8.3"
+ptyprocess = "0.3.0"
 
 
 [build-dependencies]
@@ -107,7 +110,7 @@ path = "../bazelfe-protos"
 
 [dependencies.futures]
 default-features = false
-features = ["alloc"]
+features = ["alloc", "bilock", "unstable"]
 version = "0.3.21"
 
 [dependencies.tokio]
@@ -131,7 +134,7 @@ tempfile = "3.3.0"
 [features]
 default = []
 dev-binaries = []
-autotest-action = ["tui", "crossterm", "muncher", "tempfile", "bazelfe-daemon"]
+autotest-action = ["tui", "muncher", "tempfile", "bazelfe-daemon"]
 bazelfe-daemon = ["notify", "tokio-serde", "flume", "trim-margin", "dashmap", "fork", "stdio-override"]
 
 [lib]

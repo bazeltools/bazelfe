@@ -1,12 +1,15 @@
+use ptyprocess::PtyProcess;
 use std::ffi::OsString;
+use std::path::Path;
 use std::process::Stdio;
 use std::sync::atomic::Ordering;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 
-use tokio::process::Command;
-
-static SUB_PROCESS_PID: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+// 0 == no sub process
+// -1 == don't send signals
+// > 0 == send signals
+static SUB_PROCESS_PID: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
 
 #[cfg(feature = "autotest-action")]
 mod auto_test_action;
@@ -21,8 +24,14 @@ pub use user_report_error::UserReportError;
 
 pub fn register_ctrlc_handler() {
     ctrlc::set_handler(move || {
-        let current_sub_process_pid: u32 = SUB_PROCESS_PID.load(Ordering::SeqCst);
-        info!("Received ctrl-c, state: {:?}", current_sub_process_pid);
+        let current_sub_process_pid: i32 = SUB_PROCESS_PID.load(Ordering::SeqCst);
+
+        let state = if current_sub_process_pid == 0 {
+            "Subprocess active"
+        } else {
+            "no subprocess active"
+        };
+        info!("Received ctrl-c, state: {:?}", state);
 
         // no subprocess_pid
         if current_sub_process_pid == 0 {
@@ -31,6 +40,15 @@ pub fn register_ctrlc_handler() {
                 current_sub_process_pid
             );
             std::process::exit(137);
+        } else if current_sub_process_pid > 0 {
+            // To ensure we killl any spawned of or exec'd sub processes get the grp and send the signal to everyone.
+            let child_pid = nix::unistd::Pid::from_raw(current_sub_process_pid);
+            if let Ok(grp) = nix::unistd::getpgid(Some(child_pid)) {
+                debug!("Sending kill signal to {:#?}", grp);
+                nix::sys::signal::killpg(grp, nix::sys::signal::Signal::SIGINT).unwrap();
+            }
+            debug!("Sending kill signal to {:#?}", &child_pid);
+            nix::sys::signal::kill(child_pid, nix::sys::signal::Signal::SIGINT).unwrap();
         }
     })
     .expect("Error setting Ctrl-C handler");
@@ -92,31 +110,20 @@ pub async fn execute_bazel(
     execute_bazel_output_control(bazel_command_line, bes_port, true).await
 }
 
-pub async fn execute_bazel_output_control(
-    bazel_command_line: &ParsedCommandLine,
-    bes_port: u16,
+// use tokio when we aren't dealing with a tty.
+async fn execute_tokio_subprocess(
+    command: &Path,
+    args: &Vec<OsString>,
     show_output: bool,
 ) -> Result<ExecuteResult, Box<dyn std::error::Error>> {
-    let mut bazel_command_line = bazel_command_line.clone();
+    use tokio::process::Command;
 
-    add_custom_args(&mut bazel_command_line, bes_port);
+    let mut cmd = Command::new(command);
 
-    debug!("{:#?}", bazel_command_line);
-
-    let args: Vec<OsString> = bazel_command_line
-        .all_args_normalized()?
-        .into_iter()
-        .map(|e| e.into())
-        .collect();
-
-    let mut cmd = Command::new(bazel_command_line.bazel_binary);
-
-    cmd.args(&args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    cmd.args(args).stdout(Stdio::piped()).stderr(Stdio::piped());
 
     let mut child: tokio::process::Child = cmd.spawn().expect("failed to start bazel process");
-    SUB_PROCESS_PID.store(child.id().unwrap(), Ordering::SeqCst);
+    SUB_PROCESS_PID.store(-1, Ordering::SeqCst);
 
     let mut child_stdout = child.stdout.take().expect("Child didn't have a stdout");
 
@@ -124,18 +131,14 @@ pub async fn execute_bazel_output_control(
         let mut buffer = [0; 1024];
         let mut stdout = tokio::io::stdout();
 
-        loop {
-            if let Ok(bytes_read) = child_stdout.read(&mut buffer[..]).await {
-                if bytes_read == 0 {
+        while let Ok(bytes_read) = child_stdout.read(&mut buffer[..]).await {
+            if bytes_read == 0 {
+                break;
+            }
+            if show_output {
+                if let Err(_) = stdout.write_all(&buffer[0..bytes_read]).await {
                     break;
                 }
-                if show_output {
-                    if let Err(_) = stdout.write_all(&buffer[0..bytes_read]).await {
-                        break;
-                    }
-                }
-            } else {
-                break;
             }
         }
     });
@@ -145,18 +148,14 @@ pub async fn execute_bazel_output_control(
     let stderr = tokio::spawn(async move {
         let mut buffer = [0; 1024];
         let mut stderr = tokio::io::stderr();
-        loop {
-            if let Ok(bytes_read) = child_stderr.read(&mut buffer[..]).await {
-                if bytes_read == 0 {
+        while let Ok(bytes_read) = child_stderr.read(&mut buffer[..]).await {
+            if bytes_read == 0 {
+                break;
+            }
+            if show_output {
+                if let Err(_) = stderr.write_all(&buffer[0..bytes_read]).await {
                     break;
                 }
-                if show_output {
-                    if let Err(_) = stderr.write_all(&buffer[0..bytes_read]).await {
-                        break;
-                    }
-                }
-            } else {
-                break;
             }
         }
     });
@@ -174,4 +173,88 @@ pub async fn execute_bazel_output_control(
         exit_code: result.code().unwrap_or_else(|| -1),
         errors_corrected: 0,
     })
+}
+
+async fn execute_sub_tty_process(
+    command: &Path,
+    args: &Vec<OsString>,
+) -> Result<ExecuteResult, Box<dyn std::error::Error>> {
+    use std::process::Command;
+    let mut cmd = Command::new(command);
+    cmd.args(&*args);
+
+    let child: PtyProcess = PtyProcess::spawn(cmd).expect("failed to start bazel process");
+
+    SUB_PROCESS_PID.store(child.pid().as_raw(), Ordering::SeqCst);
+
+    let mut child_stdout = tokio::fs::File::from_std(child.get_raw_handle().unwrap());
+
+    let stdout = tokio::spawn(async move {
+        let mut buffer = [0; 1024];
+        let mut stdout = tokio::io::stdout();
+
+        loop {
+            if let Ok(bytes_read) = child_stdout.read(&mut buffer[..]).await {
+                if bytes_read == 0 {
+                    break;
+                }
+                if let Err(_) = stdout.write_all(&buffer[0..bytes_read]).await {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+    });
+
+    let child_complete: ptyprocess::WaitStatus = tokio::task::spawn_blocking(move || {
+        let r = child.wait();
+        r
+    })
+    .await
+    .expect("The command wasn't running")?;
+
+    SUB_PROCESS_PID.store(0, Ordering::SeqCst);
+
+    // These tasks can/will fail when a chained process or otherwise can close the input/output pipe.
+    // e.g. bazel help test | head -n 5
+    // would cause stdout to fail here.
+    let _ = stdout.await;
+
+    let exit_code = if let ptyprocess::WaitStatus::Exited(_pid, code) = child_complete {
+        code
+    } else {
+        -1
+    };
+    Ok(ExecuteResult {
+        exit_code,
+        errors_corrected: 0,
+    })
+}
+
+pub async fn execute_bazel_output_control(
+    bazel_command_line: &ParsedCommandLine,
+    bes_port: u16,
+    show_output: bool,
+) -> Result<ExecuteResult, Box<dyn std::error::Error>> {
+    let mut bazel_command_line = bazel_command_line.clone();
+
+    add_custom_args(&mut bazel_command_line, bes_port);
+
+    debug!("{:#?}", bazel_command_line);
+
+    let args: Vec<OsString> = bazel_command_line
+        .all_args_normalized()?
+        .into_iter()
+        .map(|e| e.into())
+        .collect();
+
+    use crossterm::tty::IsTty;
+    use std::io::stdout;
+
+    if show_output && stdout().is_tty() {
+        execute_sub_tty_process(&bazel_command_line.bazel_binary, &args).await
+    } else {
+        execute_tokio_subprocess(&bazel_command_line.bazel_binary, &args, show_output).await
+    }
 }
