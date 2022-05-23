@@ -190,7 +190,7 @@ async fn execute_sub_tty_process(
     let mut child_stdout = tokio::fs::File::from_std(child.get_raw_handle().unwrap());
 
     let stdout = tokio::spawn(async move {
-        let mut buffer = [0; 1024];
+        let mut buffer = [0; 512];
         let mut stdout = tokio::io::stdout();
 
         loop {
@@ -199,6 +199,9 @@ async fn execute_sub_tty_process(
                     break;
                 }
                 if let Err(_) = stdout.write_all(&buffer[0..bytes_read]).await {
+                    break;
+                }
+                if let Err(_) = stdout.flush().await {
                     break;
                 }
             } else {
