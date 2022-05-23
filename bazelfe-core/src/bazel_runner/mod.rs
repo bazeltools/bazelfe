@@ -1,5 +1,7 @@
 use ptyprocess::PtyProcess;
 use std::ffi::OsString;
+use std::io::Read;
+use std::io::Write;
 use std::path::Path;
 use std::process::Stdio;
 use std::sync::atomic::Ordering;
@@ -187,21 +189,21 @@ async fn execute_sub_tty_process(
 
     SUB_PROCESS_PID.store(child.pid().as_raw(), Ordering::SeqCst);
 
-    let mut child_stdout = tokio::fs::File::from_std(child.get_raw_handle().unwrap());
+    let mut child_fd = child.get_raw_handle().unwrap();
 
-    let stdout = tokio::spawn(async move {
-        let mut buffer = [0; 512];
-        let mut stdout = tokio::io::stdout();
+    let stderr = tokio::task::spawn_blocking(move || {
+        let mut buffer = [0; 2048];
+        let mut stderr = std::io::stderr();
 
         loop {
-            if let Ok(bytes_read) = child_stdout.read(&mut buffer[..]).await {
+            if let Ok(bytes_read) = child_fd.read(&mut buffer[..]) {
                 if bytes_read == 0 {
                     break;
                 }
-                if let Err(_) = stdout.write_all(&buffer[0..bytes_read]).await {
+                if let Err(_) = stderr.write_all(&buffer[0..bytes_read]) {
                     break;
                 }
-                if let Err(_) = stdout.flush().await {
+                if let Err(_) = stderr.flush() {
                     break;
                 }
             } else {
@@ -222,7 +224,7 @@ async fn execute_sub_tty_process(
     // These tasks can/will fail when a chained process or otherwise can close the input/output pipe.
     // e.g. bazel help test | head -n 5
     // would cause stdout to fail here.
-    let _ = stdout.await;
+    let _ = stderr.await;
 
     let exit_code = if let ptyprocess::WaitStatus::Exited(_pid, code) = child_complete {
         code
