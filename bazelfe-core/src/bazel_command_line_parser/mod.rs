@@ -26,7 +26,7 @@ impl BazelOption {
                 }
             }
             BazelOption::OptionWithArg(nme, arg) => {
-                vec![format!("--{}", nme), arg.to_string()]
+                vec![format!("--{}={}", nme, arg)]
             }
         }
     }
@@ -197,6 +197,10 @@ fn extract_set_of_flags<'a, I: Iterator<Item = &'a String>>(
         if let Some(nxt) = peek_str {
             let mut trimmed = nxt.trim();
 
+            if trimmed == "--" {
+                break 'outer_loop;
+            }
+
             if trimmed.starts_with("--") {
                 let mut value: Option<String> = None;
                 trimmed = &trimmed[2..];
@@ -259,6 +263,28 @@ fn extract_set_of_flags<'a, I: Iterator<Item = &'a String>>(
                             }
                         }
                     }
+                }
+
+                // Custom bazel settings handling
+                if let Some(without_no) = trimmed.strip_prefix("no") {
+                    // Boolean setting with custom options
+                    if without_no.starts_with("//") || without_no.starts_with("@") {
+                        result.push(BazelOption::BooleanOption(without_no.to_string(), false));
+                        iter.next();
+                        continue 'outer_loop;
+                    }
+                }
+                if trimmed.starts_with("//") || trimmed.starts_with("@") {
+                    if let Some(v) = value.as_ref() {
+                        result.push(BazelOption::option_with_arg(
+                            trimmed.to_string(),
+                            v.to_string(),
+                        ));
+                    } else {
+                        result.push(BazelOption::BooleanOption(trimmed.to_string(), true));
+                    }
+                    iter.next();
+                    continue 'outer_loop;
                 }
 
                 // We found no matching option
@@ -440,10 +466,8 @@ mod tests {
         assert_eq!(result.remaining_args, remaining_expected);
 
         let expected_args: Vec<String> = vec![
-            "--host_jvm_args".to_string(),
-            "foobarbaz".to_string(),
-            "--output_base".to_string(),
-            "/tmp/foo build".to_string(),
+            "--host_jvm_args=foobarbaz".to_string(),
+            "--output_base=/tmp/foo build".to_string(),
             "test".to_string(),
             "--keep_going".to_string(),
             "--".to_string(),
@@ -557,11 +581,65 @@ mod tests {
         assert_eq!(result.remaining_args, remaining_expected);
 
         let expected_args: Vec<String> = vec![
-            "--host_jvm_args".to_string(),
-            "foobarbaz".to_string(),
-            "--output_base".to_string(),
-            "/tmp/foo build".to_string(),
+            "--host_jvm_args=foobarbaz".to_string(),
+            "--output_base=/tmp/foo build".to_string(),
             "test".to_string(),
+            "--keep_going".to_string(),
+            "--".to_string(),
+            "bar".to_string(),
+        ];
+        assert_eq!(
+            result.all_args_normalized().expect("Can reproduce args"),
+            expected_args
+        );
+    }
+
+    #[tokio::test]
+    async fn parse_bazel_command_line_5() {
+        let passthrough_command_line = vec![
+            "bazel".to_string(),
+            "--host_jvm_args=\"foobarbaz\"".to_string(),
+            "--output_base=/tmp/foo build".to_string(),
+            "test".to_string(),
+            "--//foo/bar/baz=33".to_string(),
+            "--no//foo/bar/bam".to_string(),
+            "--//foo/bar/bauz".to_string(),
+            "bar".to_string(),
+            "--keep_going".to_string(),
+        ];
+
+        let result = parse_bazel_command_line(&passthrough_command_line)
+            .expect("Should be able to parse the cmd line");
+
+        let expected_startup_options: Vec<BazelOption> = vec![
+            BazelOption::OptionWithArg(String::from("host_jvm_args"), String::from("foobarbaz")),
+            BazelOption::OptionWithArg(String::from("output_base"), String::from("/tmp/foo build")),
+        ];
+
+        assert_eq!(result.startup_options, expected_startup_options);
+
+        assert_eq!(result.action, Some(Action::BuiltIn(BuiltInAction::Test)));
+
+        let expected_action_options: Vec<BazelOption> = vec![
+            BazelOption::OptionWithArg(String::from("//foo/bar/baz"), String::from("33")),
+            BazelOption::BooleanOption(String::from("//foo/bar/bam"), false),
+            BazelOption::BooleanOption(String::from("//foo/bar/bauz"), true),
+            BazelOption::BooleanOption(String::from("keep_going"), true),
+        ];
+
+        assert_eq!(result.action_options, expected_action_options);
+
+        let remaining_expected: Vec<String> = vec!["bar".to_string()];
+
+        assert_eq!(result.remaining_args, remaining_expected);
+
+        let expected_args: Vec<String> = vec![
+            "--host_jvm_args=foobarbaz".to_string(),
+            "--output_base=/tmp/foo build".to_string(),
+            "test".to_string(),
+            "--//foo/bar/baz=33".to_string(),
+            "--no//foo/bar/bam".to_string(),
+            "--//foo/bar/bauz".to_string(),
             "--keep_going".to_string(),
             "--".to_string(),
             "bar".to_string(),
