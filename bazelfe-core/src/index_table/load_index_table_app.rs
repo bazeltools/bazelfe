@@ -24,7 +24,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     for f in opt.files.iter() {
         let mut file = std::fs::File::open(&f).unwrap();
 
-        let index_table = bazelfe_core::index_table::IndexTable::read(&mut file);
+        let index_table = bazelfe_core::index_table::IndexTable::read(&mut file)
+            .expect("Should be able to read table");
         let debug_table = index_table.to_debug_table().await;
 
         if opt.targets_only {
