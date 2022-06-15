@@ -577,7 +577,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let index_table = if running_refresh_mode && opt.index_output_location.exists() {
         let mut src_f = std::fs::File::open(&opt.index_output_location).unwrap();
-        bazelfe_core::index_table::IndexTable::read(&mut src_f)
+        bazelfe_core::index_table::IndexTable::read(&mut src_f).unwrap_or_default()
     } else {
         bazelfe_core::index_table::IndexTable::default()
     };

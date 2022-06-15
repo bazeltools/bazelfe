@@ -26,6 +26,9 @@ struct Opt {
 
     #[clap(long)]
     config: Option<String>,
+
+    #[clap(long, parse(from_os_str))]
+    validate_index_file: Option<PathBuf>,
 }
 
 fn passthrough_to_bazel(opt: Opt) {
@@ -64,6 +67,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let opt = Opt::parse();
 
+    if let Some(index_file_path) = &opt.validate_index_file {
+        let mut src_f = std::fs::File::open(index_file_path.clone()).unwrap();
+        return match bazelfe_core::index_table::IndexTable::read(&mut src_f) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(format!(
+                "Failed to parse index file @ {:?}, error\n:{:?}",
+                index_file_path, e
+            )
+            .into()),
+        };
+    }
     // TODO IN HERE,
     // fixed actions we intercept
     // bail of a bes_backend is already configured.

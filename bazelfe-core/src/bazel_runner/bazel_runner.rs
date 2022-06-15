@@ -88,7 +88,7 @@ impl BazelRunner {
             Some(p) => {
                 if p.exists() {
                     let mut src_f = std::fs::File::open(p).unwrap();
-                    crate::index_table::IndexTable::read(&mut src_f)
+                    crate::index_table::IndexTable::read(&mut src_f).unwrap_or_default()
                 } else {
                     crate::index_table::IndexTable::new()
                 }

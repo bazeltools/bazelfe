@@ -214,7 +214,7 @@ impl<'a> IndexTable {
         file.flush().unwrap();
     }
 
-    pub fn read<R>(rdr: &mut R) -> IndexTable
+    pub fn read<R>(rdr: &mut R) -> Result<IndexTable, Box<dyn std::error::Error>>
     where
         R: Read,
     {
@@ -225,8 +225,7 @@ impl<'a> IndexTable {
 
         let signature = rdr.read_u64::<LittleEndian>().unwrap();
         if signature != 7654323579 {
-            error!("Invalid signature: {}, expected: 7654323579. Indicates corruption/bad file. Will continue without.", signature);
-            return IndexTable::default();
+            return Err(format!("Invalid signature: {}, expected: 7654323579. Indicates corruption/bad file. Will continue without.", signature).into());
         }
         let file_version_number = rdr.read_u16::<LittleEndian>().unwrap();
 
@@ -304,7 +303,7 @@ impl<'a> IndexTable {
 
         debug!("Finished parsing..");
 
-        Self {
+        Ok(Self {
             tbl_map: Arc::new(RwLock::new(tbl_map)),
             id_to_ctime: Arc::new(RwLock::new(id_to_ctime)),
             id_to_popularity: Arc::new(RwLock::new(id_to_popularity)),
@@ -313,7 +312,7 @@ impl<'a> IndexTable {
             id_to_target_reverse_map: Arc::new(RwLock::new(reverse_hashmap)),
             mutated: Arc::new(AtomicBool::new(false)),
             target_blacklist: Arc::new(RwLock::new(target_blacklist)),
-        }
+        })
     }
 
     pub async fn index_jar(
