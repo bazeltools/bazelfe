@@ -660,7 +660,7 @@ mod tests {
 
         cursor.set_position(0);
 
-        let table = IndexTable::read(&mut cursor);
+        let table = IndexTable::read(&mut cursor).expect("Should be able to read the table.");
         assert_eq!(
             table
                 .get("javax.annotation.Noof")
