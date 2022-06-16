@@ -32,15 +32,15 @@ pub async fn graph_query<B: BazelQuery + ?Sized, Q: AsRef<str>>(
     Ok(blaze_query::QueryResult::decode(&*res.stdout_raw)?)
 }
 
-pub async fn r_deps(
+pub async fn allrdeps(
     bazel_query: Arc<Mutex<Box<dyn BazelQuery>>>,
     target: &str,
 ) -> Result<HashSet<String>, Box<dyn std::error::Error>> {
     let bazel_query = bazel_query.lock().await;
     let dependencies_calculated = crate::bazel_query::graph_query(
         bazel_query.as_ref(),
-        &format!("rdeps({}, //...)", target),
-        &["--noimplicit_deps"],
+        &format!("allrdeps({})", target),
+        &["--noimplicit_deps", "--universe_scope=//..."],
         false,
     )
     .await?;
@@ -86,7 +86,7 @@ pub trait BazelQueryEngine: Send + Sync + std::fmt::Debug {
         edge_dest: &str,
     ) -> Result<bool, Box<dyn std::error::Error>>;
 
-    async fn r_deps(
+    async fn allrdeps(
         self: &Self,
         target: &str,
     ) -> Result<HashSet<String>, Box<dyn std::error::Error>>;
@@ -107,11 +107,11 @@ impl RealBazelQueryEngine {
 
 #[async_trait::async_trait]
 impl BazelQueryEngine for RealBazelQueryEngine {
-    async fn r_deps(
+    async fn allrdeps(
         self: &Self,
         target: &str,
     ) -> Result<HashSet<String>, Box<dyn std::error::Error>> {
-        let res_set = r_deps(Arc::clone(&self.query), target).await?;
+        let res_set = allrdeps(Arc::clone(&self.query), target).await?;
 
         Ok(res_set)
     }
@@ -121,7 +121,7 @@ impl BazelQueryEngine for RealBazelQueryEngine {
         edge_src: &str,
         edge_dest: &str,
     ) -> Result<bool, Box<dyn std::error::Error>> {
-        let res_set = r_deps(Arc::clone(&self.query), edge_dest).await?;
+        let res_set = allrdeps(Arc::clone(&self.query), edge_dest).await?;
 
         // info!("When looking for edges from {} to {}, we found edges: {:#?}", edge_src, edge_dest, res_set);
 

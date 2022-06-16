@@ -222,7 +222,7 @@ async fn inner_process_missing_dependency_errors<'a, T: Buildozer>(
     let label = crate::label_utils::sanitize_label(String::from(label));
 
     let target_rdeps = bazel_query_engine
-        .r_deps(&label)
+        .allrdeps(&label)
         .await
         .unwrap_or(HashSet::default());
     let mut total_added = 0;
