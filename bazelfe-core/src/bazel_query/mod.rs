@@ -39,7 +39,7 @@ pub async fn r_deps(
     let bazel_query = bazel_query.lock().await;
     let dependencies_calculated = crate::bazel_query::graph_query(
         bazel_query.as_ref(),
-        &format!("r_deps({})", target),
+        &format!("rdeps({})", target),
         &["--noimplicit_deps"],
         false,
     )
