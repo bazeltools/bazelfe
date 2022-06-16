@@ -411,7 +411,7 @@ mod tests {
             Ok(false)
         }
 
-        async fn r_deps(
+        async fn allrdeps(
             self: &Self,
             _target: &str,
         ) -> Result<HashSet<String>, Box<dyn std::error::Error>> {
