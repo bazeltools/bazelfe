@@ -66,17 +66,6 @@ struct Opt {
     #[clap(long)]
     extra_allowed_rule_kinds: Option<Vec<String>>,
 
-    /// An optional bazel deps root, something like `@third_party_jvm`
-    /// when present we will use this root to try calculate the mapping of a bazel deps
-    /// to underlying raw jar. Then apply that reverse mapping so missing dependencies/the index built
-    /// will use the bazel deps entry rather than the raw jar.
-    #[clap(long)]
-    bazel_deps_root: Option<String>,
-
-    /// Refresh bazel deps only
-    #[clap(long)]
-    refresh_bazel_deps_only: bool,
-
     /// Blacklist out these targets. Usually this matters when 3rdparty targets are poorly behaved and are not fully shaded
     /// and may include classes from other targets.
     #[clap(long)]
@@ -267,122 +256,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bazel_query =
         bazelfe_core::jvm_indexer::bazel_query::from_binary_path(&opt.bazel_binary_path);
 
-    let bazel_deps_replacement_map: HashMap<String, String> = match &opt.bazel_deps_root {
-        None => HashMap::default(),
-        Some(bazel_deps_root) => {
-            info!("Asked to find out information about a bazel_deps root for replacement, issuing queries");
-            let targets_in_bazel_deps_root = bazel_query
-                .execute(&vec![
-                    String::from("query"),
-                    format!("{}//3rdparty/jvm/...", bazel_deps_root),
-                    String::from("--keep_going"),
-                ])
-                .await;
-
-            info!("Graph query now starting");
-            let bazel_deps_deps = bazel_query
-                .execute(&vec![
-                    String::from("query"),
-                    String::from("--noimplicit_deps"),
-                    format!("deps({}//3rdparty/jvm/...)", bazel_deps_root),
-                    String::from("--output"),
-                    String::from("graph"),
-                    String::from("--keep_going"),
-                ])
-                .await;
-
-            let bazel_deps = {
-                let mut bazel_deps = HashSet::new();
-                for ln in targets_in_bazel_deps_root.stdout.lines() {
-                    bazel_deps.insert(ln);
-                }
-                bazel_deps
-            };
-            let mut mapping = HashMap::new();
-            for ln in bazel_deps_deps.stdout.lines() {
-                if ln.contains(" -> ") {
-                    let elements: Vec<&str> = ln.split(" -> ").collect();
-                    if elements.len() > 1 {
-                        let src = elements[0].trim();
-                        let dest = elements[1].trim();
-
-                        let e = mapping
-                            .entry(src.replace("\"", "").to_string())
-                            .or_insert_with(Vec::default);
-                        e.push(dest.replace("\"", ""));
-                    }
-                }
-            }
-
-            let mut results_mapping = HashMap::new();
-            for bazel_dep in bazel_deps {
-                if let Some(values) = mapping.get(&bazel_dep.to_string()) {
-                    let mut values = values.clone();
-                    while !values.is_empty() {
-                        let e = values.pop().unwrap();
-                        if e.starts_with('@')
-                            && (e.ends_with("//jar:jar")
-                                || e.ends_with("//jar:file")
-                                || e.ends_with("//jar"))
-                        {
-                            if let Some(prefix) = e.split("//").next() {
-                                results_mapping
-                                    .insert(format!("{}//jar:jar", prefix), bazel_dep.to_string());
-                                results_mapping
-                                    .insert(format!("{}//jar:file", prefix), bazel_dep.to_string());
-                            }
-                        } else if e.starts_with("//external") {
-                            if let Some(r) = mapping.get(&e) {
-                                values.extend(r.clone().into_iter());
-                            }
-                        }
-                    }
-                }
-            }
-            results_mapping
-        }
-    };
-
     let union_with_spaces_bytes = " union ".as_bytes();
 
-    let all_targets_to_use = if opt.refresh_bazel_deps_only {
-        running_refresh_mode = true;
-        let mut all_targets_to_use: HashMap<String, HashSet<String>> = HashMap::default();
-        let merged = {
-            let mut buffer = Vec::default();
-
-            for x in bazel_deps_replacement_map.keys() {
-                if buffer.is_empty() {
-                    buffer.write_all(x.as_bytes()).unwrap();
-                } else {
-                    buffer.write_all(union_with_spaces_bytes).unwrap();
-                    buffer.write_all(x.as_bytes()).unwrap();
-                }
-            }
-            String::from_utf8(buffer).unwrap()
-        };
-        let res = bazel_query
-            .execute(&vec![
-                String::from("query"),
-                String::from("--keep_going"),
-                String::from("--noimplicit_deps"),
-                String::from("--output"),
-                String::from("label_kind"),
-                merged,
-            ])
-            .await;
-
-        for ln in res.stdout.lines() {
-            let entries: Vec<&str> = ln.split_whitespace().collect();
-            if entries.len() == 3 {
-                let entry = all_targets_to_use
-                    .entry(entries[0].to_string())
-                    .or_insert_with(HashSet::default);
-                entry.insert(entries[2].to_string());
-            }
-        }
-        all_targets_to_use
-    } else {
+    let all_targets_to_use = {
         info!("Executing initial query to find all external repos in this bazel repository");
 
         let res = bazel_query
@@ -604,10 +480,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         index_table.set_popularity_str(k, v as u16).await
     }
 
-    for (k, v) in bazel_deps_replacement_map {
-        index_table.add_transformation_mapping(k, v).await;
-    }
-
     let default_port = {
         let rand_v: u16 = rng.gen();
         40000 + (rand_v % 3000)
@@ -724,17 +596,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut file = std::fs::File::create(&opt.index_output_location).unwrap();
 
     index_table.write(&mut file).await;
-
-    // When operating on bazel deps the number of targets we feed into build isn't filtered to the particular types
-    // this means we wind up not building everything since some don't show up in the BEP.
-    if !opt.refresh_bazel_deps_only {
-        let tt_map = target_completed_tracker.expected_targets.lock().await;
-        for e in tt_map.iter() {
-            if e.starts_with("//") {
-                println!("Didn't build target: {}", e);
-            }
-        }
-    }
 
     Ok(())
 }

@@ -31,7 +31,6 @@ pub struct IndexTable {
     tbl_map: Arc<RwLock<HashMap<String, IndexTableValue>>>,
     id_to_ctime: Arc<RwLock<Vec<u64>>>,
     id_to_popularity: Arc<RwLock<Vec<u16>>>,
-    id_to_replacement_id: Arc<RwLock<HashMap<usize, usize>>>,
     id_to_target_vec: Arc<RwLock<Vec<Arc<Vec<u8>>>>>,
     id_to_target_reverse_map: Arc<RwLock<HashMap<Arc<Vec<u8>>, usize>>>,
     mutated: Arc<AtomicBool>,
@@ -53,7 +52,6 @@ impl<'a> IndexTable {
             tbl_map: Arc::new(RwLock::new(HashMap::new())),
             id_to_ctime: Arc::new(RwLock::new(Vec::new())),
             id_to_popularity: Arc::new(RwLock::new(Vec::new())),
-            id_to_replacement_id: Arc::new(RwLock::new(HashMap::new())),
             id_to_target_vec: Arc::new(RwLock::new(Vec::new())),
             id_to_target_reverse_map: Arc::new(RwLock::new(HashMap::new())),
             mutated: Arc::new(AtomicBool::new(false)),
@@ -96,24 +94,6 @@ impl<'a> IndexTable {
         lock.insert(id);
     }
 
-    pub async fn add_transformation_mapping(&self, src_str: String, dest_str: String) {
-        let src_id = self.maybe_insert_target_string(src_str).await;
-        let dest_id = self.maybe_insert_target_string(dest_str).await;
-        let blacklist = self.target_blacklist.read().await;
-        if !blacklist.contains(&dest_id) {
-            let mut lock = self.id_to_replacement_id.write().await;
-            lock.insert(src_id, dest_id);
-        }
-    }
-
-    /// use the replacement map to maybe change the target key into a replacement one via a transform mapping.
-    pub async fn maybe_update_id(&self, src_id: usize) -> usize {
-        let lock = self.id_to_replacement_id.read().await;
-        match lock.get(&src_id) {
-            Some(dest) => *dest,
-            None => src_id,
-        }
-    }
     pub async fn get_popularity(&self, label_id: usize) -> u16 {
         let lock = self.id_to_popularity.read().await;
         if label_id >= lock.len() {
@@ -146,7 +126,7 @@ impl<'a> IndexTable {
     {
         let mut file = std::io::BufWriter::with_capacity(512 * 1024, file);
 
-        file.write_u64::<LittleEndian>(7654323579_u64).unwrap();
+        file.write_u64::<LittleEndian>(7654323333_u64).unwrap();
         file.write_u16::<LittleEndian>(1_u16).unwrap();
 
         let _ = {
@@ -196,14 +176,6 @@ impl<'a> IndexTable {
             file.write_u16::<LittleEndian>(*e).unwrap();
         }
 
-        let id_to_replacement_id = self.id_to_replacement_id.read().await;
-        file.write_u64::<LittleEndian>(id_to_replacement_id.len() as u64)
-            .unwrap();
-        for (k, v) in id_to_replacement_id.iter() {
-            file.write_u64::<LittleEndian>(*k as u64).unwrap();
-            file.write_u64::<LittleEndian>(*v as u64).unwrap();
-        }
-
         let target_blacklist = self.target_blacklist.read().await;
         file.write_u64::<LittleEndian>(target_blacklist.len() as u64)
             .unwrap();
@@ -224,8 +196,8 @@ impl<'a> IndexTable {
         let mut rdr = BufReader::with_capacity(512 * 1024, rdr);
 
         let signature = rdr.read_u64::<LittleEndian>().unwrap();
-        if signature != 7654323579 {
-            return Err(format!("Invalid signature: {}, expected: 7654323579. Indicates corruption/bad file. Will continue without.", signature).into());
+        if signature != 7654323333 {
+            return Err(format!("Invalid signature: {}, expected: 7654323333. Indicates corruption/bad file. Will continue without.", signature).into());
         }
         let file_version_number = rdr.read_u16::<LittleEndian>().unwrap();
 
@@ -278,16 +250,6 @@ impl<'a> IndexTable {
             id_to_popularity.push(popularity);
         }
 
-        debug!("Complete id_to_popularity");
-        let id_to_replacement_id_size = rdr.read_u64::<LittleEndian>().unwrap();
-        let mut id_to_replacement_id = HashMap::default();
-        for _ in 0..id_to_replacement_id_size {
-            let k = rdr.read_u64::<LittleEndian>().unwrap();
-            let v = rdr.read_u64::<LittleEndian>().unwrap();
-            id_to_replacement_id.insert(k as usize, v as usize);
-        }
-        debug!("Complete id_to_replacement_id");
-
         let target_blacklist = if file_version_number >= 1 {
             let target_blacklist_size = rdr.read_u64::<LittleEndian>().unwrap();
             let mut target_blacklist = HashSet::default();
@@ -307,7 +269,6 @@ impl<'a> IndexTable {
             tbl_map: Arc::new(RwLock::new(tbl_map)),
             id_to_ctime: Arc::new(RwLock::new(id_to_ctime)),
             id_to_popularity: Arc::new(RwLock::new(id_to_popularity)),
-            id_to_replacement_id: Arc::new(RwLock::new(id_to_replacement_id)),
             id_to_target_vec: Arc::new(RwLock::new(index_buf)),
             id_to_target_reverse_map: Arc::new(RwLock::new(reverse_hashmap)),
             mutated: Arc::new(AtomicBool::new(false)),
@@ -393,7 +354,6 @@ impl<'a> IndexTable {
             }
 
             let mut jvm_segments_indexed = 0;
-            let key_id = self.maybe_update_id(key_id).await;
 
             let popularity = self.get_popularity(key_id).await;
 
@@ -471,7 +431,6 @@ impl<'a> IndexTable {
             tbl_map: Arc::new(RwLock::new(tbl_map)),
             id_to_ctime: Arc::new(RwLock::new(Vec::default())),
             id_to_popularity: Arc::new(RwLock::new(Vec::default())),
-            id_to_replacement_id: Arc::new(RwLock::new(HashMap::default())),
             id_to_target_vec: Arc::new(RwLock::new(id_to_target_vec)),
             id_to_target_reverse_map: Arc::new(RwLock::new(id_to_target_reverse_map)),
             mutated: Arc::new(AtomicBool::new(false)),
