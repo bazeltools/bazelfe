@@ -13,22 +13,36 @@ use std::{collections::HashMap, sync::Arc, time::Instant};
 use super::CurrentState;
 #[derive(Clone, PartialEq, Debug)]
 
-enum BazelCorrectionCommand {
+pub enum BazelCorrectionCommand {
     BuildozerRemoveDep(BuildozerRemoveDepCmd),
     BuildozerRemoveDepLike(BuildozerRemoveDepLikeCmd),
 }
+
+impl BazelCorrectionCommand {
+    pub fn label(&self) -> &str {
+match self {
+    BazelCorrectionCommand::BuildozerRemoveDep(rd) => rd.target_to_operate_on.as_str(),
+    BazelCorrectionCommand::BuildozerRemoveDepLike(rdl) => rdl.target_to_operate_on.as_str(),
+}
+    }
+}
 #[derive(Clone, PartialEq, Debug)]
-struct BuildozerRemoveDepCmd {
+pub struct BuildozerRemoveDepCmd {
     pub target_to_operate_on: String,
     pub dependency_to_remove: String,
     pub why: String,
+    // These are potentially user means to do the change
+    // so we should undo them if bazelfe added it. Otherwise leave it alone
+    pub only_if_bazelfe_added: bool,
 }
 
 #[derive(Clone, PartialEq, Debug)]
-struct BuildozerRemoveDepLikeCmd {
+pub struct BuildozerRemoveDepLikeCmd {
     pub target_to_operate_on: String,
     pub dep_like: String,
     pub why: String,
+    // Things that the user may be meaning to do and can fix themselves.
+    pub only_if_bazelfe_added: bool
 }
 
 struct BadDep<'a> {
@@ -61,6 +75,7 @@ fn extract_external_build_not_found(
                         target_to_operate_on: bad_dep.used_in.to_string(),
                         dep_like: bad_dep.bad_dep.to_string(),
                         why: String::from("BUILD does not exist"),
+                        only_if_bazelfe_added: false
                     });
 
                 command_stream.push(correction);
@@ -106,6 +121,7 @@ fn extract_build_not_found(
                         target_to_operate_on: operate_on.to_string(),
                         dep_like: format!("//{}", dep_like),
                         why: String::from("BUILD does not exist"),
+                        only_if_bazelfe_added: false
                     });
                 command_stream.push(correction);
             }
@@ -153,6 +169,7 @@ fn extract_target_does_not_exist(
                             target_to_operate_on: bad_dep.used_in.to_string(),
                             dependency_to_remove: bad_dep.bad_dep.to_string(),
                             why: String::from("Dependency on does not exist"),
+                            only_if_bazelfe_added: false
                         });
                     command_stream.push(correction);
                 }
@@ -217,6 +234,7 @@ fn extract_target_not_declared_in_package(
                         target_to_operate_on: bad_dep.used_in.to_string(),
                         dependency_to_remove: bad_dep.bad_dep.to_string(),
                         why: String::from("Dependency on does not exist"),
+                        only_if_bazelfe_added: false
                     });
                 command_stream.push(correction);
             }
@@ -251,6 +269,7 @@ fn extract_target_not_visible(
                         BazelCorrectionCommand::BuildozerRemoveDep(BuildozerRemoveDepCmd {
                             target_to_operate_on: src_target.to_string(),
                             dependency_to_remove: offending_dependency.to_string(),
+                            only_if_bazelfe_added: true,
                             why: String::from(
                                 "Target dependended on is not visible from the current target",
                             ),
@@ -316,6 +335,7 @@ async fn extract_added_cycle_in_dependency_graph(
                                 BazelCorrectionCommand::BuildozerRemoveDep(BuildozerRemoveDepCmd {
                                     target_to_operate_on,
                                     dependency_to_remove,
+                                    only_if_bazelfe_added: false,
                                     why: String::from("There is a cyclic dependency, so attempting to unwind/remove dependencies")
                                 });
                             command_stream.push(correction);
@@ -340,7 +360,8 @@ async fn extract_added_cycle_in_dependency_graph(
     }
 }
 
-async fn apply_candidates<T: Buildozer + Clone + Send + Sync + 'static>(
+pub async fn apply_candidates<T: Buildozer + Clone + Send + Sync + 'static>(
+    current_state: &mut CurrentState,
     candidate_correction_commands: Vec<BazelCorrectionCommand>,
     buildozer: T,
 ) -> super::Response {
@@ -353,6 +374,7 @@ async fn apply_candidates<T: Buildozer + Clone + Send + Sync + 'static>(
             BazelCorrectionCommand::BuildozerRemoveDepLike(buildozer_remove_deplike) => {
                 let dep_like = buildozer_remove_deplike.dep_like;
                 let target_to_operate_on = buildozer_remove_deplike.target_to_operate_on;
+
                 // otherwise... add the dependency with buildozer here
                 // then add it ot the local seen dependencies
                 info!(
@@ -367,10 +389,10 @@ async fn apply_candidates<T: Buildozer + Clone + Send + Sync + 'static>(
                         for dep in deps_for_target.into_iter() {
                             if dep.contains(&dep_like) {
                                 let buildozer_res = buildozer
-                                    .remove_from(&attr, &target_to_operate_on, &dep)
+                                    .remove_if_present_from(&attr, &target_to_operate_on, &dep)
                                     .await;
                                 match buildozer_res {
-                                    Ok(_) => {
+                                    Ok(true) => {
                                         target_stories.push(super::TargetStory {
                                             target: target_to_operate_on.clone(),
                                             action: super::TargetStoryAction::RemovedDependency {
@@ -380,6 +402,7 @@ async fn apply_candidates<T: Buildozer + Clone + Send + Sync + 'static>(
                                             when: Instant::now(),
                                         });
                                     }
+                                    Ok(false) => (),
                                     Err(_) => info!("Buildozer remove_dep command failed"),
                                 }
                             }
@@ -392,6 +415,13 @@ async fn apply_candidates<T: Buildozer + Clone + Send + Sync + 'static>(
             BazelCorrectionCommand::BuildozerRemoveDep(buildozer_remove_dep) => {
                 let dependency_to_remove = buildozer_remove_dep.dependency_to_remove;
                 let target_to_operate_on = buildozer_remove_dep.target_to_operate_on;
+                let only_if_bazelfe_added = buildozer_remove_dep.only_if_bazelfe_added;
+                let added_by_bazelfe =  current_state.added_target_for_class.values().any(|e| e.contains(&dependency_to_remove));
+
+                if only_if_bazelfe_added && !added_by_bazelfe {
+                    continue;
+                }
+
                 // otherwise... add the dependency with buildozer here
                 // then add it ot the local seen dependencies
                 debug!(
@@ -423,11 +453,23 @@ async fn apply_candidates<T: Buildozer + Clone + Send + Sync + 'static>(
     }
     super::Response::new(target_stories)
 }
-pub async fn process_progress<T: Buildozer + Clone + Send + Sync + 'static>(
-    buildozer: T,
+
+fn group_correction_commands(candidate_correction_commands: Vec<BazelCorrectionCommand>) -> HashMap<String, Vec<BazelCorrectionCommand>> {
+    let mut res = HashMap::default();
+        for e in candidate_correction_commands {
+            let existing = {
+                let entry = res.entry(e.label().to_string());
+                entry.or_insert(Vec::default())
+            };
+            existing.push(e);
+        }
+
+        res
+}
+pub async fn extract_progress(
     bazel_progress_error_info: &ProgressEvt,
     previous_global_seen: Arc<RwLock<HashMap<String, Arc<Mutex<CurrentState>>>>>,
-) -> super::Response {
+) -> HashMap<String, Vec<BazelCorrectionCommand>> {
     let mut candidate_correction_commands: Vec<BazelCorrectionCommand> = vec![];
 
     extract_added_cycle_in_dependency_graph(
@@ -452,19 +494,20 @@ pub async fn process_progress<T: Buildozer + Clone + Send + Sync + 'static>(
         &mut candidate_correction_commands,
     );
 
-    apply_candidates(candidate_correction_commands, buildozer).await
+    group_correction_commands(candidate_correction_commands)
+
 }
 
-pub async fn process_build_abort_errors<T: Buildozer + Clone + Send + Sync + 'static>(
-    buildozer: T,
-    bazel_abort_error_info: &hydrated_stream::BazelAbortErrorInfo,
-) -> super::Response {
-    let mut candidate_correction_commands: Vec<BazelCorrectionCommand> = vec![];
+pub async fn extract_build_abort_errors(
+    bazel_abort_error_info: &hydrated_stream::BazelAbortErrorInfo) -> HashMap<String, Vec<BazelCorrectionCommand>>
+    {
+        let mut candidate_correction_commands: Vec<BazelCorrectionCommand> = vec![];
 
-    extract_target_does_not_exist(bazel_abort_error_info, &mut candidate_correction_commands);
-    extract_target_not_visible(bazel_abort_error_info, &mut candidate_correction_commands);
-    apply_candidates(candidate_correction_commands, buildozer).await
-}
+        extract_target_does_not_exist(bazel_abort_error_info, &mut candidate_correction_commands);
+        extract_target_not_visible(bazel_abort_error_info, &mut candidate_correction_commands);
+
+        group_correction_commands(candidate_correction_commands)
+    }
 
 #[cfg(test)]
 mod tests {
@@ -488,7 +531,8 @@ mod tests {
                 BuildozerRemoveDepLikeCmd {
                     target_to_operate_on: String::from("//baz/src/test/scala/com/p/q/r:m"),
                     dep_like: String::from("@third_party_jvm//3rdparty/jvm/net/jpountz/lz4"),
-                    why: String::from("BUILD does not exist")
+                    why: String::from("BUILD does not exist"),
+                    only_if_bazelfe_added: false
                 }
             )]
         );
@@ -511,7 +555,8 @@ mod tests {
                 BuildozerRemoveDepLikeCmd {
                     target_to_operate_on: String::from("//baz/src/test/scala/com/p/q/r:m"),
                     dep_like: String::from("//baz/src/test/scala"),
-                    why: String::from("BUILD does not exist")
+                    why: String::from("BUILD does not exist"),
+                    only_if_bazelfe_added: false
                 }
             )]
         );
@@ -535,6 +580,7 @@ mod tests {
                     target_to_operate_on: String::from("//src/main/java/com/example:Example"),
                     dependency_to_remove: String::from("//src/main/java/com/example:asdfasdf"),
                     why: String::from("Dependency on does not exist"),
+                    only_if_bazelfe_added: false
                 }
             )]
         );
@@ -558,6 +604,7 @@ mod tests {
                     target_to_operate_on: String::from("//src/main/java/com/example:Example"),
                     dependency_to_remove: String::from("//src/main/java/com/example:asdfasdf"),
                     why: String::from("Dependency on does not exist"),
+                    only_if_bazelfe_added: false
                 }
             )]
         );
@@ -581,6 +628,7 @@ mod tests {
                     target_to_operate_on: String::from("//src/main/java/com/example:Example"),
                     dependency_to_remove: String::from("//src/main/java/com/example:asdfasdf"),
                     why: String::from("Dependency on does not exist"),
+                    only_if_bazelfe_added: false
                 }
             )]
         );
@@ -603,6 +651,7 @@ mod tests {
                     target_to_operate_on: String::from("//src/main/java/com/example/c:c"),
                     dependency_to_remove: String::from("//src/main/java/com/example/foo:foo"),
                     why: String::from("Dependency on does not exist"),
+                    only_if_bazelfe_added: false
                 }
             )]
         );
@@ -624,6 +673,7 @@ mod tests {
                     target_to_operate_on: String::from("//src/main/java/com/example/c:c"),
                     dependency_to_remove: String::from("@third_party_jvm//3rdparty/jvm/foo:bar"),
                     why: String::from("Dependency on does not exist"),
+                    only_if_bazelfe_added: false
                 }
             )]
         );
@@ -645,6 +695,7 @@ mod tests {
                     target_to_operate_on: String::from("//src/main/java/com/example/c:c"),
                     dependency_to_remove: String::from("@third_party_jvm//3rdparty/jvm/foo:bar"),
                     why: String::from("Dependency on does not exist"),
+                    only_if_bazelfe_added: false
                 }
             )]
         );
@@ -668,6 +719,7 @@ mod tests {
                     target_to_operate_on: String::from("//src/main/java/com/com/example:Example"),
                     dependency_to_remove: String::from("@third_party_jvm//3rdparty/jvm/com/google/api/grpc:proto_google_common_protos"),
                     why: String::from("Target dependended on is not visible from the current target"),
+                    only_if_bazelfe_added: true
                 }
             )]
         );
@@ -733,6 +785,7 @@ mod tests {
                     why: String::from(
                         "There is a cyclic dependency, so attempting to unwind/remove dependencies"
                     ),
+                    only_if_bazelfe_added: false
                 }
             ),]
         );

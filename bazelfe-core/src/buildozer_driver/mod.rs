@@ -55,6 +55,25 @@ pub trait Buildozer: Clone + Send + Sync + std::fmt::Debug + 'static {
         target_to_operate_on: &String,
         label_to_remove: &String,
     ) -> Result<()>;
+
+
+    async fn remove_if_present_from(
+        &self,
+        from_what: &BazelAttrTarget,
+        target_to_operate_on: &String,
+        label_to_remove: &String,
+    ) -> Result<bool> {
+        if let Ok(deps_for_target) = self.print_attr(from_what, target_to_operate_on).await {
+        for dep in deps_for_target.into_iter() {
+            if &dep == label_to_remove {
+                self.remove_from(from_what, target_to_operate_on, &dep)
+                    .await?;
+                    return Ok(true);
+            }
+        }
+    }
+        Ok(false)
+    }
 }
 
 #[derive(Clone, Debug)]

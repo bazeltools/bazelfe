@@ -11,11 +11,11 @@ use super::shared_utils::text_logs_from_failure;
 
 #[derive(Clone, PartialEq, Debug)]
 
-enum BazelCorrectionCommand {
+pub enum BazelCorrectionCommand {
     BuildozerRemoveDep(BuildozerRemoveDepCmd),
 }
 #[derive(Clone, PartialEq, Debug)]
-struct BuildozerRemoveDepCmd {
+pub struct BuildozerRemoveDepCmd {
     pub target_to_operate_on: String,
     pub dependency_to_remove: String,
     pub why: String,
