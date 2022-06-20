@@ -20,10 +20,12 @@ pub enum BazelCorrectionCommand {
 
 impl BazelCorrectionCommand {
     pub fn label(&self) -> &str {
-match self {
-    BazelCorrectionCommand::BuildozerRemoveDep(rd) => rd.target_to_operate_on.as_str(),
-    BazelCorrectionCommand::BuildozerRemoveDepLike(rdl) => rdl.target_to_operate_on.as_str(),
-}
+        match self {
+            BazelCorrectionCommand::BuildozerRemoveDep(rd) => rd.target_to_operate_on.as_str(),
+            BazelCorrectionCommand::BuildozerRemoveDepLike(rdl) => {
+                rdl.target_to_operate_on.as_str()
+            }
+        }
     }
 }
 #[derive(Clone, PartialEq, Debug)]
@@ -42,7 +44,7 @@ pub struct BuildozerRemoveDepLikeCmd {
     pub dep_like: String,
     pub why: String,
     // Things that the user may be meaning to do and can fix themselves.
-    pub only_if_bazelfe_added: bool
+    pub only_if_bazelfe_added: bool,
 }
 
 struct BadDep<'a> {
@@ -75,7 +77,7 @@ fn extract_external_build_not_found(
                         target_to_operate_on: bad_dep.used_in.to_string(),
                         dep_like: bad_dep.bad_dep.to_string(),
                         why: String::from("BUILD does not exist"),
-                        only_if_bazelfe_added: false
+                        only_if_bazelfe_added: false,
                     });
 
                 command_stream.push(correction);
@@ -121,7 +123,7 @@ fn extract_build_not_found(
                         target_to_operate_on: operate_on.to_string(),
                         dep_like: format!("//{}", dep_like),
                         why: String::from("BUILD does not exist"),
-                        only_if_bazelfe_added: false
+                        only_if_bazelfe_added: false,
                     });
                 command_stream.push(correction);
             }
@@ -169,7 +171,7 @@ fn extract_target_does_not_exist(
                             target_to_operate_on: bad_dep.used_in.to_string(),
                             dependency_to_remove: bad_dep.bad_dep.to_string(),
                             why: String::from("Dependency on does not exist"),
-                            only_if_bazelfe_added: false
+                            only_if_bazelfe_added: false,
                         });
                     command_stream.push(correction);
                 }
@@ -234,7 +236,7 @@ fn extract_target_not_declared_in_package(
                         target_to_operate_on: bad_dep.used_in.to_string(),
                         dependency_to_remove: bad_dep.bad_dep.to_string(),
                         why: String::from("Dependency on does not exist"),
-                        only_if_bazelfe_added: false
+                        only_if_bazelfe_added: false,
                     });
                 command_stream.push(correction);
             }
@@ -416,7 +418,10 @@ pub async fn apply_candidates<T: Buildozer + Clone + Send + Sync + 'static>(
                 let dependency_to_remove = buildozer_remove_dep.dependency_to_remove;
                 let target_to_operate_on = buildozer_remove_dep.target_to_operate_on;
                 let only_if_bazelfe_added = buildozer_remove_dep.only_if_bazelfe_added;
-                let added_by_bazelfe =  current_state.added_target_for_class.values().any(|e| e.contains(&dependency_to_remove));
+                let added_by_bazelfe = current_state
+                    .added_target_for_class
+                    .values()
+                    .any(|e| e.contains(&dependency_to_remove));
 
                 if only_if_bazelfe_added && !added_by_bazelfe {
                     continue;
@@ -454,17 +459,19 @@ pub async fn apply_candidates<T: Buildozer + Clone + Send + Sync + 'static>(
     super::Response::new(target_stories)
 }
 
-fn group_correction_commands(candidate_correction_commands: Vec<BazelCorrectionCommand>) -> HashMap<String, Vec<BazelCorrectionCommand>> {
+fn group_correction_commands(
+    candidate_correction_commands: Vec<BazelCorrectionCommand>,
+) -> HashMap<String, Vec<BazelCorrectionCommand>> {
     let mut res = HashMap::default();
-        for e in candidate_correction_commands {
-            let existing = {
-                let entry = res.entry(e.label().to_string());
-                entry.or_insert(Vec::default())
-            };
-            existing.push(e);
-        }
+    for e in candidate_correction_commands {
+        let existing = {
+            let entry = res.entry(e.label().to_string());
+            entry.or_insert(Vec::default())
+        };
+        existing.push(e);
+    }
 
-        res
+    res
 }
 pub async fn extract_progress(
     bazel_progress_error_info: &ProgressEvt,
@@ -495,19 +502,18 @@ pub async fn extract_progress(
     );
 
     group_correction_commands(candidate_correction_commands)
-
 }
 
 pub async fn extract_build_abort_errors(
-    bazel_abort_error_info: &hydrated_stream::BazelAbortErrorInfo) -> HashMap<String, Vec<BazelCorrectionCommand>>
-    {
-        let mut candidate_correction_commands: Vec<BazelCorrectionCommand> = vec![];
+    bazel_abort_error_info: &hydrated_stream::BazelAbortErrorInfo,
+) -> HashMap<String, Vec<BazelCorrectionCommand>> {
+    let mut candidate_correction_commands: Vec<BazelCorrectionCommand> = vec![];
 
-        extract_target_does_not_exist(bazel_abort_error_info, &mut candidate_correction_commands);
-        extract_target_not_visible(bazel_abort_error_info, &mut candidate_correction_commands);
+    extract_target_does_not_exist(bazel_abort_error_info, &mut candidate_correction_commands);
+    extract_target_not_visible(bazel_abort_error_info, &mut candidate_correction_commands);
 
-        group_correction_commands(candidate_correction_commands)
-    }
+    group_correction_commands(candidate_correction_commands)
+}
 
 #[cfg(test)]
 mod tests {

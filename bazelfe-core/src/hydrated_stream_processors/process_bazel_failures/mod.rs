@@ -128,35 +128,32 @@ impl<T: Buildozer, U: CommandLineRunner> ProcessBazelFailures<T, U> {
         *e += 1;
     }
 
-
     async fn label_to_prev_data_arc(&self, label: &str) -> Arc<Mutex<CurrentState>> {
         let arc = Arc::clone(&self.previous_global_seen);
 
-            let handle = self.previous_global_seen.read().await;
-            match handle.get(label) {
-                Some(e) => Arc::clone(e),
-                None => {
-                    drop(handle);
-                    let mut handle = arc.write().await;
-                    handle
-                        .insert(label.to_string(), Default::default());
-                    drop(handle);
-                    let handle = arc.read().await;
-                    Arc::clone(handle.get(label).unwrap())
-                }
+        let handle = self.previous_global_seen.read().await;
+        match handle.get(label) {
+            Some(e) => Arc::clone(e),
+            None => {
+                drop(handle);
+                let mut handle = arc.write().await;
+                handle.insert(label.to_string(), Default::default());
+                drop(handle);
+                let handle = arc.read().await;
+                Arc::clone(handle.get(label).unwrap())
             }
+        }
     }
 
     pub async fn process(
         &self,
         event: &hydrated_stream::HydratedInfo,
     ) -> Vec<super::BuildEventResponse> {
-
-
         let r: Vec<Response> = match event {
             hydrated_stream::HydratedInfo::ActionFailed(action_failed_error_info) => {
-
-                let arc_resp = self.label_to_prev_data_arc(action_failed_error_info.label.as_str()).await;
+                let arc_resp = self
+                    .label_to_prev_data_arc(action_failed_error_info.label.as_str())
+                    .await;
                 let mut prev_data = arc_resp.lock().await;
                 let epoch = *self.epoch.read().await;
 
@@ -193,15 +190,22 @@ impl<T: Buildozer, U: CommandLineRunner> ProcessBazelFailures<T, U> {
             }
 
             hydrated_stream::HydratedInfo::BazelAbort(bazel_abort_error_info) => {
-                let build_abort = process_build_abort_errors::extract_build_abort_errors(
-                    bazel_abort_error_info,
-                ).await;
+                let build_abort =
+                    process_build_abort_errors::extract_build_abort_errors(bazel_abort_error_info)
+                        .await;
 
                 let mut res = Vec::default();
                 for (label, errors) in build_abort {
-                    let arc_resp =  self.label_to_prev_data_arc(label.as_str()).await;
+                    let arc_resp = self.label_to_prev_data_arc(label.as_str()).await;
                     let mut prev_data = arc_resp.lock().await;
-                    res.push(process_build_abort_errors::apply_candidates(&mut *prev_data, errors, self.buildozer.clone()).await);
+                    res.push(
+                        process_build_abort_errors::apply_candidates(
+                            &mut *prev_data,
+                            errors,
+                            self.buildozer.clone(),
+                        )
+                        .await,
+                    );
                 }
 
                 res
@@ -232,20 +236,24 @@ impl<T: Buildozer, U: CommandLineRunner> ProcessBazelFailures<T, U> {
             hydrated_stream::HydratedInfo::Progress(progress_info) => {
                 let tbl = Arc::clone(&self.previous_global_seen);
 
-                let build_abort = process_build_abort_errors::extract_progress(
-                    progress_info,
-                    tbl
-                ).await;
+                let build_abort =
+                    process_build_abort_errors::extract_progress(progress_info, tbl).await;
 
                 let mut res = Vec::default();
                 for (label, errors) in build_abort {
-                    let arc_resp =  self.label_to_prev_data_arc(label.as_str()).await;
+                    let arc_resp = self.label_to_prev_data_arc(label.as_str()).await;
                     let mut prev_data = arc_resp.lock().await;
-                    res.push(process_build_abort_errors::apply_candidates(&mut *prev_data, errors, self.buildozer.clone()).await);
+                    res.push(
+                        process_build_abort_errors::apply_candidates(
+                            &mut *prev_data,
+                            errors,
+                            self.buildozer.clone(),
+                        )
+                        .await,
+                    );
                 }
 
                 res
-
             }
             hydrated_stream::HydratedInfo::TestResult(_) => {
                 vec![]
