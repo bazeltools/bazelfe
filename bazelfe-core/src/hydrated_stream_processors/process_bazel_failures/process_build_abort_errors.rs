@@ -236,7 +236,7 @@ fn extract_target_not_declared_in_package(
                         target_to_operate_on: bad_dep.used_in.to_string(),
                         dependency_to_remove: bad_dep.bad_dep.to_string(),
                         why: String::from("Dependency on does not exist"),
-                        only_if_bazelfe_added: false,
+                        only_if_bazelfe_added: true,
                     });
                 command_stream.push(correction);
             }
@@ -434,14 +434,14 @@ pub async fn apply_candidates<T: Buildozer + Clone + Send + Sync + 'static>(
                     dependency_to_remove, target_to_operate_on
                 );
                 let buildozer_res = buildozer
-                    .remove_from(
+                    .remove_if_present_from(
                         &BazelAttrTarget::Deps,
                         &target_to_operate_on,
                         &dependency_to_remove,
                     )
                     .await;
                 match buildozer_res {
-                    Ok(_) => {
+                    Ok(true) => {
                         target_stories.push(super::TargetStory {
                             target: target_to_operate_on.clone(),
                             action: super::TargetStoryAction::RemovedDependency {
@@ -451,6 +451,7 @@ pub async fn apply_candidates<T: Buildozer + Clone + Send + Sync + 'static>(
                             when: Instant::now(),
                         });
                     }
+                    Ok(false) => (),
                     Err(_) => info!("Buildozer command failed"),
                 }
             }
