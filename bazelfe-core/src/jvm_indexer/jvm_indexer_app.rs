@@ -284,7 +284,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             info!("Current repo name identified as {}", r);
             blacklist_repos.push(r);
         }
-        blacklist_repos.extend(opt.blacklist_remote_roots.into_iter());
+        blacklist_repos.extend(opt.blacklist_remote_roots.iter().flat_map(|e| e.split(',')).map(|e| e.to_string()));
 
         info!(
             "Will ignore any target in the repos: {}",
@@ -294,9 +294,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         for line in res.stdout.lines() {
             if let Some(ln) = line.strip_prefix("//external:") {
                 let mut ok = true;
-                for root in &blacklist_repos {
+                'inner: for root in blacklist_repos.iter() {
                     if ln.starts_with(root) {
                         ok = false;
+                        break 'inner;
                     }
                 }
                 // Some externals are bind mounts
