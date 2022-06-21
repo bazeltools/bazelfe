@@ -658,7 +658,7 @@ mod tests {
                     target_to_operate_on: String::from("//src/main/java/com/example/c:c"),
                     dependency_to_remove: String::from("//src/main/java/com/example/foo:foo"),
                     why: String::from("Dependency on does not exist"),
-                    only_if_bazelfe_added: false
+                    only_if_bazelfe_added: true
                 }
             )]
         );
@@ -680,7 +680,7 @@ mod tests {
                     target_to_operate_on: String::from("//src/main/java/com/example/c:c"),
                     dependency_to_remove: String::from("@third_party_jvm//3rdparty/jvm/foo:bar"),
                     why: String::from("Dependency on does not exist"),
-                    only_if_bazelfe_added: false
+                    only_if_bazelfe_added: true
                 }
             )]
         );
@@ -702,7 +702,7 @@ mod tests {
                     target_to_operate_on: String::from("//src/main/java/com/example/c:c"),
                     dependency_to_remove: String::from("@third_party_jvm//3rdparty/jvm/foo:bar"),
                     why: String::from("Dependency on does not exist"),
-                    only_if_bazelfe_added: false
+                    only_if_bazelfe_added: true
                 }
             )]
         );
