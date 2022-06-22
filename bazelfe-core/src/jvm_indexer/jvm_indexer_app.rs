@@ -319,7 +319,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let all_queries = build_rule_queries(&allowed_rule_kinds, &target_roots);
 
-        let query_rule_attr_batch_size: usize = 10;
+        let query_rule_attr_batch_size: usize = 40;
         info!("Extracting targets with an allowed rule kind, gives rise to {} total queries, we will union them to bazel in batches of size: {}", all_queries.len(), query_rule_attr_batch_size);
 
         let mut all_targets_to_use: HashMap<String, HashSet<String>> = HashMap::default();
