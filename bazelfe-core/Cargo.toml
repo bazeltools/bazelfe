@@ -115,7 +115,7 @@ version = "0.3.21"
 
 [dependencies.tokio]
 features = ["full"]
-version = "1.19.2"
+version = "1.20.0"
 
 [dependencies.tokio-stream]
 features = ["net"]
