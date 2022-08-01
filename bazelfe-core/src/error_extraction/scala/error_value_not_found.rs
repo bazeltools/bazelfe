@@ -23,7 +23,7 @@ fn build_class_import_request(
         class_name,
         exact_only: true,
         src_fn: "extract_value_or_type_not_found",
-        priority: priority,
+        priority,
     }
 }
 

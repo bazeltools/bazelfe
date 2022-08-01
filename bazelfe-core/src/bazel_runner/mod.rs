@@ -172,7 +172,7 @@ async fn execute_tokio_subprocess(
     SUB_PROCESS_PID.store(0, Ordering::SeqCst);
 
     Ok(ExecuteResult {
-        exit_code: result.code().unwrap_or_else(|| -1),
+        exit_code: result.code().unwrap_or(-1),
         errors_corrected: 0,
     })
 }
@@ -213,8 +213,8 @@ async fn execute_sub_tty_process(
     });
 
     let child_complete: ptyprocess::WaitStatus = tokio::task::spawn_blocking(move || {
-        let r = child.wait();
-        r
+        
+        child.wait()
     })
     .await
     .expect("The command wasn't running")?;
