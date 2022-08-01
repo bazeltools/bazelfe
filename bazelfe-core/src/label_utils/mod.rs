@@ -89,12 +89,10 @@ pub fn class_name_to_prefixes(class_name: &str, allow_all_minor_domains: bool) -
         // otherwise it likely reflects an organization
         let required_loop_cnt = if is_major_domain {
             1
+        } else if allow_all_minor_domains {
+            -1
         } else {
-            if allow_all_minor_domains {
-                -1
-            } else {
-                0
-            }
+            0
         };
 
         if loop_cnt > required_loop_cnt && long_running_string != class_name {

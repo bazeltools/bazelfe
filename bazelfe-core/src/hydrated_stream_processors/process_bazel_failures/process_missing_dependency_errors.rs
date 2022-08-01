@@ -126,7 +126,7 @@ pub fn expand_candidate_import_requests(action_requests: Vec<ActionRequest>) -> 
             let r = crate::label_utils::class_name_to_prefixes(&c.class_name, false);
             let len = r.len();
             for (offset, sub_pre) in r.into_iter().enumerate() {
-                let inner_offset = ((len - offset) as i32) * -1;
+                let inner_offset = -((len - offset) as i32);
                 extras.push(error_extraction::ClassImportRequest {
                     class_name: sub_pre,
                     priority: -50 + c.priority + inner_offset,
@@ -223,8 +223,7 @@ async fn inner_process_missing_dependency_errors<'a, T: Buildozer>(
 
     let target_rdeps = bazel_query_engine
         .allrdeps(&label)
-        .await
-        .unwrap_or(HashSet::default());
+        .await.unwrap_or_default();
     let mut total_added = 0;
     'req_point: for req in all_requests.into_iter() {
         let candidates = match &req {

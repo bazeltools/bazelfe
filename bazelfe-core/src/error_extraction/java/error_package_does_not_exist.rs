@@ -77,7 +77,7 @@ pub(in crate::error_extraction) fn extract(
                         if let Some(pkg) = file_data.package_name.as_ref() {
                             class_import_request.push(JavaClassImportRequest {
                                 src_file_name: src_file_name.to_string(),
-                                class_name: format!("{}.{}", pkg, package.to_string()),
+                                class_name: format!("{}.{}", pkg, package),
                                 exact_only: true,
                                 src_fn: "package_does_not_exist",
                                 priority: 2,
