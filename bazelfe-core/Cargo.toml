@@ -102,7 +102,7 @@ ptyprocess = "0.3.0"
 
 
 [build-dependencies]
-vergen = "7.3.1"
+vergen = "7.3.2"
 anyhow = "1.0.59"
 
 [dependencies.bazelfe-protos]
