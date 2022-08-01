@@ -128,13 +128,11 @@ fn extract_build_not_found(
                 command_stream.push(correction);
             }
             prev_line = None
-        } else {
-            if let Some(missing_package) = FIRST_REGEX
-                .captures(ln)
-                .map(|captures| captures.get(1).unwrap().as_str())
-            {
-                prev_line = Some(missing_package.to_string())
-            }
+        } else if let Some(missing_package) = FIRST_REGEX
+            .captures(ln)
+            .map(|captures| captures.get(1).unwrap().as_str())
+        {
+            prev_line = Some(missing_package.to_string())
         }
     }
 }

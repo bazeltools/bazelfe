@@ -132,9 +132,7 @@ impl IndexTableValue {
     pub fn new(mut data: Vec<IndexTableValueEntry>) -> Self {
         data.sort();
 
-        Self {
-            0: Arc::new(RwLock::new(data)),
-        }
+        Self(Arc::new(RwLock::new(data)))
     }
 
     pub fn with_value(entry: IndexTableValueEntry) -> Self {

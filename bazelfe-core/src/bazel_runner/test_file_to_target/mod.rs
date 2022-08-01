@@ -33,7 +33,7 @@ pub async fn run<B: BazelQuery>(
     }
 
     if on_disk_files.is_empty() {
-        return err(format!("No files on disk specified to run"));
+        return err("No files on disk specified to run".to_string());
     }
 
     let mut targets: HashSet<String> = HashSet::default();

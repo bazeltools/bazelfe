@@ -135,14 +135,14 @@ impl ParsedCommandLine {
     pub fn all_args_normalized(&self) -> Result<Vec<String>, ArgNormalizationError> {
         let mut result = Vec::default();
 
-        result.extend(self.startup_options.iter().map(|e| e.to_arg()).flatten());
+        result.extend(self.startup_options.iter().flat_map(|e| e.to_arg()));
 
         if let Some(action) = &self.action {
             match action {
                 Action::BuiltIn(b) => {
                     result.push(b.to_string());
 
-                    result.extend(self.action_options.iter().map(|e| e.to_arg()).flatten());
+                    result.extend(self.action_options.iter().flat_map(|e| e.to_arg()));
 
                     if !self.remaining_args.is_empty() {
                         result.push(String::from("--"));
@@ -268,13 +268,13 @@ fn extract_set_of_flags<'a, I: Iterator<Item = &'a String>>(
                 // Custom bazel settings handling
                 if let Some(without_no) = trimmed.strip_prefix("no") {
                     // Boolean setting with custom options
-                    if without_no.starts_with("//") || without_no.starts_with("@") {
+                    if without_no.starts_with("//") || without_no.starts_with('@') {
                         result.push(BazelOption::BooleanOption(without_no.to_string(), false));
                         iter.next();
                         continue 'outer_loop;
                     }
                 }
-                if trimmed.starts_with("//") || trimmed.starts_with("@") {
+                if trimmed.starts_with("//") || trimmed.starts_with('@') {
                     if let Some(v) = value.as_ref() {
                         result.push(BazelOption::option_with_arg(
                             trimmed.to_string(),

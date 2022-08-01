@@ -225,7 +225,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut rng = rand::thread_rng();
     let mut builder = pretty_env_logger::formatted_timed_builder();
     builder.format_timestamp_nanos();
-    let mut running_refresh_mode = false;
+    let running_refresh_mode = false;
     builder.target(pretty_env_logger::env_logger::Target::Stderr);
     if let Ok(s) = ::std::env::var("RUST_LOG") {
         builder.parse_filters(&s);
@@ -256,7 +256,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bazel_query =
         bazelfe_core::jvm_indexer::bazel_query::from_binary_path(&opt.bazel_binary_path);
 
-    let union_with_spaces_bytes = " union ".as_bytes();
+    let _union_with_spaces_bytes = " union ".as_bytes();
 
     let all_targets_to_use = {
         info!("Executing initial query to find all external repos in this bazel repository");
