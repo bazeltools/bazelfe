@@ -51,7 +51,7 @@ name = "bazel-runner"
 path = "src/bazel_runner/bazel_runner_app.rs"
 
 [dependencies]
-async-channel = "1.6.1"
+async-channel = "1.7.0"
 async-stream = "0.3.3"
 async-trait = "0.1.57"
 byteorder = "1.4.3"
