@@ -212,6 +212,9 @@ fn write_failed_action(action: &ActionFailedErrorInfo, output_root: &Path) {
 async fn main() -> Result<(), Box<dyn Error>> {
     let opt = Opt::parse();
     let r = load_proto(opt.build_event_binary_output.as_path());
+
+    std::fs::create_dir_all(&opt.junit_output_path).expect("Make output tree");
+
     let mut hydrator = HydratorState::default();
     let mut res = Vec::default();
     for e in r {
@@ -239,7 +242,35 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 write_failed_action(action_failed, &opt.junit_output_path);
             }
             bazelfe_core::build_events::hydrated_stream::HydratedInfo::Progress(_) => (),
-            bazelfe_core::build_events::hydrated_stream::HydratedInfo::TestResult(_) => (),
+            bazelfe_core::build_events::hydrated_stream::HydratedInfo::TestResult(r) => {
+                let output_folder = opt
+                    .junit_output_path
+                    .join(label_to_child_path(r.test_summary_event.label.as_str()));
+                std::fs::create_dir_all(&output_folder).expect("Make dir failed");
+
+                let files: Vec<&str> = r
+                    .test_summary_event
+                    .output_files
+                    .iter()
+                    .flat_map(|e| match e {
+                        bazelfe_protos::build_event_stream::file::File::Uri(uri) => {
+                            let p = uri
+                                .strip_prefix("file://")
+                                .expect(format!("Wasn't a local file for {}", uri).as_str());
+                            if p.ends_with("/test.xml") {
+                                Some(p)
+                            } else {
+                                None
+                            }
+                        }
+                        bazelfe_protos::build_event_stream::file::File::Contents(_) => None,
+                    })
+                    .collect();
+                for (idx, f) in files.iter().enumerate() {
+                    let output_file = output_folder.join(format!("test.{}.xml", idx));
+                    std::fs::copy(f, output_file).unwrap();
+                }
+            }
             bazelfe_core::build_events::hydrated_stream::HydratedInfo::ActionSuccess(_) => (),
             bazelfe_core::build_events::hydrated_stream::HydratedInfo::TargetComplete(_) => (),
         }

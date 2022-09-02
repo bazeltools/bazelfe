@@ -197,7 +197,7 @@ pub mod bazel_event {
                             _ => None,
                         });
 
-                failed_file_data.and_then(|(test_status, failed_files)| {
+                failed_file_data.and_then(|(test_status, output_files)| {
                     target_label_opt.map(|u| {
                         let test_status = match test_status {
                             build_event_stream::TestStatus::NoStatus => todo!(),
@@ -219,7 +219,7 @@ pub mod bazel_event {
                         Evt::TestResult(TestResultEvt {
                             label: u,
                             test_status,
-                            failed_files,
+                            output_files,
                         })
                     })
                 })
@@ -315,7 +315,7 @@ pub mod bazel_event {
     pub struct TestResultEvt {
         pub label: String,
         pub test_status: TestStatus,
-        pub failed_files: Vec<build_event_stream::file::File>,
+        pub output_files: Vec<build_event_stream::file::File>,
     }
     #[derive(Clone, PartialEq, Debug)]
     pub struct TargetConfiguredEvt {

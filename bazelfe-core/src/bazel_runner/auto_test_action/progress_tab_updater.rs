@@ -91,9 +91,9 @@ impl BazelEventHandler for ProgressTabUpdater {
                     crate::build_events::build_event_server::bazel_event::TestStatus::FailedToBuild => false,
                     crate::build_events::build_event_server::bazel_event::TestStatus::ToolHaltedBeforeTesting => false,
                 };
-                let failed_files = tst
+                let output_files = tst
                     .test_summary_event
-                    .failed_files
+                    .output_files
                     .iter()
                     .filter_map(|e| match e {
                         bazelfe_protos::build_event_stream::file::File::Uri(u) => {
@@ -120,7 +120,7 @@ impl BazelEventHandler for ProgressTabUpdater {
                         success: is_success,
                         label: tst.test_summary_event.label.clone(),
                         when: Instant::now(),
-                        files: failed_files,
+                        files: output_files,
                         target_kind: tst.target_kind.clone(),
                         bazel_run_id,
                     })
