@@ -191,7 +191,7 @@ fn action_to_build_failure(action: &ActionFailedErrorInfo) -> junit_testsuite::T
 
 fn write_failed_action(action: &ActionFailedErrorInfo, output_root: &Path) {
     let output_folder = output_root.join(label_to_child_path(action.label.as_str()));
-    let output_file = output_folder.join("res.xml");
+    let output_file = output_folder.join("test.xml");
     std::fs::create_dir_all(output_folder).expect("Make dir failed");
     let mut file = std::fs::File::create(&output_file)
         .expect(format!("Should open file {:?}", output_file).as_str());
