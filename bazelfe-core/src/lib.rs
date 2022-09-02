@@ -8,6 +8,7 @@ pub mod bazel_query;
 pub mod bazel_runner;
 #[cfg(feature = "bazelfe-daemon")]
 pub mod bazel_runner_daemon;
+pub mod bep_junit;
 pub mod build_events;
 pub mod buildozer_driver;
 pub mod config;

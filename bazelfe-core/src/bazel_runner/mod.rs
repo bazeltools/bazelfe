@@ -212,12 +212,9 @@ async fn execute_sub_tty_process(
         }
     });
 
-    let child_complete: ptyprocess::WaitStatus = tokio::task::spawn_blocking(move || {
-        
-        child.wait()
-    })
-    .await
-    .expect("The command wasn't running")?;
+    let child_complete: ptyprocess::WaitStatus = tokio::task::spawn_blocking(move || child.wait())
+        .await
+        .expect("The command wasn't running")?;
 
     SUB_PROCESS_PID.store(0, Ordering::SeqCst);
 

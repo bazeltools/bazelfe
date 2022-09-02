@@ -223,7 +223,8 @@ async fn inner_process_missing_dependency_errors<'a, T: Buildozer>(
 
     let target_rdeps = bazel_query_engine
         .allrdeps(&label)
-        .await.unwrap_or_default();
+        .await
+        .unwrap_or_default();
     let mut total_added = 0;
     'req_point: for req in all_requests.into_iter() {
         let candidates = match &req {

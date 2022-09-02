@@ -284,7 +284,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             info!("Current repo name identified as {}", r);
             blacklist_repos.push(r);
         }
-        blacklist_repos.extend(opt.blacklist_remote_roots.iter().flat_map(|e| e.split(',')).map(|e| e.to_string()));
+        blacklist_repos.extend(
+            opt.blacklist_remote_roots
+                .iter()
+                .flat_map(|e| e.split(','))
+                .map(|e| e.to_string()),
+        );
 
         info!(
             "Will ignore any target in the repos: {}",

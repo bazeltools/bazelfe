@@ -85,7 +85,7 @@ impl CommandLineRunner for CommandLineRunnerImpl {
 }
 
 #[cfg(test)]
-pub(in crate) mod test_tools {
+pub(crate) mod test_tools {
     use std::{collections::HashSet, sync::Arc};
 
     use tokio::sync::Mutex;

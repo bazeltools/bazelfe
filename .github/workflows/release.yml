@@ -38,6 +38,8 @@ jobs:
         run: ./.github/ci_scripts/prepare_output.sh bazel-runner-${{ matrix.platform }} staging-directory target/release/bazel-runner
       - name: Prepare jvm-indexer
         run: ./.github/ci_scripts/prepare_output.sh jvm-indexer-${{ matrix.platform }} staging-directory target/release/jvm-indexer
+      - name: Prepare bep-junit
+        run: ./.github/ci_scripts/prepare_output.sh bep-junit-${{ matrix.platform }} staging-directory target/release/bep-junit
       - uses: actions-rs/cargo@v1
         with:
           command: build
@@ -46,6 +48,8 @@ jobs:
         run: ./.github/ci_scripts/prepare_output.sh bazel-runner-with-daemon-${{ matrix.platform }} staging-directory target/release/bazel-runner
       - name: Prepare jvm-indexer
         run: ./.github/ci_scripts/prepare_output.sh jvm-indexer-with-daemon-${{ matrix.platform }} staging-directory target/release/jvm-indexer
+      - name: Prepare bep-junit
+        run: ./.github/ci_scripts/prepare_output.sh bep-junit-with-daemon-${{ matrix.platform }} staging-directory target/release/bep-junit
       - uses: actions/upload-artifact@master
         with:
           name: ${{ matrix.artifact }}
@@ -68,11 +72,16 @@ jobs:
         run: ./.github/ci_scripts/prepare_output.sh bazel-runner-macos-arm64 staging-directory target/aarch64-apple-darwin/release/bazel-runner
       - name: Prepare jvm-indexer
         run: ./.github/ci_scripts/prepare_output.sh jvm-indexer-macos-arm64 staging-directory target/aarch64-apple-darwin/release/jvm-indexer
+      - name: Prepare bep-junit
+        run: ./.github/ci_scripts/prepare_output.sh bep-junit-macos-arm64 staging-directory target/aarch64-apple-darwin/release/bep-junit
       - run: SDKROOT=$(xcrun -sdk macosx --show-sdk-path) MACOSX_DEPLOYMENT_TARGET=$(xcrun -sdk macosx --show-sdk-platform-version) cargo build --target=aarch64-apple-darwin --release --all-features
       - name: Prepare bazel-runner output
         run: ./.github/ci_scripts/prepare_output.sh bazel-runner-with-daemon-macos-arm64 staging-directory target/aarch64-apple-darwin/release/bazel-runner
       - name: Prepare jvm-indexer
         run: ./.github/ci_scripts/prepare_output.sh jvm-indexer-with-daemon-macos-arm64 staging-directory target/aarch64-apple-darwin/release/jvm-indexer
+      - name: Prepare bep-junit
+        run: ./.github/ci_scripts/prepare_output.sh bep-junit-with-daemon-macos-arm64 staging-directory target/aarch64-apple-darwin/release/bep-junit
+
       - uses: actions/upload-artifact@master
         with:
           name: bazelfe-macos-arm64
@@ -138,4 +147,13 @@ jobs:
             downloads/jvm-indexer-linux-ubuntu-20.04.sha256
             downloads/jvm-indexer-linux-ubuntu-18.04
             downloads/jvm-indexer-linux-ubuntu-18.04.sha256
+            downloads/bep-junit-macos
+            downloads/bep-junit-macos.sha256
+            downloads/bep-junit-macos-arm64
+            downloads/bep-junit-macos-arm64.sha256
+            downloads/bep-junit-linux-ubuntu-20.04
+            downloads/bep-junit-linux-ubuntu-20.04.sha256
+            downloads/bep-junit-linux-ubuntu-18.04
+            downloads/bep-junit-linux-ubuntu-18.04.sha256
+
         id: "automatic_releases"

@@ -46,7 +46,7 @@ async fn start_server(
     Ok(())
 }
 
-pub(in crate) async fn try_kill_server_from_cfg(daemon_config: &DaemonConfig) {
+pub(crate) async fn try_kill_server_from_cfg(daemon_config: &DaemonConfig) {
     if let Ok(daemon_communication_ptr) = configure_communication_ptr(&daemon_config) {
         let paths = daemon_paths_from_access(&daemon_communication_ptr);
 

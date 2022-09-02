@@ -43,6 +43,10 @@ path = "src/bazel_runner_daemon/bazel_runner_daemon_demo_app.rs"
 required-features = ["dev-binaries"]
 
 [[bin]]
+name = "bep-junit"
+path = "src/bep_junit/bep_junit_app.rs"
+
+[[bin]]
 name = "jvm-indexer"
 path = "src/jvm_indexer/jvm_indexer_app.rs"
 
@@ -69,7 +73,6 @@ rand = "0.8.5"
 regex = "1.6.0"
 serde = { version = "1.0.144", features = ["derive"] }
 dynfmt = { version = "0.1.5", features = ["curly"] }
-serde_derive = "1.0.141"
 toml = "0.5.9"
 walkdir = "2.3.2"
 shellwords = "1.1.0"
@@ -99,6 +102,7 @@ tower = "0.4.13"
 tokio-signal = "0.2.9"
 mio = "0.8.4"
 ptyprocess = "0.3.0"
+xml-rs = "0.8.4"
 
 
 [build-dependencies]

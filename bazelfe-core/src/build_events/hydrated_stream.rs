@@ -10,6 +10,7 @@ use std::collections::HashMap;
 
 use super::build_event_server::bazel_event::{self, TestResultEvt};
 use super::build_event_server::BuildEventAction;
+use bazelfe_protos::build_event_stream::NamedSetOfFiles;
 use bazelfe_protos::*;
 
 // This is keeping some state as we go through a stream to hydrate values with things like rule kinds
@@ -93,7 +94,7 @@ pub enum HydratedInfo {
     TargetComplete(TargetCompleteInfo),
 }
 
-async fn recursive_lookup(
+fn recursive_lookup(
     lut: &HashMap<String, build_event_stream::NamedSetOfFiles>,
     results: &mut Vec<build_event_stream::File>,
     mut ids: Vec<String>,
@@ -111,7 +112,7 @@ async fn recursive_lookup(
     true
 }
 
-async fn tce_event(
+fn tce_event(
     tce: bazel_event::TargetCompletedEvt,
     rule_kind_lookup: &HashMap<String, String>,
     named_set_of_files_lookup: &HashMap<String, build_event_stream::NamedSetOfFiles>,
@@ -129,7 +130,6 @@ async fn tce_event(
                     .map(|fs| fs.id.clone())
                     .collect(),
             )
-            .await
         } else {
             true
         };
@@ -149,146 +149,150 @@ async fn tce_event(
     }
 }
 
+#[derive(Default, Debug)]
+pub struct HydratorState {
+    named_set_of_files_lookup: HashMap<String, NamedSetOfFiles>,
+    rule_kind_lookup: HashMap<String, String>,
+    buffered_tce: Vec<bazel_event::TargetCompletedEvt>,
+}
+impl HydratorState {
+    pub fn consume(
+        &mut self,
+        action: BuildEventAction<bazel_event::BazelBuildEvent>,
+    ) -> Vec<Option<HydratedInfo>> {
+        match action {
+            BuildEventAction::BuildCompleted => {
+                self.rule_kind_lookup.clear();
+                vec![None]
+            }
+            BuildEventAction::LifecycleEvent(_) => Vec::default(),
+            BuildEventAction::BuildEvent(msg) => match msg.event {
+                bazel_event::Evt::BazelEvent(_) => Vec::default(),
+                bazel_event::Evt::TargetConfigured(tgt_cfg) => {
+                    self.rule_kind_lookup
+                        .insert(tgt_cfg.label, tgt_cfg.rule_kind);
+                    Vec::default()
+                }
+
+                bazel_event::Evt::NamedSetOfFiles {
+                    id,
+                    named_set_of_files,
+                } => {
+                    let _ = {
+                        self.named_set_of_files_lookup
+                            .insert(id, named_set_of_files)
+                    };
+
+                    let tmp_v: Vec<bazel_event::TargetCompletedEvt> =
+                        self.buffered_tce.drain(..).collect();
+
+                    let mut r = vec![];
+                    for tce in tmp_v.into_iter() {
+                        if let Some(target_complete_info) = tce_event(
+                            tce,
+                            &self.rule_kind_lookup,
+                            &self.named_set_of_files_lookup,
+                            &mut self.buffered_tce,
+                        ) {
+                            r.push(Some(HydratedInfo::TargetComplete(target_complete_info)))
+                        }
+                    }
+                    r
+                }
+                bazel_event::Evt::TargetCompleted(tce) => {
+                    if let Some(target_complete_info) = tce_event(
+                        tce,
+                        &self.rule_kind_lookup,
+                        &self.named_set_of_files_lookup,
+                        &mut self.buffered_tce,
+                    ) {
+                        vec![Some(HydratedInfo::TargetComplete(target_complete_info))]
+                    } else {
+                        Vec::default()
+                    }
+                }
+
+                bazel_event::Evt::ActionCompleted(ace) => {
+                    if !ace.success {
+                        let err_info = ActionFailedErrorInfo {
+                            stdout: ace.stdout.map(|stdout| build_event_stream::File {
+                                file: Some(stdout),
+                                path_prefix: vec![],
+                                name: String::from("stdout"),
+                                digest: String::default(),
+                                length: -1,
+                            }),
+                            stderr: ace.stderr.map(|stderr| build_event_stream::File {
+                                file: Some(stderr),
+                                path_prefix: vec![],
+                                name: String::from("stderr"),
+                                digest: String::default(),
+                                length: -1,
+                            }),
+                            target_kind: self.rule_kind_lookup.get(&ace.label).cloned(),
+                            label: ace.label,
+                        };
+                        vec![Some(HydratedInfo::ActionFailed(err_info))]
+                    } else {
+                        let act_info = ActionSuccessInfo {
+                            stdout: ace.stdout.map(|stdout| build_event_stream::File {
+                                file: Some(stdout),
+                                path_prefix: vec![],
+                                name: String::from("stdout"),
+                                digest: String::default(),
+                                length: -1,
+                            }),
+                            stderr: ace.stderr.map(|stderr| build_event_stream::File {
+                                file: Some(stderr),
+                                path_prefix: vec![],
+                                name: String::from("stderr"),
+                                digest: String::default(),
+                                length: -1,
+                            }),
+
+                            target_kind: self.rule_kind_lookup.get(&ace.label).cloned(),
+                            label: ace.label,
+                        };
+
+                        vec![Some(HydratedInfo::ActionSuccess(act_info))]
+                    }
+                }
+
+                bazel_event::Evt::TestResult(tfe) => {
+                    let tst_info = TestResultInfo {
+                        target_kind: self.rule_kind_lookup.get(&tfe.label).cloned(),
+                        test_summary_event: tfe,
+                    };
+
+                    vec![Some(HydratedInfo::TestResult(tst_info))]
+                }
+                bazel_event::Evt::Progress(progress) => {
+                    vec![Some(HydratedInfo::Progress(progress))]
+                }
+                bazel_event::Evt::Aborted(tfe) => {
+                    let err_info = BazelAbortErrorInfo {
+                        reason: tfe.reason,
+                        description: tfe.description,
+                        label: tfe.label,
+                    };
+                    vec![Some(HydratedInfo::BazelAbort(err_info))]
+                }
+                bazel_event::Evt::UnknownEvent(_) => Vec::default(),
+            },
+        }
+    }
+}
+
 impl HydratedInfo {
     pub fn build_transformer(
         rx: async_channel::Receiver<BuildEventAction<bazel_event::BazelBuildEvent>>,
     ) -> async_channel::Receiver<Option<HydratedInfo>> {
         let (tx, next_rx) = async_channel::unbounded();
-
-        let mut named_set_of_files_lookup = HashMap::new();
-        let mut rule_kind_lookup = HashMap::new();
-        let mut buffered_tce: Vec<bazel_event::TargetCompletedEvt> = Vec::default();
-
+        let mut hydrator = HydratorState::default();
         tokio::spawn(async move {
             while let Ok(action) = rx.recv().await {
-                match action {
-                    BuildEventAction::BuildCompleted => {
-                        rule_kind_lookup.clear();
-                        tx.send(None).await.unwrap();
-                    }
-                    BuildEventAction::LifecycleEvent(_) => (),
-                    BuildEventAction::BuildEvent(msg) => match msg.event {
-                        bazel_event::Evt::BazelEvent(_) => {}
-                        bazel_event::Evt::TargetConfigured(tgt_cfg) => {
-                            rule_kind_lookup.insert(tgt_cfg.label, tgt_cfg.rule_kind);
-                        }
-
-                        bazel_event::Evt::NamedSetOfFiles {
-                            id,
-                            named_set_of_files,
-                        } => {
-                            let _ = { named_set_of_files_lookup.insert(id, named_set_of_files) };
-
-                            let tmp_v: Vec<bazel_event::TargetCompletedEvt> =
-                                buffered_tce.drain(..).collect();
-
-                            for tce in tmp_v.into_iter() {
-                                if let Some(target_complete_info) = tce_event(
-                                    tce,
-                                    &rule_kind_lookup,
-                                    &named_set_of_files_lookup,
-                                    &mut buffered_tce,
-                                )
-                                .await
-                                {
-                                    tx.send(Some(HydratedInfo::TargetComplete(
-                                        target_complete_info,
-                                    )))
-                                    .await
-                                    .unwrap();
-                                }
-                            }
-                        }
-                        bazel_event::Evt::TargetCompleted(tce) => {
-                            if let Some(target_complete_info) = tce_event(
-                                tce,
-                                &rule_kind_lookup,
-                                &named_set_of_files_lookup,
-                                &mut buffered_tce,
-                            )
-                            .await
-                            {
-                                tx.send(Some(HydratedInfo::TargetComplete(target_complete_info)))
-                                    .await
-                                    .unwrap();
-                            }
-                        }
-
-                        bazel_event::Evt::ActionCompleted(ace) => {
-                            if !ace.success {
-                                let err_info = ActionFailedErrorInfo {
-                                    stdout: ace.stdout.map(|stdout| build_event_stream::File {
-                                        file: Some(stdout),
-                                        path_prefix: vec![],
-                                        name: String::from("stdout"),
-                                        digest: String::default(),
-                                        length: -1,
-                                    }),
-                                    stderr: ace.stderr.map(|stderr| build_event_stream::File {
-                                        file: Some(stderr),
-                                        path_prefix: vec![],
-                                        name: String::from("stderr"),
-                                        digest: String::default(),
-                                        length: -1,
-                                    }),
-                                    target_kind: rule_kind_lookup.get(&ace.label).cloned(),
-                                    label: ace.label,
-                                };
-                                tx.send(Some(HydratedInfo::ActionFailed(err_info)))
-                                    .await
-                                    .unwrap();
-                            } else {
-                                let act_info = ActionSuccessInfo {
-                                    stdout: ace.stdout.map(|stdout| build_event_stream::File {
-                                        file: Some(stdout),
-                                        path_prefix: vec![],
-                                        name: String::from("stdout"),
-                                        digest: String::default(),
-                                        length: -1,
-                                    }),
-                                    stderr: ace.stderr.map(|stderr| build_event_stream::File {
-                                        file: Some(stderr),
-                                        path_prefix: vec![],
-                                        name: String::from("stderr"),
-                                        digest: String::default(),
-                                        length: -1,
-                                    }),
-
-                                    target_kind: rule_kind_lookup.get(&ace.label).cloned(),
-                                    label: ace.label,
-                                };
-                                tx.send(Some(HydratedInfo::ActionSuccess(act_info)))
-                                    .await
-                                    .unwrap();
-                            }
-                        }
-
-                        bazel_event::Evt::TestResult(tfe) => {
-                            let tst_info = TestResultInfo {
-                                target_kind: rule_kind_lookup.get(&tfe.label).cloned(),
-                                test_summary_event: tfe,
-                            };
-                            tx.send(Some(HydratedInfo::TestResult(tst_info)))
-                                .await
-                                .unwrap();
-                        }
-                        bazel_event::Evt::Progress(progress) => {
-                            tx.send(Some(HydratedInfo::Progress(progress)))
-                                .await
-                                .unwrap();
-                        }
-                        bazel_event::Evt::Aborted(tfe) => {
-                            let err_info = BazelAbortErrorInfo {
-                                reason: tfe.reason,
-                                description: tfe.description,
-                                label: tfe.label,
-                            };
-                            tx.send(Some(HydratedInfo::BazelAbort(err_info)))
-                                .await
-                                .unwrap();
-                        }
-                        bazel_event::Evt::UnknownEvent(_) => (),
-                    },
+                for r in hydrator.consume(action) {
+                    tx.send(r).await.unwrap();
                 }
             }
         });
