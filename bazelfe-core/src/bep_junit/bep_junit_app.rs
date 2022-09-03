@@ -266,9 +266,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         bazelfe_protos::build_event_stream::file::File::Contents(_) => None,
                     })
                     .collect();
-                for (idx, f) in files.iter().enumerate() {
-                    let output_file = output_folder.join(format!("test.{}.xml", idx));
-                    std::fs::copy(f, output_file).unwrap();
+                if files.len() > 1 {
+                    panic!("Expected only to get one test output in a given label, huh? : {:#?}", files)
+                }
+                for file in files.iter() {
+                    let output_file = output_folder.join("test.xml");
+                    std::fs::copy(file, output_file).unwrap();
                 }
             }
             bazelfe_core::build_events::hydrated_stream::HydratedInfo::ActionSuccess(_) => (),
