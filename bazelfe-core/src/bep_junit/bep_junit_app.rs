@@ -61,28 +61,14 @@ mod junit_testsuite {
 
     #[derive(Debug)]
     pub struct TestSuites {
-        pub id: String,
-        pub name: String,
-        pub tests: u32,
-        pub failures: u32,
-        pub time: f64,
-        pub testsuite: Vec<TestSuite>,
+        pub testsuites: Vec<TestSuite>,
     }
     impl TestSuites {
         pub fn write_xml<W: std::io::Write>(&self, writer: &mut xml::writer::EventWriter<W>) {
-            let tests = self.tests.to_string();
-            let failures = self.failures.to_string();
-            let time = self.time.to_string();
-            let e = XmlEvent::start_element("TestSuites")
-                .attr("id", self.id.as_str())
-                .attr("name", self.name.as_str())
-                .attr("tests", tests.as_str())
-                .attr("failures", failures.as_str())
-                .attr("time", time.as_str());
-
+            let e = XmlEvent::start_element("testsuites");
             writer.write(e).unwrap();
 
-            for s in self.testsuite.iter() {
+            for s in self.testsuites.iter() {
                 s.write_xml(writer);
             }
             writer.write(XmlEvent::end_element()).unwrap();
@@ -91,29 +77,46 @@ mod junit_testsuite {
 
     #[derive(Debug)]
     pub struct TestSuite {
-        pub id: String,
         pub name: String,
         pub tests: u32,
         pub failures: u32,
-        pub time: f64,
-        pub failure: Vec<Failure>,
+        pub testcases: Vec<TestCase>,
     }
-
     impl TestSuite {
         pub fn write_xml<W: std::io::Write>(&self, writer: &mut xml::writer::EventWriter<W>) {
             let tests = self.tests.to_string();
             let failures = self.failures.to_string();
-            let time = self.time.to_string();
-            let e = XmlEvent::start_element("TestSuite")
-                .attr("id", self.id.as_str())
+            let e = XmlEvent::start_element("testsuite")
                 .attr("name", self.name.as_str())
                 .attr("tests", tests.as_str())
-                .attr("failures", failures.as_str())
+                .attr("failures", failures.as_str());
+
+            writer.write(e).unwrap();
+
+            for s in self.testcases.iter() {
+                s.write_xml(writer);
+            }
+            writer.write(XmlEvent::end_element()).unwrap();
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct TestCase {
+        pub name: String,
+        pub time: f64,
+        pub failures: Vec<Failure>,
+    }
+
+    impl TestCase {
+        pub fn write_xml<W: std::io::Write>(&self, writer: &mut xml::writer::EventWriter<W>) {
+            let time = self.time.to_string();
+            let e = XmlEvent::start_element("testcase")
+                .attr("name", self.name.as_str())
                 .attr("time", time.as_str());
 
             writer.write(e).unwrap();
 
-            for s in self.failure.iter() {
+            for s in self.failures.iter() {
                 s.write_xml(writer);
             }
             writer.write(XmlEvent::end_element()).unwrap();
@@ -129,7 +132,7 @@ mod junit_testsuite {
 
     impl Failure {
         pub fn write_xml<W: std::io::Write>(&self, writer: &mut xml::writer::EventWriter<W>) {
-            let e = XmlEvent::start_element("Failure")
+            let e = XmlEvent::start_element("failure")
                 .attr("message", self.message.as_str())
                 .attr("type", self.tpe_name.as_str());
 
@@ -141,7 +144,7 @@ mod junit_testsuite {
     }
 }
 
-fn action_to_build_failure(action: &ActionFailedErrorInfo) -> junit_testsuite::TestSuite {
+fn action_to_build_failure(action: &ActionFailedErrorInfo) -> junit_testsuite::TestCase {
     fn get_failure_type(
         known_failures: &mut Vec<junit_testsuite::Failure>,
         nme: &str,
@@ -179,13 +182,10 @@ fn action_to_build_failure(action: &ActionFailedErrorInfo) -> junit_testsuite::T
     get_failure_type(&mut known_failures, "stderr", &action.stderr);
     get_failure_type(&mut known_failures, "stdout", &action.stdout);
 
-    junit_testsuite::TestSuite {
-        id: random::<i32>().to_string(),
+    junit_testsuite::TestCase {
         name: action.label.clone(),
-        tests: 1,
-        failures: 1,
         time: 1.0f64,
-        failure: known_failures,
+        failures: known_failures,
     }
 }
 
@@ -196,12 +196,12 @@ fn write_failed_action(action: &ActionFailedErrorInfo, output_root: &Path) {
     let mut file = std::fs::File::create(&output_file)
         .expect(format!("Should open file {:?}", output_file).as_str());
     let e = junit_testsuite::TestSuites {
-        id: random::<u32>().to_string(),
-        name: action.label.clone(),
-        tests: 1,
-        failures: 1,
-        time: 1.0f64,
-        testsuite: vec![action_to_build_failure(action)],
+        testsuites: vec![junit_testsuite::TestSuite {
+            name: action.label.clone(),
+            tests: 1,
+            failures: 1,
+            testcases: vec![action_to_build_failure(action)],
+        }],
     };
     use xml::writer::EventWriter;
     let mut event_writer = EventWriter::new(&mut file);
@@ -266,12 +266,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         bazelfe_protos::build_event_stream::file::File::Contents(_) => None,
                     })
                     .collect();
-                if files.len() > 1 {
-                    panic!("Expected only to get one test output in a given label, huh? : {:#?}", files)
-                }
-                for file in files.iter() {
-                    let output_file = output_folder.join("test.xml");
-                    std::fs::copy(file, output_file).unwrap();
+                for (idx, f) in files.iter().enumerate() {
+                    let output_file = output_folder.join(format!("test.{}.xml", idx));
+                    std::fs::copy(f, output_file).unwrap();
                 }
             }
             bazelfe_core::build_events::hydrated_stream::HydratedInfo::ActionSuccess(_) => (),
