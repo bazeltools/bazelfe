@@ -43,7 +43,6 @@ fn load_build_event_proto(d: &Path) -> impl Iterator<Item = BuildEvent> {
     IterC(data_vec)
 }
 
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let opt = Opt::parse();
@@ -79,9 +78,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
             bazelfe_core::build_events::hydrated_stream::HydratedInfo::Progress(_) => (),
             bazelfe_core::build_events::hydrated_stream::HydratedInfo::TestResult(r) => {
-                let output_folder = opt
-                    .junit_output_path
-                    .join(label_to_junit_relative_path(r.test_summary_event.label.as_str()));
+                let output_folder = opt.junit_output_path.join(label_to_junit_relative_path(
+                    r.test_summary_event.label.as_str(),
+                ));
                 std::fs::create_dir_all(&output_folder).expect("Make dir failed");
 
                 let files: Vec<&str> = r
