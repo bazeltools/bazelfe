@@ -64,7 +64,7 @@ fn generate_struct_from_failed_action(
     get_failure_type(&mut known_failures, "stdout", &action.stdout);
 
     junit_xml_error_writer::TestCase {
-        name: action.label.clone(),
+        name: "Build failure".to_string(),
         time: 1.0f64,
         failures: known_failures,
     }
@@ -115,7 +115,7 @@ mod tests {
         assert_eq!(
             generate_struct_from_failed_action(&v),
             TestCase {
-                name: "//src/main/foo/bar:baz".to_string(),
+                name: "Build failure".to_string(),
                 time: 1.0,
                 failures: vec![
                     Failure {
@@ -133,11 +133,4 @@ mod tests {
         );
     }
 
-    // #[test]
-    // fn test_external_label_to_expected_path() {
-    //     assert_eq!(
-    //         label_to_junit_relative_path("@my_lib//src/main/foo/bar/baz:lump"),
-    //         "external/my_lib/src/main/foo/bar/baz/lump".to_string()
-    //     );
-    // }
 }
