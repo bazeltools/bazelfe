@@ -1,14 +1,13 @@
+use bazelfe_core::bep_junit::{emit_junit_xml_from_failed_action, label_to_junit_relative_path};
 use bazelfe_core::build_events::build_event_server::BuildEventAction;
 
 use bazelfe_core::build_events::build_event_server::bazel_event::BazelBuildEvent;
-use bazelfe_core::build_events::hydrated_stream::{ActionFailedErrorInfo, HydratorState};
+use bazelfe_core::build_events::hydrated_stream::HydratorState;
 use bazelfe_protos::build_event_stream::BuildEvent;
 use clap::Parser;
 use prost::Message;
-use rand::random;
 use std::collections::VecDeque;
 use std::error::Error;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
 #[derive(Parser, Debug)]
@@ -21,7 +20,7 @@ struct Opt {
     junit_output_path: PathBuf,
 }
 
-fn load_proto(d: &Path) -> impl Iterator<Item = BuildEvent> {
+fn load_build_event_proto(d: &Path) -> impl Iterator<Item = BuildEvent> {
     struct IterC(VecDeque<u8>);
     impl Iterator for IterC {
         type Item = BuildEvent;
@@ -44,174 +43,11 @@ fn load_proto(d: &Path) -> impl Iterator<Item = BuildEvent> {
     IterC(data_vec)
 }
 
-fn label_to_child_path(label: &str) -> String {
-    let p = if let Some(external_suffix) = label.strip_prefix("@") {
-        format!("external/{}", external_suffix)
-    } else if let Some(internal_suffix) = label.strip_prefix("//") {
-        internal_suffix.to_string()
-    } else {
-        label.to_string()
-    };
-
-    p.replace("//", "/").replace(":", "/")
-}
-
-mod junit_testsuite {
-    use xml::writer::XmlEvent;
-
-    #[derive(Debug)]
-    pub struct TestSuites {
-        pub testsuites: Vec<TestSuite>,
-    }
-    impl TestSuites {
-        pub fn write_xml<W: std::io::Write>(&self, writer: &mut xml::writer::EventWriter<W>) {
-            let e = XmlEvent::start_element("testsuites");
-            writer.write(e).unwrap();
-
-            for s in self.testsuites.iter() {
-                s.write_xml(writer);
-            }
-            writer.write(XmlEvent::end_element()).unwrap();
-        }
-    }
-
-    #[derive(Debug)]
-    pub struct TestSuite {
-        pub name: String,
-        pub tests: u32,
-        pub failures: u32,
-        pub testcases: Vec<TestCase>,
-    }
-    impl TestSuite {
-        pub fn write_xml<W: std::io::Write>(&self, writer: &mut xml::writer::EventWriter<W>) {
-            let tests = self.tests.to_string();
-            let failures = self.failures.to_string();
-            let e = XmlEvent::start_element("testsuite")
-                .attr("name", self.name.as_str())
-                .attr("tests", tests.as_str())
-                .attr("failures", failures.as_str());
-
-            writer.write(e).unwrap();
-
-            for s in self.testcases.iter() {
-                s.write_xml(writer);
-            }
-            writer.write(XmlEvent::end_element()).unwrap();
-        }
-    }
-
-    #[derive(Debug)]
-    pub struct TestCase {
-        pub name: String,
-        pub time: f64,
-        pub failures: Vec<Failure>,
-    }
-
-    impl TestCase {
-        pub fn write_xml<W: std::io::Write>(&self, writer: &mut xml::writer::EventWriter<W>) {
-            let time = self.time.to_string();
-            let e = XmlEvent::start_element("testcase")
-                .attr("name", self.name.as_str())
-                .attr("time", time.as_str());
-
-            writer.write(e).unwrap();
-
-            for s in self.failures.iter() {
-                s.write_xml(writer);
-            }
-            writer.write(XmlEvent::end_element()).unwrap();
-        }
-    }
-
-    #[derive(Debug)]
-    pub struct Failure {
-        pub message: String,
-        pub tpe_name: String,
-        pub value: String,
-    }
-
-    impl Failure {
-        pub fn write_xml<W: std::io::Write>(&self, writer: &mut xml::writer::EventWriter<W>) {
-            let e = XmlEvent::start_element("failure")
-                .attr("message", self.message.as_str())
-                .attr("type", self.tpe_name.as_str());
-
-            writer.write(e).unwrap();
-
-            writer.write(XmlEvent::CData(self.value.as_str())).unwrap();
-            writer.write(XmlEvent::end_element()).unwrap();
-        }
-    }
-}
-
-fn action_to_build_failure(action: &ActionFailedErrorInfo) -> junit_testsuite::TestCase {
-    fn get_failure_type(
-        known_failures: &mut Vec<junit_testsuite::Failure>,
-        nme: &str,
-        f: &Option<bazelfe_protos::build_event_stream::File>,
-    ) {
-        if let Some(inner_f) = &f.as_ref().and_then(|e| e.file.as_ref()) {
-            let mut str_v = None;
-
-            match inner_f {
-                bazelfe_protos::build_event_stream::file::File::Uri(uri) => {
-                    if let Some(p) = uri.strip_prefix("file://") {
-                        let s = std::fs::read_to_string(p)
-                            .expect("Expected to be able to open input test data");
-                        str_v = Some(s);
-                    }
-                }
-                bazelfe_protos::build_event_stream::file::File::Contents(content) => {
-                    str_v = Some(String::from_utf8_lossy(content).to_string())
-                }
-            }
-            if let Some(content) = str_v {
-                if !content.is_empty() {
-                    known_failures.push(junit_testsuite::Failure {
-                        message: format!("Failed to build, {}", nme),
-                        tpe_name: "ERROR".to_string(),
-                        value: content,
-                    });
-                }
-            }
-        }
-    }
-
-    let mut known_failures = vec![];
-
-    get_failure_type(&mut known_failures, "stderr", &action.stderr);
-    get_failure_type(&mut known_failures, "stdout", &action.stdout);
-
-    junit_testsuite::TestCase {
-        name: action.label.clone(),
-        time: 1.0f64,
-        failures: known_failures,
-    }
-}
-
-fn write_failed_action(action: &ActionFailedErrorInfo, output_root: &Path) {
-    let output_folder = output_root.join(label_to_child_path(action.label.as_str()));
-    let output_file = output_folder.join("test.xml");
-    std::fs::create_dir_all(output_folder).expect("Make dir failed");
-    let mut file = std::fs::File::create(&output_file)
-        .expect(format!("Should open file {:?}", output_file).as_str());
-    let e = junit_testsuite::TestSuites {
-        testsuites: vec![junit_testsuite::TestSuite {
-            name: action.label.clone(),
-            tests: 1,
-            failures: 1,
-            testcases: vec![action_to_build_failure(action)],
-        }],
-    };
-    use xml::writer::EventWriter;
-    let mut event_writer = EventWriter::new(&mut file);
-    e.write_xml(&mut event_writer);
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let opt = Opt::parse();
-    let r = load_proto(opt.build_event_binary_output.as_path());
+    let r = load_build_event_proto(opt.build_event_binary_output.as_path());
 
     std::fs::create_dir_all(&opt.junit_output_path).expect("Make output tree");
 
@@ -239,13 +75,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
             bazelfe_core::build_events::hydrated_stream::HydratedInfo::ActionFailed(
                 action_failed,
             ) => {
-                write_failed_action(action_failed, &opt.junit_output_path);
+                emit_junit_xml_from_failed_action(action_failed, &opt.junit_output_path);
             }
             bazelfe_core::build_events::hydrated_stream::HydratedInfo::Progress(_) => (),
             bazelfe_core::build_events::hydrated_stream::HydratedInfo::TestResult(r) => {
                 let output_folder = opt
                     .junit_output_path
-                    .join(label_to_child_path(r.test_summary_event.label.as_str()));
+                    .join(label_to_junit_relative_path(r.test_summary_event.label.as_str()));
                 std::fs::create_dir_all(&output_folder).expect("Make dir failed");
 
                 let files: Vec<&str> = r
