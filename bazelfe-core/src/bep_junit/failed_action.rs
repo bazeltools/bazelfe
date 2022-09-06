@@ -1,4 +1,5 @@
 use super::junit_xml_error_writer;
+use super::junit_xml_error_writer::XmlWritable;
 use super::label_to_junit_relative_path;
 use crate::build_events::hydrated_stream::ActionFailedErrorInfo;
 use std::path::Path;
@@ -67,4 +68,76 @@ fn generate_struct_from_failed_action(
         time: 1.0f64,
         failures: known_failures,
     }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use bazelfe_protos::build_event_stream;
+    use junit_xml_error_writer::*;
+
+    use super::*;
+    #[test]
+    fn test_generate_struct_from_failed_action() {
+        let t = tempfile::tempdir().expect("Make a temp directory");
+        use std::io::Write;
+
+        let stdout_f = t.path().join("stdout_out");
+        let mut file = std::fs::File::create(&stdout_f).unwrap();
+        file.write_all(b"Hello, world!").unwrap();
+
+        let stderr_f = t.path().join("stderr_out");
+        let mut file = std::fs::File::create(&stderr_f).unwrap();
+        file.write_all(b"Hello, world!").unwrap();
+
+        let v = ActionFailedErrorInfo {
+            label: "//src/main/foo/bar:baz".to_string(),
+            stdout: Some(build_event_stream::File {
+                path_prefix: vec!["bazel-out".to_string()],
+                name: "stdout".to_string(),
+                digest: "AABE".to_string(),
+                length: 33,
+                file: Some(bazelfe_protos::build_event_stream::file::File::Uri(
+                    format!("file://{}", stdout_f.to_string_lossy()),
+                )),
+            }),
+            stderr: Some(build_event_stream::File {
+                path_prefix: vec!["bazel-out".to_string()],
+                name: "stderr".to_string(),
+                digest: "AABEE".to_string(),
+                length: 23,
+                file: Some(bazelfe_protos::build_event_stream::file::File::Uri(
+                    format!("file://{}", stderr_f.to_string_lossy()),
+                )),
+            }),
+            target_kind: Some("my_test_type".to_string()),
+        };
+        assert_eq!(
+            generate_struct_from_failed_action(&v),
+            TestCase {
+                name: "//src/main/foo/bar:baz".to_string(),
+                time: 1.0,
+                failures: vec![
+                    Failure {
+                        message: "Failed to build, stderr".to_string(),
+                        tpe_name: "ERROR".to_string(),
+                        value: "Hello, world!".to_string()
+                    },
+                    Failure {
+                        message: "Failed to build, stdout".to_string(),
+                        tpe_name: "ERROR".to_string(),
+                        value: "Hello, world!".to_string()
+                    }
+                ]
+            }
+        );
+    }
+
+    // #[test]
+    // fn test_external_label_to_expected_path() {
+    //     assert_eq!(
+    //         label_to_junit_relative_path("@my_lib//src/main/foo/bar/baz:lump"),
+    //         "external/my_lib/src/main/foo/bar/baz/lump".to_string()
+    //     );
+    // }
 }
