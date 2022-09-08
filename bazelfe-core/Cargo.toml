@@ -130,7 +130,7 @@ features = ["tls"]
 version = "0.8.1"
 
 [dev-dependencies]
-once_cell = "1.13.1"
+once_cell = "1.14.0"
 pinky-swear = "6.1.0"
 tower = "0.4.13"
 tempfile = "3.3.0"
