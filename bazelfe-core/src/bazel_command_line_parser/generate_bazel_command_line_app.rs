@@ -89,16 +89,13 @@ async fn extract_options(
     for line in stdout.lines() {
         let segment = line.split(' ').find(|e| !e.is_empty());
         if let Some(action) = segment {
-            if action.starts_with("--") {
-                if action.starts_with("--[no]") {
-                    let opt = &action[6..];
-                    if valid_option(opt) {
-                        res.push(BazelOption::BooleanOption(opt.to_string()));
+            if let Some(arg) = action.strip_prefix("--") {
+                if let Some(inner_opt) = arg.strip_prefix("[no]") {
+                    if valid_option(inner_opt) {
+                        res.push(BazelOption::BooleanOption(inner_opt.to_string()));
                     }
-                } else {
-                    let opt = &action[2..];
-                    if valid_option(opt) {
-                        res.push(BazelOption::OptionWithArg(opt.to_string()));
+                    if valid_option(arg) {
+                        res.push(BazelOption::OptionWithArg(arg.to_string()));
                     }
                 }
             }

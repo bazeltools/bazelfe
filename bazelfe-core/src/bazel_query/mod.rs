@@ -81,15 +81,12 @@ pub async fn in_repo_dependencies(
 #[async_trait::async_trait]
 pub trait BazelQueryEngine: Send + Sync + std::fmt::Debug {
     async fn dependency_link(
-        self: &Self,
+        &self,
         edge_src: &str,
         edge_dest: &str,
     ) -> Result<bool, Box<dyn std::error::Error>>;
 
-    async fn allrdeps(
-        self: &Self,
-        target: &str,
-    ) -> Result<HashSet<String>, Box<dyn std::error::Error>>;
+    async fn allrdeps(&self, target: &str) -> Result<HashSet<String>, Box<dyn std::error::Error>>;
 }
 
 #[derive(Debug)]
@@ -107,17 +104,14 @@ impl RealBazelQueryEngine {
 
 #[async_trait::async_trait]
 impl BazelQueryEngine for RealBazelQueryEngine {
-    async fn allrdeps(
-        self: &Self,
-        target: &str,
-    ) -> Result<HashSet<String>, Box<dyn std::error::Error>> {
+    async fn allrdeps(&self, target: &str) -> Result<HashSet<String>, Box<dyn std::error::Error>> {
         let res_set = allrdeps(Arc::clone(&self.query), target).await?;
 
         Ok(res_set)
     }
 
     async fn dependency_link(
-        self: &Self,
+        &self,
         edge_src: &str,
         edge_dest: &str,
     ) -> Result<bool, Box<dyn std::error::Error>> {

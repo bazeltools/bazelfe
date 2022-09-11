@@ -31,7 +31,7 @@ pub enum BazelAttrTarget {
 }
 
 impl BazelAttrTarget {
-    pub fn as_str<'a>(self: &'a Self) -> &'a str {
+    pub fn as_str(&self) -> &str {
         match self {
             BazelAttrTarget::Deps => "deps",
             BazelAttrTarget::RuntimeDeps => "runtime_deps",

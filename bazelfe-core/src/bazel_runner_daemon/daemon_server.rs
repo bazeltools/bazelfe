@@ -350,7 +350,7 @@ impl TargetCache {
                     use sha2::{Digest, Sha256};
                     let mut hasher = Sha256::new();
                     if let Ok(mut file) = std::fs::File::open(&real_path) {
-                        if let Ok(_) = std::io::copy(&mut file, &mut hasher) {
+                        if std::io::copy(&mut file, &mut hasher).is_ok() {
                             current_sha = Some(hasher.finalize().to_vec());
 
                             if let Some((_, _, Some(prev_sha))) = lock.get(&real_path) {
@@ -666,12 +666,6 @@ pub async fn main_from_config(config_path: &PathBuf) -> Result<(), Box<dyn Error
     main(&u.daemon_config, &u.bazel_binary_path, &u.daemon_paths).await
 }
 
-#[derive(Debug, Clone)]
-struct SharedLastFiles {
-    last_files_updated: Arc<Mutex<HashMap<PathBuf, u128>>>,
-    inotify_ignore_regexes: NotifyRegexes,
-}
-impl SharedLastFiles {}
 use clap::Parser;
 #[derive(Parser, Debug)]
 #[clap(name = "basic")]

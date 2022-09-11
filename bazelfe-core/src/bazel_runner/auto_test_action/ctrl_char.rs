@@ -93,9 +93,7 @@ impl CtrlChunk {
                     ctrl = ctrl[0].split(';').map(|s| s.to_string()).collect();
                 }
                 ctrl_chars.extend(ctrl);
-                if ctrl_text.len() == 1 {
-                    continue;
-                } else if ctrl_text[1].contains('\u{1b}') {
+                if ctrl_text.len() == 1 || ctrl_text[1].contains('\u{1b}') {
                     continue;
                 } else {
                     let mut text = ctrl_text[1].to_string();

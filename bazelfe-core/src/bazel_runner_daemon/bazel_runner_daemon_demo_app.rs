@@ -55,9 +55,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     match opt.subcmd {
         SubCommands::SpawnDaemon => {
-            let mut daemon_config = DaemonConfig::default();
-
-            daemon_config.enabled = true;
+            let daemon_config = DaemonConfig {
+                enabled: true,
+                ..Default::default()
+            };
 
             let bazel_path = opt
                 .bazel_binary_path
