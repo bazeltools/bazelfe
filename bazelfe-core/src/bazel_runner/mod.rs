@@ -102,7 +102,7 @@ fn add_custom_args(bazel_command_line: &mut ParsedCommandLine, srv_port: u16) {
     );
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ExecuteResult {
     pub exit_code: i32,
     pub errors_corrected: u32,
@@ -185,7 +185,7 @@ async fn execute_sub_tty_process(
 ) -> Result<ExecuteResult, Box<dyn std::error::Error>> {
     use std::process::Command;
     let mut cmd = Command::new(command);
-    cmd.args(&*args);
+    cmd.args(args);
 
     let child: PtyProcess = PtyProcess::spawn(cmd).expect("failed to start bazel process");
 

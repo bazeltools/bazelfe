@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use std::{ffi::OsString, path::PathBuf};
 use tokio::process::Command;
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ExecuteResultError {
     pub exit_code: i32,
     pub stdout: String,

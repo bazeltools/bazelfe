@@ -23,13 +23,13 @@ impl<'a> From<nom::Err<(&'a str, NomErrorKind)>> for Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum SelectorType {
     SelectorList(Vec<(String, Option<String>)>),
     WildcardSelector,
     NoSelector,
 }
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Import {
     pub line_number: u32,
     pub prefix_section: String,

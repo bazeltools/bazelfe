@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use std::ffi::OsString;
 use tokio::process::Command;
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ExecutionResult {
     pub exit_success: bool,
     pub stdout: String,
@@ -92,7 +92,7 @@ pub(crate) mod test_tools {
 
     use super::*;
 
-    #[derive(Clone, Debug, PartialEq)]
+    #[derive(Clone, Debug, PartialEq, Eq)]
     pub enum ActionLogEntry {
         ExecuteCommandLine { command_line: String },
     }

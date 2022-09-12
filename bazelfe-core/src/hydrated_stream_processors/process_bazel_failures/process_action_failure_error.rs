@@ -9,12 +9,12 @@ use std::time::Instant;
 
 use super::shared_utils::text_logs_from_failure;
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 
 pub enum BazelCorrectionCommand {
     BuildozerRemoveDep(BuildozerRemoveDepCmd),
 }
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct BuildozerRemoveDepCmd {
     pub target_to_operate_on: String,
     pub dependency_to_remove: String,

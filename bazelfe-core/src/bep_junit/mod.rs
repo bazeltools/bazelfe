@@ -14,7 +14,7 @@ pub fn label_to_junit_relative_path(label: &str) -> String {
         label.to_string()
     };
 
-    p.replace("//", "/").replace(":", "/")
+    p.replace("//", "/").replace(':', "/")
 }
 
 #[cfg(test)]

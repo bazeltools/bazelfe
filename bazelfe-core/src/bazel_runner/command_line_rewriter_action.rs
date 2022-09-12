@@ -169,7 +169,7 @@ mod tests {
             remaining_args: vec!["bar".to_string()],
         };
 
-        let _ = rewrite_command_line(
+        rewrite_command_line(
             &mut passthrough_command_line,
             &CommandLineRewriter::default(),
             #[cfg(feature = "bazelfe-daemon")]
@@ -203,7 +203,7 @@ mod tests {
         let rewrite_config = CommandLineRewriter {
             test: TestActionMode::EmptyTestToLocalRepo(EmptyTestToLocalRepoCfg::default()),
         };
-        let _ = rewrite_command_line(
+        rewrite_command_line(
             &mut passthrough_command_line,
             &rewrite_config,
             #[cfg(feature = "bazelfe-daemon")]

@@ -96,7 +96,7 @@ async fn spawn_bazel_attempt(
     bazel_args: &ParsedCommandLine,
 ) -> bazel_runner::ExecuteResult {
     let (tx, rx) = async_channel::unbounded();
-    let _ = {
+    {
         let mut locked = sender_arc.lock().await;
         *locked = Some(tx);
     };
@@ -110,7 +110,7 @@ async fn spawn_bazel_attempt(
         .await
         .expect("Internal errors should not occur invoking bazel.");
 
-    let _ = {
+    {
         let mut locked = sender_arc.lock().await;
         locked.take();
     };
@@ -146,14 +146,12 @@ async fn run_query_chunk<B: BazelQuery>(
         String::from_utf8(buffer).unwrap()
     };
     let res = bazel_query
-        .execute(&vec![
-            String::from("query"),
+        .execute(&[String::from("query"),
             String::from("--keep_going"),
             String::from("--noimplicit_deps"),
             String::from("--output"),
             String::from("label_kind"),
-            merged,
-        ])
+            merged])
         .await;
 
     for ln in res.stdout.lines() {
@@ -262,7 +260,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         info!("Executing initial query to find all external repos in this bazel repository");
 
         let res = bazel_query
-            .execute(&vec![String::from("query"), String::from("//external:*")])
+            .execute(&[String::from("query"), String::from("//external:*")])
             .await;
 
         let mut target_roots = vec![String::from("//...")];

@@ -17,15 +17,15 @@ pub fn sanitize_label(label: String) -> String {
     // src/foo/bar/baz and src/foo/bar/baz:baz
     // ensures we don't try refer to ourselves
 
-    let label = match label.find(':') {
+    
+
+    match label.find(':') {
         None => {
             let last_segment = &label[label.rfind('/').map(|e| e + 1).unwrap_or(0)..label.len()];
             format!("{}:{}", label, last_segment)
         }
         Some(_) => label,
-    };
-
-    label
+    }
 }
 
 pub fn prepare_class_import_requests(

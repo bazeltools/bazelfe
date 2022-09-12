@@ -66,7 +66,7 @@ impl<'a> IndexTable {
 
         let mut id_to_str: Vec<String> = Vec::default();
         for e in str_lut.iter() {
-            id_to_str.push(String::from_utf8_lossy(&*e).into_owned());
+            id_to_str.push(String::from_utf8_lossy(e).into_owned());
         }
 
         let mut res_lst: Vec<(String, Vec<(u16, String)>)> = Vec::default();
@@ -129,7 +129,7 @@ impl<'a> IndexTable {
         file.write_u64::<LittleEndian>(7654323333_u64).unwrap();
         file.write_u16::<LittleEndian>(1_u16).unwrap();
 
-        let _ = {
+        {
             let id_vec = self.id_to_target_vec.read().await;
             file.write_u64::<LittleEndian>(id_vec.len() as u64).unwrap();
             for ele in id_vec.iter() {
@@ -340,7 +340,7 @@ impl<'a> IndexTable {
         };
 
         if should_update {
-            let _ = {
+            {
                 let mut w = self.id_to_ctime.write().await;
                 if key_id >= w.len() {
                     w.resize_with((key_id + 100) as usize, Default::default);

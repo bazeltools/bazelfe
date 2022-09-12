@@ -91,7 +91,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         bazelfe_protos::build_event_stream::file::File::Uri(uri) => {
                             let p = uri
                                 .strip_prefix("file://")
-                                .expect(format!("Wasn't a local file for {}", uri).as_str());
+                                .unwrap_or_else(|| panic!("Wasn't a local file for {}", uri));
                             if p.ends_with("/test.xml") {
                                 Some(p)
                             } else {

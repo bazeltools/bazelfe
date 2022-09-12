@@ -11,7 +11,7 @@ use regex::Regex;
 use std::{collections::HashMap, sync::Arc, time::Instant};
 
 use super::CurrentState;
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 
 pub enum BazelCorrectionCommand {
     BuildozerRemoveDep(BuildozerRemoveDepCmd),

@@ -43,7 +43,7 @@ pub struct TestResultInfo {
     pub target_kind: Option<String>,
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct BazelAbortErrorInfo {
     pub label: Option<String>,
     pub reason: Option<build_event_stream::aborted::AbortReason>,

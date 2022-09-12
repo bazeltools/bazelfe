@@ -317,7 +317,7 @@ pub mod bazel_event {
         pub test_status: TestStatus,
         pub output_files: Vec<build_event_stream::file::File>,
     }
-    #[derive(Clone, PartialEq, Debug)]
+    #[derive(Clone, PartialEq, Eq, Debug)]
     pub struct TargetConfiguredEvt {
         pub label: String,
         pub rule_kind: String,

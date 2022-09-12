@@ -68,7 +68,7 @@ impl XmlWritable for TestCase {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Failure {
     pub message: String,
     pub tpe_name: String,

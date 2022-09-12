@@ -71,7 +71,7 @@ async fn spawn_bazel_attempt(
     pipe_output: bool,
 ) -> Result<(ProcessorActivity, bazel_runner::ExecuteResult), Box<dyn std::error::Error>> {
     let (tx, rx) = async_channel::unbounded();
-    let _ = {
+    {
         let mut locked = sender_arc.lock().await;
         *locked = Some(tx);
     };
@@ -129,7 +129,7 @@ async fn spawn_bazel_attempt(
     let res = bazel_runner::execute_bazel_output_control(bazel_command_line, bes_port, pipe_output)
         .await?;
 
-    let _ = {
+    {
         let mut locked = sender_arc.lock().await;
         locked.take();
     };

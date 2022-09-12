@@ -23,7 +23,7 @@ mod shared_utils;
 pub use command_line_runner::CommandLineRunner;
 pub use command_line_runner::CommandLineRunnerImpl;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TargetStoryAction {
     WouldHaveAddedDependency {
         what: String,
