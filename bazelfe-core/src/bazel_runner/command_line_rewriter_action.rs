@@ -6,6 +6,7 @@ use crate::{
     config::command_line_rewriter::TestActionMode,
 };
 
+#[cfg(feature = "bazelfe-daemon")]
 use std::fmt::Write;
 
 #[cfg(feature = "bazelfe-daemon")]

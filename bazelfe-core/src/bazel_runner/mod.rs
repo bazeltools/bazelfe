@@ -15,7 +15,9 @@ static SUB_PROCESS_PID: std::sync::atomic::AtomicI32 = std::sync::atomic::Atomic
 
 #[cfg(feature = "autotest-action")]
 mod auto_test_action;
-pub mod bazel_runner;
+mod bazel_runner_inst;
+pub use bazel_runner_inst::{BazelRunner, BazelRunnerError};
+
 mod command_line_rewriter_action;
 mod configured_bazel_runner;
 mod processor_activity;

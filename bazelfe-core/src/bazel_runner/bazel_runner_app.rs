@@ -151,7 +151,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.disable_action_stories_on_success = opt.disable_action_stories_on_success;
     }
 
-    let bazel_runner = bazel_runner::bazel_runner::BazelRunner {
+    let bazel_runner = bazel_runner::BazelRunner {
         config,
         bazel_command_line: parsed_command_line,
     };
@@ -162,7 +162,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Err(ex) => {
             match ex {
-                bazel_runner::bazel_runner::BazelRunnerError::UserErrorReport(user_error) => {
+                bazel_runner::BazelRunnerError::UserErrorReport(user_error) => {
                     eprintln!("\x1b[0;31m{}\x1b[0m", user_error.0);
                 }
                 other => eprintln!("Error:\n{}", other),
