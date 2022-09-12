@@ -6,6 +6,8 @@ use crate::{
     config::command_line_rewriter::TestActionMode,
 };
 
+use std::fmt::Write;
+
 #[cfg(feature = "bazelfe-daemon")]
 use bazelfe_protos::bazel_tools::daemon_service::daemon_service_client::DaemonServiceClient;
 use thiserror::Error;
@@ -81,7 +83,7 @@ pub async fn rewrite_command_line<B: BazelQuery>(
                             invalidated_targets.extend(
                                 recently_invalidated_targets
                                     .into_iter()
-                                    .map(|e| e.into_inner().targets.unwrap_or(Default::default()))
+                                    .map(|e| e.into_inner().targets.unwrap_or_default())
                                     .map(|e| (distance, e)),
                             );
                         }
@@ -100,7 +102,7 @@ pub async fn rewrite_command_line<B: BazelQuery>(
                                         if(!seen_targets.contains(&label))
                                         {
                                             seen_targets.insert(label.clone());
-                                            buf.push_str(&format!("\n|{}", label));
+                                            write!(buf, "\n|{}", label);
                                         }
                                     },
                                 }
@@ -238,7 +240,7 @@ mod tests {
 
     #[async_trait::async_trait]
     impl BazelQuery for TestBazelQuery {
-        async fn execute(&self, _args: &Vec<String>) -> ExecuteResult {
+        async fn execute(&self, _args: &[String]) -> ExecuteResult {
             self.0.clone()
         }
     }
@@ -265,12 +267,12 @@ mod tests {
         )
         .await;
 
-        assert_eq!(true, ret.is_err());
+        assert!(ret.is_err());
 
         match ret {
             Ok(_) => panic!("Expected to get an error condition from the call"),
             Err(RewriteCommandLineError::UserErrorReport(err)) => {
-                assert_eq!(true, err.0.contains("No test target specified"));
+                assert!(err.0.contains("No test target specified"));
             }
         }
     }

@@ -81,8 +81,8 @@ fn monotonic_current_time() -> daemon_service::Instant {
     }
     daemon_service::Instant { value: ret }
 }
-fn target_as_path(s: &String) -> Option<PathBuf> {
-    let pb = PathBuf::from(s.replace(":", "/").replace("//", ""));
+fn target_as_path(s: &str) -> Option<PathBuf> {
+    let pb = PathBuf::from(s.replace(':', "/").replace("//", ""));
     if pb.exists() {
         Some(pb)
     } else {
@@ -168,16 +168,12 @@ impl TargetState {
             return Ok(());
         }
         let mut cur_path = Some(path);
-        loop {
-            if let Some(p) = cur_path {
-                if p.join("BUILD").exists() || p.join("WORKSPACE").exists() {
-                    break;
-                } else {
-                    cur_path = p.parent();
-                }
-            } else {
+        while let Some(p) = cur_path {
+            if p.join("BUILD").exists() || p.join("WORKSPACE").exists() {
                 break;
-            };
+            } else {
+                cur_path = p.parent();
+            }
         }
 
         if let Some(p) = cur_path {
@@ -233,11 +229,19 @@ impl TargetState {
     }
 }
 use crate::jvm_indexer::bazel_query::BazelQuery;
+
+#[derive(Debug)]
+struct UpdatedFileState {
+    content_sha: Option<Vec<u8>>,
+    daemon_updated: daemon_service::Instant,
+    updated: Instant
+}
+
 #[derive(Debug)]
 struct TargetCache {
     target_state: Arc<TargetState>,
     last_files_updated:
-        Arc<Mutex<HashMap<PathBuf, (daemon_service::Instant, Instant, Option<Vec<u8>>)>>>,
+        Arc<Mutex<HashMap<PathBuf, UpdatedFileState>>>,
     inotify_ignore_regexes: NotifyRegexes,
     pending_hydrations: Arc<AtomicUsize>,
     bazel_query: Arc<Mutex<Box<dyn BazelQuery>>>,
@@ -304,7 +308,7 @@ impl TargetCache {
 
             let parent_relative = if let Ok(relative_path) = parent
                 .canonicalize()
-                .unwrap_or(p.clone())
+                .unwrap_or_else(|_| p.clone())
                 .strip_prefix(current_path.as_path())
             {
                 relative_path.to_path_buf()
@@ -353,9 +357,11 @@ impl TargetCache {
                         if std::io::copy(&mut file, &mut hasher).is_ok() {
                             current_sha = Some(hasher.finalize().to_vec());
 
-                            if let Some((_, _, Some(prev_sha))) = lock.get(&real_path) {
-                                if current_sha.as_ref() == Some(prev_sha) {
-                                    do_insert = false;
+                            if let Some(p) = lock.get(&real_path) {
+                                if let Some(prev_sha) = p.content_sha.as_ref() {
+                                    if current_sha.as_ref() == Some(prev_sha) {
+                                        do_insert = false;
+                                    }
                                 }
                             }
                         }
@@ -369,7 +375,11 @@ impl TargetCache {
                         event_kind,
                         (real_path.to_path_buf(), (ts, now_instant, &current_sha))
                     );
-                    lock.insert(real_path.to_path_buf(), (ts, now_instant, current_sha));
+                    lock.insert(real_path.to_path_buf(), UpdatedFileState {
+                        content_sha: current_sha,
+                        daemon_updated: ts,
+                        updated: now_instant,
+                });
                 }
             }
         }
@@ -379,7 +389,7 @@ impl TargetCache {
         let mut max_age = Duration::from_secs(3600);
 
         while lock.len() > 20 && max_age > Duration::from_secs(120) {
-            lock.retain(|_, v| now_instant - v.1 < max_age);
+            lock.retain(|_, v| now_instant - v.updated < max_age);
             max_age /= 2;
         }
     }
@@ -421,11 +431,12 @@ impl TargetCache {
         let lock = self.last_files_updated.lock().await;
 
         lock.iter()
-            .filter_map(|(k, (v, _, _))| {
-                if *v > instant {
+            .filter_map(|(k, prev_s)| {
+                let v = prev_s.daemon_updated;
+                if v > instant {
                     Some(daemon_service::FileStatus {
                         path: k.to_string_lossy().to_string(),
-                        updated: Some(*v),
+                        updated: Some(v),
                     })
                 } else {
                     None
@@ -727,7 +738,7 @@ pub async fn main(
 
     let mut ignore_builder = ignore::gitignore::GitignoreBuilder::new(&current_dir);
 
-    for f in vec![".gitignore", ".bazelignore"] {
+    for f in &[".gitignore", ".bazelignore"] {
         let sub_path = current_dir.join(f);
         if sub_path.exists() {
             let _ = ignore_builder.add(sub_path);
@@ -749,6 +760,17 @@ pub async fn main(
     let _ = tokio::task::spawn(async move {
         while let Ok(event) = flume_rx.recv_async().await {
             use notify::EventKind;
+
+            let should_process = match &event.kind {
+                EventKind::Any => true,
+                EventKind::Access(access_type) =>
+                    matches!(access_type, notify::event::AccessKind::Close(notify::event::AccessMode::Write)),
+                EventKind::Create(_) => true,
+                EventKind::Modify(_) => true,
+                EventKind::Remove(_) => true,
+                EventKind::Other => true,
+            };
+
             let filtered_paths: Vec<PathBuf> = event
                 .paths
                 .iter()
@@ -756,24 +778,10 @@ pub async fn main(
                 .cloned()
                 .collect();
 
-            let should_process = match &event.kind {
-                EventKind::Any => true,
-                EventKind::Access(access_type) => match access_type {
-                    notify::event::AccessKind::Close(m) => match m {
-                        notify::event::AccessMode::Write => true,
-                        _ => false,
-                    },
-                    _ => false,
-                },
-                EventKind::Create(_) => true,
-                EventKind::Modify(_) => true,
-                EventKind::Remove(_) => true,
-                EventKind::Other => true,
-            };
 
             if should_process && !filtered_paths.is_empty() {
                 copy_shared
-                    .register_new_files(event.paths, event.kind.clone())
+                    .register_new_files(filtered_paths, event.kind.clone())
                     .await;
             }
         }
@@ -824,8 +832,8 @@ pub async fn main(
 
     let mut root_watcher: RecommendedWatcher =
         RecommendedWatcher::new(move |res: notify::Result<notify::Event>| match res {
-            Ok(event) => match event.kind {
-                notify::EventKind::Create(_) => {
+            Ok(event) =>
+                if let notify::EventKind::Create(_) = event.kind {
                     for path in event.paths.iter() {
                         let file_name = if let Some(file_name) = path.file_name() {
                             file_name
@@ -849,8 +857,6 @@ pub async fn main(
 
                         core_watcher.watch(path, RecursiveMode::Recursive).unwrap();
                     }
-                }
-                _ => (),
             },
             Err(e) => println!("watch error: {:?}", e),
         })

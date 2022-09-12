@@ -87,12 +87,8 @@ pub fn extract_errors(input: &str) -> Vec<super::ActionRequest> {
     .into_iter()
     .flat_map(|e| e.into_iter().flat_map(|inner| inner.into_iter()))
     .flat_map(|e| {
-        let cached_file_data = file_parse_cache.load_file(&e.src_file_name);
-
-        match cached_file_data {
-            None => vec![e],
-            Some(file_data) => {
-                let extra_wildcard_imports: Vec<ScalaClassImportRequest> = file_data
+        let extra_entries = if let Some(file_data) = file_parse_cache.load_file(&e.src_file_name) {
+                let extra_wildcard_imports = file_data
                     .imports
                     .iter()
                     .filter_map(|e| match e.suffix {
@@ -115,16 +111,14 @@ pub fn extract_errors(input: &str) -> Vec<super::ActionRequest> {
                         } else {
                             None
                         }
-                    })
-                    .collect();
+                    });
 
-                extra_wildcard_imports
-                    .into_iter()
-                    .chain(vec![e].into_iter())
-                    .collect()
-            }
-        }
-        .into_iter()
+                Some(extra_wildcard_imports.collect::<Vec<ScalaClassImportRequest>>().into_iter())
+            } else {
+                None
+            };
+
+std::iter::once(e).chain(extra_entries.into_iter().flatten())
         .map(|o| {
             if o.class_name.find('.').is_none() {
                 let suffix = ClassSuffixMatch {

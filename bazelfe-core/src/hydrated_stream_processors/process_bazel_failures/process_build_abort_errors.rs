@@ -28,7 +28,7 @@ impl BazelCorrectionCommand {
         }
     }
 }
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct BuildozerRemoveDepCmd {
     pub target_to_operate_on: String,
     pub dependency_to_remove: String,
@@ -38,7 +38,7 @@ pub struct BuildozerRemoveDepCmd {
     pub only_if_bazelfe_added: bool,
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct BuildozerRemoveDepLikeCmd {
     pub target_to_operate_on: String,
     pub dep_like: String,
@@ -465,7 +465,7 @@ fn group_correction_commands(
     for e in candidate_correction_commands {
         let existing = {
             let entry = res.entry(e.label().to_string());
-            entry.or_insert(Vec::default())
+            entry.or_insert_with(Vec::default)
         };
         existing.push(e);
     }

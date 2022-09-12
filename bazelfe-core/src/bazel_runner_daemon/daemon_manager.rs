@@ -17,9 +17,9 @@ pub struct HydratedDaemonConfig {
     pub bazel_binary_path: PathBuf,
     pub daemon_paths: DaemonPaths,
 }
-async fn start_server(
+fn start_server(
     daemon_config: &DaemonConfig,
-    bazel_binary_path: &PathBuf,
+    bazel_binary_path: &Path,
     paths: &DaemonPaths,
 ) -> Result<(), Box<dyn Error>> {
     let _ = std::fs::remove_file(&paths.pid_path);
@@ -27,7 +27,7 @@ async fn start_server(
 
     let merged_config = HydratedDaemonConfig {
         daemon_config: daemon_config.clone(),
-        bazel_binary_path: bazel_binary_path.clone(),
+        bazel_binary_path: bazel_binary_path.to_path_buf(),
         daemon_paths: paths.clone(),
     };
 
@@ -47,7 +47,7 @@ async fn start_server(
 }
 
 pub(crate) async fn try_kill_server_from_cfg(daemon_config: &DaemonConfig) {
-    if let Ok(daemon_communication_ptr) = configure_communication_ptr(&daemon_config) {
+    if let Ok(daemon_communication_ptr) = configure_communication_ptr(daemon_config) {
         let paths = daemon_paths_from_access(&daemon_communication_ptr);
 
         if let Some(pid) = super::read_pid(&paths) {
@@ -188,7 +188,7 @@ pub async fn connect_to_server(
     }
     let executable_id = super::current_executable_id();
 
-    let daemon_communication_ptr = configure_communication_ptr(&daemon_config)?;
+    let daemon_communication_ptr = configure_communication_ptr(daemon_config)?;
     let paths = daemon_paths_from_access(&daemon_communication_ptr);
 
     let mut cntr = 0;
@@ -202,7 +202,7 @@ pub async fn connect_to_server(
         }
 
         if cntr < 3 {
-            start_server(daemon_config, &bazel_binary_path.to_path_buf(), &paths).await?;
+            start_server(daemon_config, bazel_binary_path, &paths)?;
             tokio::time::sleep(tokio::time::Duration::from_millis(4)).await;
         }
     }

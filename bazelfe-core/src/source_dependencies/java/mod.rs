@@ -96,9 +96,8 @@ pub fn parse_imports(input: &str) -> Result<Vec<Import>> {
         match eat_till_end_of_line(remaining_input) {
             Ok((r, (current_line, end_of_line_eaten))) => {
                 if !current_line.is_empty() && current_line.contains("import") {
-                    match parse_import(line_number, remaining_input) {
-                        Ok((_, found)) => results_vec.push(found),
-                        Err(_) => (),
+                    if let Ok((_, found)) = parse_import(line_number, remaining_input) {
+                        results_vec.push(found)
                     };
                 }
 

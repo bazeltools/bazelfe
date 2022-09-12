@@ -26,7 +26,7 @@ pub type Result<T> = std::result::Result<T, ExecuteResult>;
 
 #[async_trait]
 pub trait BazelQuery: std::fmt::Debug + Send + Sync {
-    async fn execute(&self, args: &Vec<String>) -> ExecuteResult;
+    async fn execute(&self, args: &[String]) -> ExecuteResult;
 }
 
 #[derive(Clone, Debug)]
@@ -50,7 +50,7 @@ impl BazelQueryBinaryImpl {
             String::from("")
         }
     }
-    async fn execute_command(&self, command: &Vec<String>) -> ExecuteResult {
+    async fn execute_command(&self, command: &[String]) -> ExecuteResult {
         let mut cmd = Command::new(&self.bazel_executable_path);
 
         debug!(
@@ -85,7 +85,7 @@ impl BazelQueryBinaryImpl {
 
 #[async_trait]
 impl BazelQuery for BazelQueryBinaryImpl {
-    async fn execute(&self, args: &Vec<String>) -> ExecuteResult {
+    async fn execute(&self, args: &[String]) -> ExecuteResult {
         self.execute_command(args).await
     }
 }

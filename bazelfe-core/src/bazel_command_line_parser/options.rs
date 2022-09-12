@@ -1,8 +1,13 @@
+
+
 use super::*;
 use lazy_static::lazy_static;
 lazy_static! {
+
     pub static ref ALL_ACTION_OPTIONS: Vec<BazelOption> = {
+        #[allow(clippy::vec_init_then_push)]
         let mut vec = Vec::new();
+
         vec.push(BazelOption::BooleanOption(
             String::from("action_cache"),
             false,

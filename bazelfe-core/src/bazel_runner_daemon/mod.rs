@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 
 pub mod daemon_manager;
 pub mod daemon_server;
@@ -45,13 +45,13 @@ pub struct DaemonPaths {
     pub socket_path: PathBuf,
 }
 
-fn make_paths<'a>(root: &'a PathBuf) -> impl Iterator<Item = PathBuf> + 'a {
+fn make_paths(root: &'_ Path) -> impl Iterator<Item = PathBuf> + '_ {
     OUTPUT_SUFFIXES
         .iter()
         .map(move |suffix| root.join(format!("{}.log", suffix)))
 }
 
-fn setup_daemon_io(root: &PathBuf) -> Result<(), SpawnFailure> {
+fn setup_daemon_io(root: &Path) -> Result<(), SpawnFailure> {
     std::fs::create_dir_all(&root).map_err(SpawnFailure::MakeDirFailed)?;
     for path in make_paths(root) {
         std::fs::File::create(path).map_err(SpawnFailure::TouchLogFile)?;
@@ -133,7 +133,7 @@ pub(in crate::bazel_runner_daemon) fn read_pid(daemon_paths: &DaemonPaths) -> Op
 
     if let Ok(mut file) = File::open(&daemon_paths.pid_path) {
         let mut contents = String::new();
-        if let Ok(_) = file.read_to_string(&mut contents) {
+        if file.read_to_string(&mut contents).is_ok() {
             if let Ok(parsed) = contents.parse() {
                 return Some(parsed);
             }

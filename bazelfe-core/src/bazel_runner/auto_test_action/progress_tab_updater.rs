@@ -95,15 +95,11 @@ impl BazelEventHandler for ProgressTabUpdater {
                     .test_summary_event
                     .output_files
                     .iter()
-                    .filter_map(|e| match e {
+                    .filter(|e| match e {
                         bazelfe_protos::build_event_stream::file::File::Uri(u) => {
-                            if u.ends_with(".log") {
-                                Some(e)
-                            } else {
-                                None
-                            }
+                            u.ends_with(".log")
                         }
-                        bazelfe_protos::build_event_stream::file::File::Contents(_) => Some(e),
+                        bazelfe_protos::build_event_stream::file::File::Contents(_) => true,
                     })
                     .map(|f| bazelfe_protos::build_event_stream::File {
                         file: Some(f.clone()),

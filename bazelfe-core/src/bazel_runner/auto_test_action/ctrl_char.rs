@@ -88,7 +88,7 @@ impl CtrlChunk {
             loop {
                 let ctrl_text = text_or_ctrl.splitn(2, 'm').collect::<Vec<_>>();
 
-                let mut ctrl = vec![ctrl_text[0].replace("[", "")];
+                let mut ctrl = vec![ctrl_text[0].replace('[', "")];
                 if ctrl[0].contains(';') {
                     ctrl = ctrl[0].split(';').map(|s| s.to_string()).collect();
                 }
@@ -301,7 +301,7 @@ impl fmt::Display for CtrlChunk {
 
 #[derive(Clone, Debug, Default)]
 pub struct CtrlChars {
-    input: String,
+    _input: String,
     parsed: Vec<CtrlChunk>,
 }
 
@@ -333,7 +333,7 @@ impl CtrlChars {
         }
 
         Self {
-            input: input.to_string(),
+            _input: input.to_string(),
             parsed,
         }
     }

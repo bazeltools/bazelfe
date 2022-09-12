@@ -404,7 +404,7 @@ mod tests {
     #[async_trait::async_trait]
     impl BazelQueryEngine for NoOpMBazelQueryEngine {
         async fn dependency_link(
-            self: &Self,
+            &self,
             _edge_src: &str,
             _edge_dest: &str,
         ) -> Result<bool, Box<dyn std::error::Error>> {
@@ -412,7 +412,7 @@ mod tests {
         }
 
         async fn allrdeps(
-            self: &Self,
+            &self,
             _target: &str,
         ) -> Result<HashSet<String>, Box<dyn std::error::Error>> {
             Ok(HashSet::default())
@@ -423,24 +423,23 @@ mod tests {
 
     #[test]
     fn test_is_potentially_valid_target() {
-        assert_eq!(is_potentially_valid_target(&None, "@foo/bar/baz"), true);
+        assert!(is_potentially_valid_target(&None, "@foo/bar/baz"));
 
-        assert_eq!(is_potentially_valid_target(&None, "//foo/bar/foo"), false);
+        assert!(!is_potentially_valid_target(&None, "//foo/bar/foo"));
 
         let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         d.push("resources/tests/bazel/sample_build");
         let built_path = format!("//{}", d.to_str().unwrap());
-        assert_eq!(is_potentially_valid_target(&None, &built_path), true);
+        assert!(is_potentially_valid_target(&None, &built_path));
     }
 
     #[test]
     fn test_is_potentially_valid_target_forbidden_by_type() {
-        assert_eq!(
-            is_potentially_valid_target(
+        assert!(
+            !is_potentially_valid_target(
                 &Some(String::from("scala_library")),
                 "@third_party_jvm//3rdparty/jvm/org/scala_lang:scala_library"
-            ),
-            false
+            )
         );
     }
 

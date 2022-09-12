@@ -287,20 +287,20 @@ pub mod bazel_event {
         pub stderr: Option<build_event_stream::file::File>,
     }
 
-    #[derive(Clone, PartialEq, Debug)]
+    #[derive(Clone, PartialEq, Eq, Debug)]
     pub struct AbortedEvt {
         pub label: Option<String>,
         pub reason: Option<build_event_stream::aborted::AbortReason>,
         pub description: String,
     }
 
-    #[derive(Clone, PartialEq, Debug)]
+    #[derive(Clone, PartialEq, Eq, Debug)]
     pub struct ProgressEvt {
         pub stdout: String,
         pub stderr: String,
     }
 
-    #[derive(Clone, PartialEq, Debug)]
+    #[derive(Clone, PartialEq, Eq, Debug)]
     pub enum TestStatus {
         Passed,
         Flaky,

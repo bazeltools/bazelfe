@@ -37,7 +37,7 @@ fn build_class_import_request_low_priority(
 }
 
 fn extract_symbol_with_package(
-    lines: &Vec<String>,
+    lines: &[String],
     src_file_name: &String,
     result: &mut Vec<JavaClassImportRequest>,
 ) {
@@ -49,24 +49,21 @@ fn extract_symbol_with_package(
     let symbol_capture = SYMBOL_RE.captures(&lines[2]);
     let package_capture = PACKAGE_RE.captures(&lines[3]);
 
-    match (symbol_capture, package_capture) {
-        (Some(c1), Some(c2)) => {
-            let class_name = format!(
-                "{}.{}",
-                c2.get(1).unwrap().as_str(),
-                c1.get(1).unwrap().as_str()
-            );
-            let class_import_request =
-                build_class_import_request(src_file_name.to_string(), class_name);
+    if let (Some(c1), Some(c2)) = (symbol_capture, package_capture) {
+        let class_name = format!(
+            "{}.{}",
+            c2.get(1).unwrap().as_str(),
+            c1.get(1).unwrap().as_str()
+        );
+        let class_import_request =
+            build_class_import_request(src_file_name.to_string(), class_name);
 
-            result.push(class_import_request);
-        }
-        _ => (),
+        result.push(class_import_request);
     }
 }
 
 fn extract_symbol(
-    lines: &Vec<String>,
+    lines: &[String],
     src_file_name: &String,
     parsed_file: &ParsedFile,
     result: &mut Vec<JavaClassImportRequest>,
