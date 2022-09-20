@@ -153,7 +153,9 @@ where
                 let _ = f.seek(std::io::SeekFrom::Start(0));
                 let mut buf_reader = std::io::BufReader::new(f);
                 use std::io::Read;
-                buf_reader.read_to_string(&mut buffer).expect("Unable to read");
+                buf_reader
+                    .read_to_string(&mut buffer)
+                    .expect("Unable to read");
             }
             super::app::OutputFile::Inline(content) => {
                 buffer = String::from_utf8_lossy(content).to_string()

@@ -58,14 +58,16 @@ pub(in crate::error_extraction) fn extract(
                     }
                 } else if pos < lines.len() - 1 {
                     let target_line = lines[pos + 1];
-                    if let Ok(matched) = crate::source_dependencies::java::parse_imports(target_line) {
-                            if let Some(e) = matched.into_iter().next() {
-                                class_import_request.push(build_class_import_request(
-                                    src_file_name.to_string(),
-                                    e.prefix_section.to_string(),
-                                    30,
-                                ));
-                            }
+                    if let Ok(matched) =
+                        crate::source_dependencies::java::parse_imports(target_line)
+                    {
+                        if let Some(e) = matched.into_iter().next() {
+                            class_import_request.push(build_class_import_request(
+                                src_file_name.to_string(),
+                                e.prefix_section.to_string(),
+                                30,
+                            ));
+                        }
                     }
                 }
 

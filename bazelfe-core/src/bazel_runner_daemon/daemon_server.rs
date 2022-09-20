@@ -234,14 +234,13 @@ use crate::jvm_indexer::bazel_query::BazelQuery;
 struct UpdatedFileState {
     content_sha: Option<Vec<u8>>,
     daemon_updated: daemon_service::Instant,
-    updated: Instant
+    updated: Instant,
 }
 
 #[derive(Debug)]
 struct TargetCache {
     target_state: Arc<TargetState>,
-    last_files_updated:
-        Arc<Mutex<HashMap<PathBuf, UpdatedFileState>>>,
+    last_files_updated: Arc<Mutex<HashMap<PathBuf, UpdatedFileState>>>,
     inotify_ignore_regexes: NotifyRegexes,
     pending_hydrations: Arc<AtomicUsize>,
     bazel_query: Arc<Mutex<Box<dyn BazelQuery>>>,
@@ -375,11 +374,14 @@ impl TargetCache {
                         event_kind,
                         (real_path.to_path_buf(), (ts, now_instant, &current_sha))
                     );
-                    lock.insert(real_path.to_path_buf(), UpdatedFileState {
-                        content_sha: current_sha,
-                        daemon_updated: ts,
-                        updated: now_instant,
-                });
+                    lock.insert(
+                        real_path.to_path_buf(),
+                        UpdatedFileState {
+                            content_sha: current_sha,
+                            daemon_updated: ts,
+                            updated: now_instant,
+                        },
+                    );
                 }
             }
         }
@@ -763,8 +765,10 @@ pub async fn main(
 
             let should_process = match &event.kind {
                 EventKind::Any => true,
-                EventKind::Access(access_type) =>
-                    matches!(access_type, notify::event::AccessKind::Close(notify::event::AccessMode::Write)),
+                EventKind::Access(access_type) => matches!(
+                    access_type,
+                    notify::event::AccessKind::Close(notify::event::AccessMode::Write)
+                ),
                 EventKind::Create(_) => true,
                 EventKind::Modify(_) => true,
                 EventKind::Remove(_) => true,
@@ -777,7 +781,6 @@ pub async fn main(
                 .filter(|path| !copy_gitignored.matched(path, path.is_dir()).is_ignore())
                 .cloned()
                 .collect();
-
 
             if should_process && !filtered_paths.is_empty() {
                 copy_shared
@@ -832,7 +835,7 @@ pub async fn main(
 
     let mut root_watcher: RecommendedWatcher =
         RecommendedWatcher::new(move |res: notify::Result<notify::Event>| match res {
-            Ok(event) =>
+            Ok(event) => {
                 if let notify::EventKind::Create(_) = event.kind {
                     for path in event.paths.iter() {
                         let file_name = if let Some(file_name) = path.file_name() {
@@ -857,7 +860,8 @@ pub async fn main(
 
                         core_watcher.watch(path, RecursiveMode::Recursive).unwrap();
                     }
-            },
+                }
+            }
             Err(e) => println!("watch error: {:?}", e),
         })
         .unwrap();

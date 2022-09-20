@@ -435,12 +435,10 @@ mod tests {
 
     #[test]
     fn test_is_potentially_valid_target_forbidden_by_type() {
-        assert!(
-            !is_potentially_valid_target(
-                &Some(String::from("scala_library")),
-                "@third_party_jvm//3rdparty/jvm/org/scala_lang:scala_library"
-            )
-        );
+        assert!(!is_potentially_valid_target(
+            &Some(String::from("scala_library")),
+            "@third_party_jvm//3rdparty/jvm/org/scala_lang:scala_library"
+        ));
     }
 
     #[test]

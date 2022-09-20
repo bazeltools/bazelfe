@@ -88,75 +88,80 @@ pub fn extract_errors(input: &str) -> Vec<super::ActionRequest> {
     .flat_map(|e| e.into_iter().flat_map(|inner| inner.into_iter()))
     .flat_map(|e| {
         let extra_entries = if let Some(file_data) = file_parse_cache.load_file(&e.src_file_name) {
-                let extra_wildcard_imports = file_data
-                    .imports
-                    .iter()
-                    .filter_map(|e| match e.suffix {
-                        crate::source_dependencies::SelectorType::SelectorList(_) => None,
-                        crate::source_dependencies::SelectorType::WildcardSelector => {
-                            Some(&e.prefix_section)
-                        }
-                        crate::source_dependencies::SelectorType::NoSelector => None,
-                    })
-                    .chain(file_data.package_name.iter())
-                    .flat_map(|prefix| {
-                        let elements = e.class_name.chars().filter(|e| *e == '.').count();
-                        if elements < 3 {
-                            Some(ScalaClassImportRequest {
-                                class_name: format!("{}.{}", prefix, e.class_name),
-                                priority: -3,
-                                exact_only: true,
-                                ..e.clone()
-                            })
-                        } else {
-                            None
-                        }
-                    });
+            let extra_wildcard_imports = file_data
+                .imports
+                .iter()
+                .filter_map(|e| match e.suffix {
+                    crate::source_dependencies::SelectorType::SelectorList(_) => None,
+                    crate::source_dependencies::SelectorType::WildcardSelector => {
+                        Some(&e.prefix_section)
+                    }
+                    crate::source_dependencies::SelectorType::NoSelector => None,
+                })
+                .chain(file_data.package_name.iter())
+                .flat_map(|prefix| {
+                    let elements = e.class_name.chars().filter(|e| *e == '.').count();
+                    if elements < 3 {
+                        Some(ScalaClassImportRequest {
+                            class_name: format!("{}.{}", prefix, e.class_name),
+                            priority: -3,
+                            exact_only: true,
+                            ..e.clone()
+                        })
+                    } else {
+                        None
+                    }
+                });
 
-                Some(extra_wildcard_imports.collect::<Vec<ScalaClassImportRequest>>().into_iter())
-            } else {
-                None
-            };
+            Some(
+                extra_wildcard_imports
+                    .collect::<Vec<ScalaClassImportRequest>>()
+                    .into_iter(),
+            )
+        } else {
+            None
+        };
 
-std::iter::once(e).chain(extra_entries.into_iter().flatten())
-        .map(|o| {
-            if o.class_name.find('.').is_none() {
-                let suffix = ClassSuffixMatch {
-                    suffix: o.class_name,
-                    src_fn: o.src_fn.to_string(),
-                    priority: 0,
-                };
-                debug!("Found class suffix request: {:#?}", suffix);
-                super::ActionRequest::Suffix(suffix)
-            } else if let Some(prefix) = o.class_name.strip_prefix("<root>.") {
-                let prefix_match = crate::error_extraction::ClassImportRequest {
-                    class_name: prefix.to_string(),
-                    exact_only: false,
-                    src_fn: o.src_fn.to_string(),
-                    priority: o.priority,
-                };
+        std::iter::once(e)
+            .chain(extra_entries.into_iter().flatten())
+            .map(|o| {
+                if o.class_name.find('.').is_none() {
+                    let suffix = ClassSuffixMatch {
+                        suffix: o.class_name,
+                        src_fn: o.src_fn.to_string(),
+                        priority: 0,
+                    };
+                    debug!("Found class suffix request: {:#?}", suffix);
+                    super::ActionRequest::Suffix(suffix)
+                } else if let Some(prefix) = o.class_name.strip_prefix("<root>.") {
+                    let prefix_match = crate::error_extraction::ClassImportRequest {
+                        class_name: prefix.to_string(),
+                        exact_only: false,
+                        src_fn: o.src_fn.to_string(),
+                        priority: o.priority,
+                    };
 
-                debug!("Found class root prefix request: {:#?}", prefix_match);
-                super::ActionRequest::Prefix(prefix_match)
-            } else if let Some(suffix) = o
-                .class_name
-                .strip_prefix("<none>.")
-                .or_else(|| o.class_name.strip_prefix("<none>"))
-                .or_else(|| o.class_name.strip_prefix("<root>."))
-            {
-                let suffix_match = ClassSuffixMatch {
-                    suffix: suffix.to_string(),
-                    src_fn: o.src_fn.to_string(),
-                    priority: 5,
-                };
-                debug!("Found class suffix request: {:#?}", suffix_match);
-                super::ActionRequest::Suffix(suffix_match)
-            } else {
-                let r = o.to_class_import_request();
-                debug!("Found class import request: {:#?}", r);
-                super::ActionRequest::Prefix(r)
-            }
-        })
+                    debug!("Found class root prefix request: {:#?}", prefix_match);
+                    super::ActionRequest::Prefix(prefix_match)
+                } else if let Some(suffix) = o
+                    .class_name
+                    .strip_prefix("<none>.")
+                    .or_else(|| o.class_name.strip_prefix("<none>"))
+                    .or_else(|| o.class_name.strip_prefix("<root>."))
+                {
+                    let suffix_match = ClassSuffixMatch {
+                        suffix: suffix.to_string(),
+                        src_fn: o.src_fn.to_string(),
+                        priority: 5,
+                    };
+                    debug!("Found class suffix request: {:#?}", suffix_match);
+                    super::ActionRequest::Suffix(suffix_match)
+                } else {
+                    let r = o.to_class_import_request();
+                    debug!("Found class import request: {:#?}", r);
+                    super::ActionRequest::Prefix(r)
+                }
+            })
     })
     .filter(|e| match e {
         super::ActionRequest::Prefix(_) => true,

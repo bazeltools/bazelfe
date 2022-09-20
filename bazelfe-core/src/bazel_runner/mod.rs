@@ -198,16 +198,16 @@ async fn execute_sub_tty_process(
         let mut stderr = std::io::stderr();
 
         while let Ok(bytes_read) = child_fd.read(&mut buffer[..]) {
-                if bytes_read == 0 {
-                    break;
-                }
-                if stderr.write_all(&buffer[0..bytes_read]).is_err() {
-                    break;
-                }
-                if stderr.flush().is_err() {
-                    break;
-                }
+            if bytes_read == 0 {
+                break;
             }
+            if stderr.write_all(&buffer[0..bytes_read]).is_err() {
+                break;
+            }
+            if stderr.flush().is_err() {
+                break;
+            }
+        }
     });
 
     let child_complete: ptyprocess::WaitStatus = tokio::task::spawn_blocking(move || child.wait())

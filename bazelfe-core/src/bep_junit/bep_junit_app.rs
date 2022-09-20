@@ -1,4 +1,7 @@
-use bazelfe_core::bep_junit::{emit_junit_xml_from_failed_action, label_to_junit_relative_path};
+use bazelfe_core::bep_junit::{
+    emit_junit_xml_from_aborted_action, emit_junit_xml_from_failed_action,
+    label_to_junit_relative_path,
+};
 use bazelfe_core::build_events::build_event_server::BuildEventAction;
 
 use bazelfe_core::build_events::build_event_server::bazel_event::BazelBuildEvent;
@@ -68,16 +71,30 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .flatten(),
     );
 
+    let mut failed_actions = Vec::default();
+    let mut aborted_actions = Vec::default();
+    let mut failed_tests = Vec::default();
     for build_event in res.iter() {
         match build_event {
-            bazelfe_core::build_events::hydrated_stream::HydratedInfo::BazelAbort(_) => (),
+            bazelfe_core::build_events::hydrated_stream::HydratedInfo::BazelAbort(abort_info) => {
+                emit_junit_xml_from_aborted_action(
+                    abort_info,
+                    aborted_actions.len(),
+                    &opt.junit_output_path,
+                );
+                aborted_actions.push(abort_info.label.clone());
+            }
             bazelfe_core::build_events::hydrated_stream::HydratedInfo::ActionFailed(
                 action_failed,
             ) => {
                 emit_junit_xml_from_failed_action(action_failed, &opt.junit_output_path);
+                failed_actions.push(action_failed.label.clone());
             }
             bazelfe_core::build_events::hydrated_stream::HydratedInfo::Progress(_) => (),
             bazelfe_core::build_events::hydrated_stream::HydratedInfo::TestResult(r) => {
+                if let bazelfe_core::build_events::build_event_server::bazel_event::TestStatus::Failed =  r.test_summary_event.test_status {
+                    failed_tests.push(r.test_summary_event.label.clone());
+                }
                 let output_folder = opt.junit_output_path.join(label_to_junit_relative_path(
                     r.test_summary_event.label.as_str(),
                 ));
@@ -108,6 +125,34 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
             bazelfe_core::build_events::hydrated_stream::HydratedInfo::ActionSuccess(_) => (),
             bazelfe_core::build_events::hydrated_stream::HydratedInfo::TargetComplete(_) => (),
+        }
+    }
+
+    if failed_actions.is_empty() && failed_tests.is_empty() && aborted_actions.is_empty() {
+        println!("Have zero failures, all successful.")
+    } else {
+        if !failed_actions.is_empty() {
+            println!("Have {} failed actions", failed_actions.len());
+            for a in failed_actions.iter() {
+                println!("  - {}", a);
+            }
+        }
+
+        if !failed_tests.is_empty() {
+            println!("Have {} failed tests", failed_tests.len());
+            for a in failed_tests.iter() {
+                println!("  - {}", a);
+            }
+        }
+
+        if !aborted_actions.is_empty() {
+            println!("Have {} aborted actions", aborted_actions.len());
+            for a in aborted_actions.iter() {
+                println!(
+                    "  - {}",
+                    a.to_owned().unwrap_or_else(|| "Unknown".to_string())
+                );
+            }
         }
     }
     Ok(())

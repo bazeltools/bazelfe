@@ -1,6 +1,7 @@
 mod failed_action;
 pub mod junit_xml_error_writer;
 
+pub use failed_action::emit_junit_xml_from_aborted_action;
 pub use failed_action::emit_junit_xml_from_failed_action;
 
 // This is to just take the label and provide a sane output path

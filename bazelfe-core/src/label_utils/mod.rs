@@ -17,8 +17,6 @@ pub fn sanitize_label(label: String) -> String {
     // src/foo/bar/baz and src/foo/bar/baz:baz
     // ensures we don't try refer to ourselves
 
-    
-
     match label.find(':') {
         None => {
             let last_segment = &label[label.rfind('/').map(|e| e + 1).unwrap_or(0)..label.len()];

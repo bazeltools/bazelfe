@@ -74,8 +74,9 @@ impl BazelRunner {
         debug!("Based on custom action if present, overriding the daemon option");
         if let Some(crate::bazel_command_line_parser::Action::Custom(
             crate::bazel_command_line_parser::CustomAction::AutoTest,
-        )) = self.bazel_command_line.action.as_ref() {
-                self.config.daemon_config.enabled = true;
+        )) = self.bazel_command_line.action.as_ref()
+        {
+            self.config.daemon_config.enabled = true;
         }
 
         let config = Arc::new(self.config);

@@ -1,26 +1,63 @@
 use super::junit_xml_error_writer;
 use super::junit_xml_error_writer::XmlWritable;
 use super::label_to_junit_relative_path;
-use crate::build_events::hydrated_stream::ActionFailedErrorInfo;
+use crate::build_events::hydrated_stream::{ActionFailedErrorInfo, BazelAbortErrorInfo};
 use std::path::Path;
 
-pub fn emit_junit_xml_from_failed_action(action: &ActionFailedErrorInfo, output_root: &Path) {
-    let output_folder = output_root.join(label_to_junit_relative_path(action.label.as_str()));
+pub fn emit_junit_xml_from_failed_operation(
+    test_cases: Vec<junit_xml_error_writer::TestCase>,
+    label_name: String,
+    output_root: &Path,
+) {
+    let output_folder = output_root.join(label_to_junit_relative_path(label_name.as_str()));
     let output_file = output_folder.join("test.xml");
     std::fs::create_dir_all(output_folder).expect("Make dir failed");
     let mut file = std::fs::File::create(&output_file)
         .unwrap_or_else(|_| panic!("Should open file {:?}", output_file));
     let e = junit_xml_error_writer::TestSuites {
         testsuites: vec![junit_xml_error_writer::TestSuite {
-            name: action.label.clone(),
+            name: label_name,
             tests: 1,
             failures: 1,
-            testcases: vec![generate_struct_from_failed_action(action)],
+            testcases: test_cases,
         }],
     };
     use xml::writer::EventWriter;
     let mut event_writer = EventWriter::new(&mut file);
     e.write_xml(&mut event_writer);
+}
+
+pub fn emit_junit_xml_from_aborted_action(
+    aborted_evt: &BazelAbortErrorInfo,
+    abort_idx: usize,
+    output_root: &Path,
+) {
+    let label_name = aborted_evt
+        .label
+        .to_owned()
+        .unwrap_or_else(|| format!("unknown-{}", abort_idx));
+
+    let known_failures = vec![junit_xml_error_writer::Failure {
+        message: format!("Failed to build, {}", label_name),
+        tpe_name: "ERROR".to_string(),
+        value: aborted_evt.description.clone(),
+    }];
+
+    let test_cases = vec![junit_xml_error_writer::TestCase {
+        name: "Build aborted".to_string(),
+        time: 1.0f64,
+        failures: known_failures,
+    }];
+
+    emit_junit_xml_from_failed_operation(test_cases, label_name, output_root)
+}
+
+pub fn emit_junit_xml_from_failed_action(action: &ActionFailedErrorInfo, output_root: &Path) {
+    emit_junit_xml_from_failed_operation(
+        vec![generate_struct_from_failed_action(action)],
+        action.label.clone(),
+        output_root,
+    )
 }
 
 fn generate_struct_from_failed_action(

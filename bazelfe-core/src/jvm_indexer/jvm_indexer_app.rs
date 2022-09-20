@@ -146,12 +146,14 @@ async fn run_query_chunk<B: BazelQuery>(
         String::from_utf8(buffer).unwrap()
     };
     let res = bazel_query
-        .execute(&[String::from("query"),
+        .execute(&[
+            String::from("query"),
             String::from("--keep_going"),
             String::from("--noimplicit_deps"),
             String::from("--output"),
             String::from("label_kind"),
-            merged])
+            merged,
+        ])
         .await;
 
     for ln in res.stdout.lines() {
