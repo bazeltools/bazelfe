@@ -35,7 +35,8 @@ pub fn emit_backup_error_data(test_result: &TestResultInfo, output_root: &Path) 
 
     // we have ran into issues with non-utf-8 characters in the output logs
     // so we will replace anything not-ascii to '?' cut it right back
-    let output_data = extract_file_content(test_result).join("\n").replace(|c: char| !c.is_ascii(), "?");
+    let output_data = extract_file_content(test_result).join("\n")
+        .replace(|c: char| !c.is_ascii() || c.is_ascii_control() || c.is_ascii_graphic(), "?");
 
     let known_failures = vec![junit_xml_error_writer::Failure {
         message: format!("Test aborted, {}", label_name),
