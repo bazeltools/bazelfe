@@ -15,9 +15,11 @@ fn extract_file_content(test_result: &TestResultInfo) -> Vec<String> {
         match inner_f {
             bazelfe_protos::build_event_stream::file::File::Uri(uri) => {
                 if let Some(p) = uri.strip_prefix("file://") {
-                    let s = std::fs::read_to_string(p)
-                        .expect("Expected to be able to open input test data");
-                    r.push(s);
+                    if p.ends_with("/test.log") {
+                        let s = std::fs::read_to_string(p)
+                            .expect("Expected to be able to open input test data");
+                        r.push(s);
+                    }
                 }
             }
             bazelfe_protos::build_event_stream::file::File::Contents(content) => {
@@ -36,7 +38,7 @@ pub fn emit_backup_error_data(test_result: &TestResultInfo, output_root: &Path) 
     let known_failures = vec![junit_xml_error_writer::Failure {
         message: format!("Test aborted, {}", label_name),
         tpe_name: "ERROR".to_string(),
-        value: output_data.clone(),
+        value: output_data,
     }];
 
     let test_cases = vec![junit_xml_error_writer::TestCase {
