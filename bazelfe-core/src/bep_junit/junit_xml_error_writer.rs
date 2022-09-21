@@ -1,8 +1,6 @@
 use xml::writer::XmlEvent;
 
-pub trait XmlWritable {
-    fn write_xml<W: std::io::Write>(&self, writer: &mut xml::writer::EventWriter<W>);
-}
+use super::xml_utils::XmlWritable;
 
 #[derive(Debug, PartialEq)]
 pub struct TestSuites {
@@ -91,15 +89,9 @@ impl XmlWritable for Failure {
 #[cfg(test)]
 mod tests {
 
-    use super::*;
+    use crate::bep_junit::xml_utils::xml_writable_to_string;
 
-    fn xml_writable_to_string<T: XmlWritable>(t: &T) -> String {
-        let mut v = Vec::default();
-        let mut xml_writer = xml::writer::EventWriter::new(&mut v);
-        t.write_xml(&mut xml_writer);
-        drop(xml_writer);
-        String::from_utf8(v).expect("Should emit sane UTF-8")
-    }
+    use super::*;
 
     #[test]
     fn test_failure_serialization() {

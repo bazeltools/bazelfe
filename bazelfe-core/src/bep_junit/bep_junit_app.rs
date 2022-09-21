@@ -1,6 +1,6 @@
 use bazelfe_core::bep_junit::{
-    emit_junit_xml_from_aborted_action, emit_junit_xml_from_failed_action,
-    label_to_junit_relative_path,
+    emit_backup_error_data, emit_junit_xml_from_aborted_action, emit_junit_xml_from_failed_action,
+    label_to_junit_relative_path, suites_with_error_from_xml,
 };
 use bazelfe_core::build_events::build_event_server::BuildEventAction;
 
@@ -118,6 +118,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         bazelfe_protos::build_event_stream::file::File::Contents(_) => None,
                     })
                     .collect();
+
+                let have_errors = files.iter().any(|result_xml| {
+                    suites_with_error_from_xml(
+                        std::fs::File::open(result_xml)
+                            .expect("Should be able to open the found xml"),
+                    )
+                });
+
+                if have_errors {
+                    emit_backup_error_data(r, &opt.junit_output_path);
+                }
                 for (idx, f) in files.iter().enumerate() {
                     let output_file = output_folder.join(format!("test.{}.xml", idx));
                     std::fs::copy(f, output_file).unwrap();

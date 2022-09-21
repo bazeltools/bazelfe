@@ -1,8 +1,11 @@
 mod failed_action;
 pub mod junit_xml_error_writer;
+mod test_results_ops;
+mod xml_utils;
 
 pub use failed_action::emit_junit_xml_from_aborted_action;
 pub use failed_action::emit_junit_xml_from_failed_action;
+pub use test_results_ops::{emit_backup_error_data, suites_with_error_from_xml};
 
 // This is to just take the label and provide a sane output path
 // in the resulting junit root to avoid conflicts.
