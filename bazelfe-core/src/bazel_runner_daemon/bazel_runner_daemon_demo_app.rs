@@ -38,7 +38,7 @@ struct DaemonArgs {
 #[derive(Parser, Debug)]
 #[clap(name = "basic")]
 struct Opt {
-    #[clap(long, parse(from_os_str))]
+    #[clap(long)]
     bazel_binary_path: Option<PathBuf>,
 
     #[clap(subcommand)]
