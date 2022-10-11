@@ -798,12 +798,9 @@ pub async fn main(
                 }
             }
             Err(e) => println!("watch error: {:?}", e),
-        })
+        },notify::Config::default())
         .unwrap();
 
-    core_watcher
-        .configure(notify::Config::PreciseEvents(true))
-        .unwrap();
 
     // Add a path to be watched. All files and directories at that path and
     // below will be monitored for changes.
@@ -862,7 +859,7 @@ pub async fn main(
                 }
             }
             Err(e) => println!("watch error: {:?}", e),
-        })
+        },notify::Config::default())
         .unwrap();
 
     root_watcher
