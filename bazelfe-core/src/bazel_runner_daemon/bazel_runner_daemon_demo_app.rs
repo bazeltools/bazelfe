@@ -31,7 +31,6 @@ enum SubCommands {
 
 #[derive(Parser, Debug)]
 struct DaemonArgs {
-    #[clap(parse(from_os_str))]
     pub config_path: PathBuf,
 }
 

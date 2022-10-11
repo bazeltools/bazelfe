@@ -9,7 +9,6 @@ struct Opt {
     #[clap(long)]
     bazel_cmd_path: PathBuf,
 
-    #[clap(parse(from_os_str))]
     output_path: PathBuf,
 }
 fn decode_str(data: &Vec<u8>) -> Result<String, Box<dyn Error>> {

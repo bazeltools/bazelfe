@@ -683,7 +683,6 @@ use clap::Parser;
 #[derive(Parser, Debug)]
 #[clap(name = "basic")]
 struct DaemonArgs {
-    #[clap(parse(from_os_str))]
     pub config_path: PathBuf,
 }
 
