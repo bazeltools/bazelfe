@@ -10,7 +10,7 @@ use bazelfe_core::source_dependencies::SelectorType;
 #[clap(name = "basic")]
 struct Opt {
     /// Files to process
-    #[clap(name = "FILE", parse(from_os_str))]
+    #[clap(name = "FILE")]
     files: Vec<PathBuf>,
 }
 

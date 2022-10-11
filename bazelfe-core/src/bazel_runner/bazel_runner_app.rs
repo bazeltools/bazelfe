@@ -12,13 +12,13 @@ struct Opt {
     #[clap(long, env = "BIND_ADDRESS")]
     bind_address: Option<String>,
 
-    #[clap(long, env = "INDEX_INPUT_LOCATION", parse(from_os_str))]
+    #[clap(long, env = "INDEX_INPUT_LOCATION")]
     index_input_location: Option<PathBuf>,
 
-    #[clap(long, env = "BUILDOZER_PATH", parse(from_os_str))]
+    #[clap(long, env = "BUILDOZER_PATH")]
     buildozer_path: PathBuf,
 
-    #[clap(required = true, min_values = 1)]
+    #[clap(required = true, num_args = 1..)]
     passthrough_args: Vec<String>,
 
     #[clap(long, env = "DISABLE_ACTION_STORIES_ON_SUCCESS")]
@@ -27,7 +27,7 @@ struct Opt {
     #[clap(long)]
     config: Option<String>,
 
-    #[clap(long, parse(from_os_str))]
+    #[clap(long)]
     validate_index_file: Option<PathBuf>,
 }
 

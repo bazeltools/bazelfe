@@ -31,14 +31,13 @@ enum SubCommands {
 
 #[derive(Parser, Debug)]
 struct DaemonArgs {
-    #[clap(parse(from_os_str))]
     pub config_path: PathBuf,
 }
 
 #[derive(Parser, Debug)]
 #[clap(name = "basic")]
 struct Opt {
-    #[clap(long, parse(from_os_str))]
+    #[clap(long)]
     bazel_binary_path: Option<PathBuf>,
 
     #[clap(subcommand)]

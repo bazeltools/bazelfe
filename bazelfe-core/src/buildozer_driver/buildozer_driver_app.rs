@@ -7,7 +7,7 @@ use bazelfe_core::buildozer_driver::{from_binary_path, BazelAttrTarget, Buildoze
 #[derive(Parser, Debug)]
 #[clap(name = "basic")]
 struct Opt {
-    #[clap(long, env = "BUILDOZER_PATH", parse(from_os_str))]
+    #[clap(long, env = "BUILDOZER_PATH")]
     buildozer_path: PathBuf,
 
     target_name: String,

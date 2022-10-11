@@ -16,10 +16,10 @@ use std::path::{Path, PathBuf};
 #[derive(Parser, Debug)]
 #[clap(name = "bep-junit")]
 struct Opt {
-    #[clap(long, parse(from_os_str))]
+    #[clap(long)]
     build_event_binary_output: PathBuf,
 
-    #[clap(long, parse(from_os_str))]
+    #[clap(long)]
     junit_output_path: PathBuf,
 }
 

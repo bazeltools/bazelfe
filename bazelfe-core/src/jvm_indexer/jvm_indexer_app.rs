@@ -48,14 +48,14 @@ struct Opt {
     bind_address: Option<String>,
 
     /// Where to find the bazel to invoke, if its just on your path `which bazel` could be passed here.
-    #[clap(long, parse(from_os_str))]
+    #[clap(long)]
     bazel_binary_path: PathBuf,
 
     #[clap(long)]
     config: Option<String>,
 
     /// Where the output index should be stored
-    #[clap(long, env = "INDEX_OUTPUT_LOCATION", parse(from_os_str))]
+    #[clap(long, env = "INDEX_OUTPUT_LOCATION")]
     index_output_location: PathBuf,
 
     /// Paths to ignore for dependencies, a good value here when working with scala code is `io_bazel_rules_scala`

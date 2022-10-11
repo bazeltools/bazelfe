@@ -6,10 +6,9 @@ use tokio::process::Command;
 #[derive(Parser, Debug)]
 #[clap(name = "basic")]
 struct Opt {
-    #[clap(long, parse(from_os_str))]
+    #[clap(long)]
     bazel_cmd_path: PathBuf,
 
-    #[clap(parse(from_os_str))]
     output_path: PathBuf,
 }
 fn decode_str(data: &Vec<u8>) -> Result<String, Box<dyn Error>> {
