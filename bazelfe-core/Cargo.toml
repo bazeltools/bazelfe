@@ -123,7 +123,7 @@ version = "1.21.2"
 
 [dependencies.tokio-stream]
 features = ["net"]
-version = "0.1.10"
+version = "0.1.11"
 
 [dependencies.tonic]
 features = ["tls"]
