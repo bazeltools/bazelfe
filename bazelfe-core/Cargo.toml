@@ -59,7 +59,7 @@ async-channel = "1.7.1"
 async-stream = "0.3.3"
 async-trait = "0.1.58"
 byteorder = "1.4.3"
-bytes = "1.2.1"
+bytes = "1.3.0"
 clap = { version = "4.0.27", features = ["derive", "env"] }
 ctrlc = "3.2.3"
 exec = "0.3.1"
