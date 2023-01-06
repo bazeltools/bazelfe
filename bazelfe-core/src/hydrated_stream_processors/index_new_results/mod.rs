@@ -1,8 +1,11 @@
 use std::{collections::HashSet, path::PathBuf};
 
+use bazelfe_bazel_wrapper::bep::BazelEventHandler;
 use bazelfe_protos::build_event_stream;
 
-use crate::{build_events::hydrated_stream, config::IndexerConfig, index_table};
+use crate::{config::IndexerConfig, index_table};
+
+use super::BuildEventResponse;
 
 #[derive(Clone, Debug)]
 
@@ -31,11 +34,11 @@ pub struct IndexNewResults {
 }
 
 #[async_trait::async_trait]
-impl super::BazelEventHandler for IndexNewResults {
+impl BazelEventHandler<BuildEventResponse> for IndexNewResults {
     async fn process_event(
         &self,
         _bazel_run_id: usize,
-        event: &hydrated_stream::HydratedInfo,
+        event: &bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::HydratedInfo,
     ) -> Vec<super::BuildEventResponse> {
         self.process(event).await
     }
@@ -54,10 +57,10 @@ impl IndexNewResults {
     }
     pub async fn process(
         &self,
-        event: &hydrated_stream::HydratedInfo,
+        event: &bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::HydratedInfo,
     ) -> Vec<super::BuildEventResponse> {
         let r = match event {
-            hydrated_stream::HydratedInfo::TargetComplete(tce) => {
+            bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::HydratedInfo::TargetComplete(tce) => {
                 if let Some(target_kind) = &tce.target_kind {
                     if (target_kind.contains("_test")
                         || (target_kind.contains("generated file")

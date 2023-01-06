@@ -1,3 +1,5 @@
+use log::{debug, error, info};
+
 use tonic::{Request, Response, Status};
 
 use bazelfe_protos::*;

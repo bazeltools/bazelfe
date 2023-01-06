@@ -3,4 +3,5 @@
 members = [
     "bazelfe-protos",
     "bazelfe-core",
+    "bazelfe-bazel-wrapper",
 ]

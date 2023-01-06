@@ -1,94 +1,37 @@
 use std::collections::HashMap;
 
-use crate::build_events::hydrated_stream::HydratedInfo;
 use crate::buildozer_driver;
-use crate::{
-    bazel_command_line_parser::ParsedCommandLine,
-    build_events::build_event_server::BuildEventAction,
+use crate::hydrated_stream_processors::BuildEventResponse;
+
+use crate::config::Config;
+use crate::hydrated_stream_processors::process_bazel_failures::{
+    ProcessBazelFailures, TargetStory, TargetStoryAction,
 };
 
-use crate::{
-    bazel_runner,
-    hydrated_stream_processors::{
-        event_stream_listener::EventStreamListener,
-        process_bazel_failures::{ProcessBazelFailures, TargetStory, TargetStoryAction},
-    },
-};
-use crate::{build_events::build_event_server::bazel_event, config::Config};
-
+use bazelfe_bazel_wrapper::bazel_command_line_parser::ParsedCommandLine;
+use bazelfe_bazel_wrapper::bazel_subprocess_wrapper::BazelWrapper;
+use bazelfe_bazel_wrapper::bazel_subprocess_wrapper::{BazelWrapperError, ExecuteResult};
 use std::sync::Arc;
-use thiserror::Error;
 
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 
 use super::processor_activity::*;
 
-pub struct ConfiguredBazel {
-    sender_arc:
-        Arc<Mutex<Option<async_channel::Sender<BuildEventAction<bazel_event::BazelBuildEvent>>>>>,
-    pub aes: EventStreamListener,
-    bes_port: u16,
-}
-
-impl ConfiguredBazel {
-    pub fn new(
-        sender_arc: &Arc<
-            Mutex<Option<async_channel::Sender<BuildEventAction<bazel_event::BazelBuildEvent>>>>,
-        >,
-        aes: EventStreamListener,
-        bes_port: u16,
-    ) -> Self {
-        Self {
-            sender_arc: sender_arc.clone(),
-            aes,
-            bes_port,
-        }
-    }
-
-    async fn spawn_bazel_attempt(
-        &self,
-        bazel_command_line: &ParsedCommandLine,
-        pipe_output: bool,
-    ) -> Result<(ProcessorActivity, bazel_runner::ExecuteResult), Box<dyn std::error::Error>> {
-        spawn_bazel_attempt(
-            &self.sender_arc,
-            &self.aes,
-            self.bes_port,
-            bazel_command_line,
-            pipe_output,
-        )
-        .await
-    }
-}
-
-async fn spawn_bazel_attempt(
-    sender_arc: &Arc<
-        Mutex<Option<async_channel::Sender<BuildEventAction<bazel_event::BazelBuildEvent>>>>,
-    >,
-    aes: &EventStreamListener,
-    bes_port: u16,
+async fn run_bazel(
+    configured_bazel: &BazelWrapper<BuildEventResponse>,
     bazel_command_line: &ParsedCommandLine,
     pipe_output: bool,
-) -> Result<(ProcessorActivity, bazel_runner::ExecuteResult), Box<dyn std::error::Error>> {
+) -> Result<(ProcessorActivity, ExecuteResult), Box<dyn std::error::Error>> {
     let (tx, rx) = async_channel::unbounded();
-    {
-        let mut locked = sender_arc.lock().await;
-        *locked = Some(tx);
-    };
-    let error_stream = HydratedInfo::build_transformer(rx);
-
-    let target_extracted_stream = aes.handle_stream(error_stream);
-
     let results_data = Arc::new(RwLock::new(None));
     let r_data = Arc::clone(&results_data);
     let recv_task = tokio::spawn(async move {
         let mut guard = r_data.write().await;
-
         let mut jvm_segments_indexed = 0;
         let mut actions_taken: u32 = 0;
         let mut target_story_actions = HashMap::new();
 
-        while let Ok(action) = target_extracted_stream.recv().await {
+        while let Ok(action) = rx.recv().await {
             match action {
                 crate::hydrated_stream_processors::BuildEventResponse::ProcessedBuildFailures(
                     pbf,
@@ -126,14 +69,10 @@ async fn spawn_bazel_attempt(
         });
     });
 
-    let res = bazel_runner::execute_bazel_output_control(bazel_command_line, bes_port, pipe_output)
-        .await?;
-
-    {
-        let mut locked = sender_arc.lock().await;
-        locked.take();
-    };
-
+    let res = configured_bazel
+        .spawn_bazel_attempt(bazel_command_line, pipe_output, tx)
+        .await
+        .map_err(|e| BazelWrapperError::Unknown(e))?;
     recv_task.await.unwrap();
     let r = results_data.write().await.take().unwrap();
     Ok((r, res))
@@ -144,7 +83,7 @@ pub struct ConfiguredBazelRunner<
     U: crate::hydrated_stream_processors::process_bazel_failures::CommandLineRunner,
 > {
     config: Arc<Config>,
-    pub configured_bazel: ConfiguredBazel,
+    pub configured_bazel: BazelWrapper<BuildEventResponse>,
     #[cfg(feature = "bazelfe-daemon")]
     pub runner_daemon: Option<
         bazelfe_protos::bazel_tools::daemon_service::daemon_service_client::DaemonServiceClient<
@@ -156,36 +95,6 @@ pub struct ConfiguredBazelRunner<
     process_build_failures: Arc<ProcessBazelFailures<T, U>>,
 }
 
-#[derive(Error, Debug)]
-pub enum ConfiguredBazelRunnerError {
-    #[error("Reporting user error: `{0}`")]
-    UserErrorReport(#[from] super::UserReportError),
-
-    #[error("Unclassified error: {0}")]
-    OtherError(#[from] Box<dyn std::error::Error>),
-}
-
-impl From<crate::bazel_runner::command_line_rewriter_action::RewriteCommandLineError>
-    for ConfiguredBazelRunnerError
-{
-    fn from(
-        cle: crate::bazel_runner::command_line_rewriter_action::RewriteCommandLineError,
-    ) -> Self {
-        use crate::bazel_runner::command_line_rewriter_action::RewriteCommandLineError;
-        match cle {
-            RewriteCommandLineError::UserErrorReport(e) => {
-                ConfiguredBazelRunnerError::UserErrorReport(e)
-            }
-        }
-    }
-}
-
-pub struct RunCompleteState {
-    pub attempts: u16,
-    pub total_actions_taken: u32,
-    pub final_exit_code: i32,
-    pub running_total: ProcessorActivity,
-}
 impl<
         T: buildozer_driver::Buildozer,
         U: crate::hydrated_stream_processors::process_bazel_failures::CommandLineRunner,
@@ -193,7 +102,7 @@ impl<
 {
     pub fn new(
         config: Arc<Config>,
-        configured_bazel: ConfiguredBazel,
+        configured_bazel: BazelWrapper<BuildEventResponse>,
         #[cfg(feature = "bazelfe-daemon")] runner_daemon: Option<
             bazelfe_protos::bazel_tools::daemon_service::daemon_service_client::DaemonServiceClient<
                 tonic::transport::Channel,
@@ -227,11 +136,12 @@ impl<
         while attempts < 60 {
             attempts += 1;
             self.process_build_failures.advance_epoch().await;
-
-            let (processor_activity, bazel_result) = self
-                .configured_bazel
-                .spawn_bazel_attempt(&self.bazel_command_line, pipe_output)
-                .await?;
+            let (processor_activity, bazel_result) = run_bazel(
+                &self.configured_bazel,
+                &self.bazel_command_line,
+                pipe_output,
+            )
+            .await?;
             let actions_taken = processor_activity.actions_taken;
             total_actions_taken += actions_taken;
             running_total.merge(processor_activity, disable_action_stories_on_success);
@@ -248,7 +158,8 @@ impl<
         })
     }
 
-    pub async fn run(mut self) -> Result<i32, ConfiguredBazelRunnerError> {
+    // todo, move me to the app, this is app specific
+    pub async fn run(mut self) -> Result<i32, BazelWrapperError> {
         let bq = crate::jvm_indexer::bazel_query::from_binary_path(
             &self.bazel_command_line.bazel_binary,
         );
@@ -259,13 +170,20 @@ impl<
             &mut self.runner_daemon,
             bq,
         )
-        .await?;
+        .await
+        .map_err(|e| BazelWrapperError::Unknown(Box::new(e)))?;
 
         #[cfg(feature = "autotest-action")]
-        if super::auto_test_action::maybe_auto_test_mode(&mut self).await? {
+        if super::auto_test_action::maybe_auto_test_mode(&mut self)
+            .await
+            .map_err(|e| BazelWrapperError::Unknown(e))?
+        {
             return Ok(0);
         };
-        let res_data = self.run_command_line(true).await?;
+        let res_data = self
+            .run_command_line(true)
+            .await
+            .map_err(|e| BazelWrapperError::Unknown(e))?;
         let disable_action_stories_on_success = self.config.disable_action_stories_on_success;
 
         // we should be very quiet if the build is successful/we added nothing.
@@ -337,4 +255,11 @@ impl<
 
         Ok(res_data.final_exit_code)
     }
+}
+
+pub struct RunCompleteState {
+    pub attempts: u16,
+    pub total_actions_taken: u32,
+    pub final_exit_code: i32,
+    pub running_total: ProcessorActivity,
 }

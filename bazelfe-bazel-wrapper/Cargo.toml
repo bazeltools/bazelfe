@@ -2,81 +2,48 @@
 authors = ["Ian O'Connell <ianoc@ianoc.net>"]
 edition = "2021"
 license = "Apache-2.0"
-name = "bazelfe-core"
+name = "bazelfe-bazel-wrapper"
 version = "0.1.0"
-build = "build.rs"
 
 [[bin]]
-name = "scala-parser"
-path = "src/source_dependencies/scala/scala_parser_app.rs"
+name = "generate-bazel-command-line"
+path = "src/bazel_command_line_parser/generate_bazel_command_line_app.rs"
 required-features = ["dev-binaries"]
-
-[[bin]]
-name = "java-parser"
-path = "src/source_dependencies/java/java_parser_app.rs"
-required-features = ["dev-binaries"]
-
-[[bin]]
-name = "index-table"
-path = "src/index_table/load_index_table_app.rs"
-required-features = ["dev-binaries"]
-
-[[bin]]
-name = "buildozer-driver"
-path = "src/buildozer_driver/buildozer_driver_app.rs"
-required-features = ["dev-binaries"]
-
-[[bin]]
-name = "bazel-runner-daemon-demo-app"
-path = "src/bazel_runner_daemon/bazel_runner_daemon_demo_app.rs"
-required-features = ["dev-binaries"]
-
-[[bin]]
-name = "bep-junit"
-path = "src/bep_junit/bep_junit_app.rs"
-
-[[bin]]
-name = "jvm-indexer"
-path = "src/jvm_indexer/jvm_indexer_app.rs"
-
-[[bin]]
-name = "bazel-runner"
-path = "src/bazel_runner/bazel_runner_app.rs"
 
 [dependencies]
-async-channel = "1.8.0"
+async-channel = "1.7.1"
 async-stream = "0.3.3"
-async-trait = "0.1.60"
+async-trait = "0.1.57"
 byteorder = "1.4.3"
-bytes = "1.3.0"
-clap = { version = "4.0.32", features = ["derive", "env"] }
-ctrlc = "3.2.4"
+bytes = "1.2.1"
+clap = { version = "4.0.11", features = ["derive", "env"] }
+ctrlc = "3.2.3"
 exec = "0.3.1"
 lazy_static = "1.4.0"
 log = "0.4.17"
-nom = "7.1.2"
+nom = "7.1.1"
 pretty_env_logger = "0.4.0"
-prost = "0.11.5"
-prost-types = "0.11.5"
+prost = "0.11.0"
+prost-types = "0.11.1"
 rand = "0.8.5"
-regex = "1.7.0"
-serde = { version = "1.0.152", features = ["derive"] }
+regex = "1.6.0"
+serde = { version = "1.0.145", features = ["derive"] }
 dynfmt = { version = "0.1.5", features = ["curly"] }
-toml = "0.5.10"
+toml = "0.5.9"
 walkdir = "2.3.2"
 shellwords = "1.1.0"
-zip = "0.6.3"
-thiserror = "1.0.38"
+zip = "0.6.2"
+thiserror = "1.0.37"
 fork = { version = "0.1.20", optional = true }
-serde_json = "1.0.91"
+serde_json = "1.0.86"
 stdio-override = { version = "0.1.3", optional = true }
-libc = "0.2.139"
+libc = "0.2.135"
 crossbeam-channel = { version = "0.5.6", optional = true }
 notify = { version = "5.0.0", optional = true }
 tokio-serde = { version = "0.8.0", features = ["bincode"], optional = true }
 tokio-util = { version = "0.7.4", features = ["compat"] }
 sha2 = "0.10.6"
-nix = "0.26.1"
+nix = "0.25.0"
 flume = { version = "0.10.14", optional = true }
 trim-margin = { version = "0.1.0", optional = true }
 dashmap = { version = "5.4.0", optional = true }
@@ -85,44 +52,39 @@ crossterm = "0.25.0"
 muncher = { version = "0.7.0", optional = true }
 humantime = "2.1.0"
 tempfile = { version = "3.3.0", optional = true }
-anyhow = "1.0.68"
-ignore = "0.4.19"
+anyhow = "1.0.65"
+ignore = "0.4.18"
 tower = "0.4.13"
 tokio-signal = "0.2.9"
-mio = "0.8.5"
+mio = "0.8.4"
 ptyprocess = "0.3.0"
 xml-rs = "0.8.4"
 
-
 [build-dependencies]
-vergen = "7.5.0"
-anyhow = "1.0.68"
+anyhow = "1.0.65"
 
 [dependencies.bazelfe-protos]
 path = "../bazelfe-protos"
 
-[dependencies.bazelfe-bazel-wrapper]
-path = "../bazelfe-bazel-wrapper"
-
 [dependencies.futures]
 default-features = false
 features = ["alloc", "bilock", "unstable"]
-version = "0.3.25"
+version = "0.3.24"
 
 [dependencies.tokio]
 features = ["full"]
-version = "1.24.0"
+version = "1.21.2"
 
 [dependencies.tokio-stream]
 features = ["net"]
-version = "0.1.11"
+version = "0.1.10"
 
 [dependencies.tonic]
 features = ["tls"]
-version = "0.8.3"
+version = "0.8.2"
 
 [dev-dependencies]
-once_cell = "1.17.0"
+once_cell = "1.15.0"
 pinky-swear = "6.1.0"
 tower = "0.4.13"
 tempfile = "3.3.0"
@@ -134,5 +96,5 @@ autotest-action = ["tui", "muncher", "tempfile", "bazelfe-daemon"]
 bazelfe-daemon = ["notify", "tokio-serde", "flume", "trim-margin", "dashmap", "fork", "stdio-override"]
 
 [lib]
-name = "bazelfe_core"
+name = "bazelfe_bazel_wrapper"
 path = "src/lib.rs"

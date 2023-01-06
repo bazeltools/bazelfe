@@ -1,9 +1,7 @@
 use lazy_static::lazy_static;
 
-use crate::{
-    build_events::hydrated_stream,
-    buildozer_driver::{BazelAttrTarget, Buildozer},
-};
+use crate::buildozer_driver::{BazelAttrTarget, Buildozer};
+use bazelfe_bazel_wrapper::bep::build_events::hydrated_stream;
 use regex::Regex;
 use std::time::Instant;
 

@@ -2748,7 +2748,7 @@ lazy_static! {
     };
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub enum BuiltInAction {
     AnalyzeProfile,
     Aquery,

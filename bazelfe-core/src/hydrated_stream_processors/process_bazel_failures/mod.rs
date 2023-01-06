@@ -1,12 +1,13 @@
 use std::{collections::HashMap, collections::HashSet, sync::Arc, time::Instant};
 
+use bazelfe_bazel_wrapper::bep::BazelEventHandler;
 use tokio::sync::{Mutex, RwLock};
 
 use crate::bazel_query::BazelQueryEngine;
 
-use crate::{
-    build_events::hydrated_stream, buildozer_driver::Buildozer, config::Config, index_table,
-};
+use bazelfe_bazel_wrapper::bep::build_events::hydrated_stream;
+
+use crate::{buildozer_driver::Buildozer, config::Config, index_table};
 
 use self::{
     command_line_runner::ExecutionResult,
@@ -22,6 +23,8 @@ mod shared_utils;
 
 pub use command_line_runner::CommandLineRunner;
 pub use command_line_runner::CommandLineRunnerImpl;
+
+use super::BuildEventResponse;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TargetStoryAction {
@@ -92,7 +95,9 @@ pub struct ProcessBazelFailures<T: Buildozer, U: CommandLineRunner> {
 }
 
 #[async_trait::async_trait]
-impl<T: Buildozer, U: CommandLineRunner> super::BazelEventHandler for ProcessBazelFailures<T, U> {
+impl<T: Buildozer, U: CommandLineRunner> BazelEventHandler<BuildEventResponse>
+    for ProcessBazelFailures<T, U>
+{
     async fn process_event(
         &self,
         _bazel_run_id: usize,

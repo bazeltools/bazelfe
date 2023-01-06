@@ -1,6 +1,8 @@
 use std::time::Instant;
 
-use crate::hydrated_stream_processors::BazelEventHandler;
+use bazelfe_bazel_wrapper::bep::{build_events, BazelEventHandler};
+
+use crate::hydrated_stream_processors::BuildEventResponse;
 
 #[derive(Debug)]
 pub struct ProgressTabUpdater {
@@ -21,14 +23,14 @@ impl ProgressTabUpdater {
 }
 
 #[async_trait::async_trait]
-impl BazelEventHandler for ProgressTabUpdater {
+impl BazelEventHandler<BuildEventResponse> for ProgressTabUpdater {
     async fn process_event(
         &self,
         bazel_run_id: usize,
-        event: &crate::build_events::hydrated_stream::HydratedInfo,
+        event: &build_events::hydrated_stream::HydratedInfo,
     ) -> Vec<crate::hydrated_stream_processors::BuildEventResponse> {
         match event {
-            crate::build_events::hydrated_stream::HydratedInfo::Progress(p) => {
+            build_events::hydrated_stream::HydratedInfo::Progress(p) => {
                 if !p.stderr.is_empty() {
                     let _ = self.progress_pump.send_async(p.stderr.clone()).await;
                 }
@@ -37,8 +39,8 @@ impl BazelEventHandler for ProgressTabUpdater {
                 }
             }
 
-            crate::build_events::hydrated_stream::HydratedInfo::BazelAbort(_ba) => {}
-            crate::build_events::hydrated_stream::HydratedInfo::ActionFailed(af) => {
+            build_events::hydrated_stream::HydratedInfo::BazelAbort(_ba) => {}
+            build_events::hydrated_stream::HydratedInfo::ActionFailed(af) => {
                 let _ = self
                     .action_event_tx
                     .send_async(super::ActionTargetStateScrollEntry {
@@ -52,7 +54,7 @@ impl BazelEventHandler for ProgressTabUpdater {
                     })
                     .await;
             }
-            crate::build_events::hydrated_stream::HydratedInfo::ActionSuccess(action_success) => {
+            build_events::hydrated_stream::HydratedInfo::ActionSuccess(action_success) => {
                 let _ = self
                     .action_event_tx
                     .send_async(super::ActionTargetStateScrollEntry {
@@ -66,7 +68,7 @@ impl BazelEventHandler for ProgressTabUpdater {
                     })
                     .await;
             }
-            crate::build_events::hydrated_stream::HydratedInfo::TargetComplete(tc) => {
+            build_events::hydrated_stream::HydratedInfo::TargetComplete(tc) => {
                 let _ = self
                     .action_event_tx
                     .send_async(super::ActionTargetStateScrollEntry {
@@ -80,16 +82,16 @@ impl BazelEventHandler for ProgressTabUpdater {
                     })
                     .await;
             }
-            crate::build_events::hydrated_stream::HydratedInfo::TestResult(tst) => {
+            build_events::hydrated_stream::HydratedInfo::TestResult(tst) => {
                 let is_success = match tst.test_summary_event.test_status {
-                    crate::build_events::build_event_server::bazel_event::TestStatus::Passed => true,
-                    crate::build_events::build_event_server::bazel_event::TestStatus::Flaky => false,
-                    crate::build_events::build_event_server::bazel_event::TestStatus::Timeout => false,
-                    crate::build_events::build_event_server::bazel_event::TestStatus::Failed => false,
-                    crate::build_events::build_event_server::bazel_event::TestStatus::Incomplete => false,
-                    crate::build_events::build_event_server::bazel_event::TestStatus::RemoteFailure => false,
-                    crate::build_events::build_event_server::bazel_event::TestStatus::FailedToBuild => false,
-                    crate::build_events::build_event_server::bazel_event::TestStatus::ToolHaltedBeforeTesting => false,
+                    build_events::build_event_server::bazel_event::TestStatus::Passed => true,
+                    build_events::build_event_server::bazel_event::TestStatus::Flaky => false,
+                    build_events::build_event_server::bazel_event::TestStatus::Timeout => false,
+                    build_events::build_event_server::bazel_event::TestStatus::Failed => false,
+                    build_events::build_event_server::bazel_event::TestStatus::Incomplete => false,
+                    build_events::build_event_server::bazel_event::TestStatus::RemoteFailure => false,
+                    build_events::build_event_server::bazel_event::TestStatus::FailedToBuild => false,
+                    build_events::build_event_server::bazel_event::TestStatus::ToolHaltedBeforeTesting => false,
                 };
                 let output_files = tst
                     .test_summary_event

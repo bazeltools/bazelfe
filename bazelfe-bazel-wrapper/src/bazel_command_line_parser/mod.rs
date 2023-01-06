@@ -1,5 +1,5 @@
 mod options;
-use std::{iter::Peekable, path::PathBuf};
+use std::{collections::HashMap, iter::Peekable, path::PathBuf};
 
 pub use options::BuiltInAction;
 
@@ -56,32 +56,25 @@ impl BazelOption {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CustomAction {
-    AutoTest,
-    TestFile,
-    BuildFile,
-}
-impl CustomAction {
-    pub fn action_for_options(&self) -> BuiltInAction {
-        match self {
-            CustomAction::AutoTest => BuiltInAction::Test,
-            CustomAction::TestFile => BuiltInAction::Test,
-            CustomAction::BuildFile => BuiltInAction::Build,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
     BuiltIn(BuiltInAction),
-    Custom(CustomAction),
+    Custom(String),
 }
 
 impl Action {
-    pub fn action_for_options(&self) -> BuiltInAction {
+    pub fn action_for_options(
+        &self,
+        custom_action_to_built_in: &HashMap<String, BuiltInAction>,
+    ) -> Result<BuiltInAction, CommandLineParsingError> {
         match self {
-            Action::BuiltIn(b) => b.clone(),
-            Action::Custom(c) => c.action_for_options(),
+            Action::BuiltIn(b) => Ok(*b),
+            Action::Custom(c) => match custom_action_to_built_in.get(c) {
+                Some(a) => Ok(*a),
+                None => Err(CommandLineParsingError::UnknownArgument(format!(
+                    "Action supplied to bazel is unknown {}, unable to parse args",
+                    c
+                ))),
+            },
         }
     }
 }
@@ -95,12 +88,7 @@ impl FromStr for Action {
             return Ok(Action::BuiltIn(builtin));
         }
 
-        match input {
-            "autotest" => Ok(Action::Custom(CustomAction::AutoTest)),
-            "test_file" => Ok(Action::Custom(CustomAction::TestFile)),
-            "build_file" => Ok(Action::Custom(CustomAction::BuildFile)),
-            _ => Err(()),
-        }
+        Ok(Action::Custom(input.to_string()))
     }
 }
 
@@ -120,7 +108,7 @@ pub enum CommandLineParsingError {
 #[derive(Error, Debug)]
 pub enum ArgNormalizationError {
     #[error("Internal args cannot be passed to bazel sanely so are forbidden from this api, command line arg had: {0:?}")]
-    HasInternalArg(CustomAction),
+    HasInternalArg(String),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -301,6 +289,7 @@ fn extract_set_of_flags<'a, I: Iterator<Item = &'a String>>(
 
 pub fn parse_bazel_command_line(
     command_line: &[String],
+    custom_action_to_built_in: HashMap<String, BuiltInAction>,
 ) -> Result<ParsedCommandLine, CommandLineParsingError> {
     let mut command_line_iter = command_line.iter().peekable();
     let bazel_path = if let Some(p) = command_line_iter.next() {
@@ -316,7 +305,7 @@ pub fn parse_bazel_command_line(
     if let Some(action) = action.as_ref() {
         command_line_iter.next();
         let options: Vec<BazelOption> = options::ACTION_TO_OPTIONS
-            .get(&action.action_for_options())
+            .get(&action.action_for_options(&custom_action_to_built_in)?)
             .expect("Should be impossible not to find options")
             .iter()
             .map(|&o| options::ALL_ACTION_OPTIONS[o].clone())
@@ -444,7 +433,7 @@ mod tests {
             "bar".to_string(),
         ];
 
-        let result = parse_bazel_command_line(&passthrough_command_line)
+        let result = parse_bazel_command_line(&passthrough_command_line, Default::default())
             .expect("Should be able to parse the cmd line");
 
         let expected_startup_options: Vec<BazelOption> = vec![
@@ -484,7 +473,7 @@ mod tests {
         let passthrough_command_line =
             vec!["bazel".to_string(), "help".to_string(), "test".to_string()];
 
-        let result = parse_bazel_command_line(&passthrough_command_line)
+        let result = parse_bazel_command_line(&passthrough_command_line, Default::default())
             .expect("Should be able to parse the cmd line");
 
         let expected_startup_options: Vec<BazelOption> = vec![];
@@ -518,7 +507,7 @@ mod tests {
             "-foo/contrib/...".to_string(),
         ];
 
-        let result = parse_bazel_command_line(&passthrough_command_line)
+        let result = parse_bazel_command_line(&passthrough_command_line, Default::default())
             .expect("Should be able to parse the cmd line");
 
         let expected_startup_options: Vec<BazelOption> = vec![];
@@ -559,7 +548,7 @@ mod tests {
             "--keep_going".to_string(),
         ];
 
-        let result = parse_bazel_command_line(&passthrough_command_line)
+        let result = parse_bazel_command_line(&passthrough_command_line, Default::default())
             .expect("Should be able to parse the cmd line");
 
         let expected_startup_options: Vec<BazelOption> = vec![
@@ -608,7 +597,7 @@ mod tests {
             "--keep_going".to_string(),
         ];
 
-        let result = parse_bazel_command_line(&passthrough_command_line)
+        let result = parse_bazel_command_line(&passthrough_command_line, Default::default())
             .expect("Should be able to parse the cmd line");
 
         let expected_startup_options: Vec<BazelOption> = vec![
@@ -662,7 +651,7 @@ mod tests {
             "--keep_going".to_string(),
         ];
 
-        match parse_bazel_command_line(&passthrough_command_line) {
+        match parse_bazel_command_line(&passthrough_command_line, Default::default()) {
             Ok(_) => panic!(
                 "Should have failed to parse bad command line with an extra unknown startup option"
             ),
@@ -692,7 +681,7 @@ mod tests {
             "--keep_going".to_string(),
         ];
 
-        match parse_bazel_command_line(&passthrough_command_line) {
+        match parse_bazel_command_line(&passthrough_command_line, Default::default()) {
             Ok(_) => panic!(
                 "Should have failed to parse bad command line with an extra unknown startup option"
             ),

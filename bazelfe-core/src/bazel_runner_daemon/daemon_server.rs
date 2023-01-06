@@ -790,17 +790,18 @@ pub async fn main(
     });
 
     println!("Starting inotify watcher");
-    let mut core_watcher: RecommendedWatcher =
-        RecommendedWatcher::new(move |res: notify::Result<notify::Event>| match res {
+    let mut core_watcher: RecommendedWatcher = RecommendedWatcher::new(
+        move |res: notify::Result<notify::Event>| match res {
             Ok(event) => {
                 if let Err(e) = flume_tx.send(event) {
                     eprintln!("Failed to enqueue inotify event: {:#?}", e);
                 }
             }
             Err(e) => println!("watch error: {:?}", e),
-        },notify::Config::default())
-        .unwrap();
-
+        },
+        notify::Config::default(),
+    )
+    .unwrap();
 
     // Add a path to be watched. All files and directories at that path and
     // below will be monitored for changes.
@@ -829,8 +830,8 @@ pub async fn main(
 
     let notify_ignore_regexes = daemon_config.inotify_ignore_regexes.clone();
 
-    let mut root_watcher: RecommendedWatcher =
-        RecommendedWatcher::new(move |res: notify::Result<notify::Event>| match res {
+    let mut root_watcher: RecommendedWatcher = RecommendedWatcher::new(
+        move |res: notify::Result<notify::Event>| match res {
             Ok(event) => {
                 if let notify::EventKind::Create(_) = event.kind {
                     for path in event.paths.iter() {
@@ -859,8 +860,10 @@ pub async fn main(
                 }
             }
             Err(e) => println!("watch error: {:?}", e),
-        },notify::Config::default())
-        .unwrap();
+        },
+        notify::Config::default(),
+    )
+    .unwrap();
 
     root_watcher
         .watch(&current_dir, RecursiveMode::NonRecursive)

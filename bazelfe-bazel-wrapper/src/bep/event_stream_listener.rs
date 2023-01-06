@@ -1,34 +1,34 @@
 use std::sync::{atomic::AtomicUsize, Arc};
 
-use crate::{build_events::hydrated_stream, hydrated_stream_processors::BuildEventResponse};
+use crate::bep::build_events::hydrated_stream;
+
+use super::BazelEventHandler;
 
 #[derive(Debug)]
-pub struct EventStreamListener {
-    processors: Vec<Arc<dyn crate::hydrated_stream_processors::BazelEventHandler>>,
+pub struct EventStreamListener<T> {
+    processors: Vec<Arc<dyn BazelEventHandler<T>>>,
     run_id: Arc<AtomicUsize>,
 }
 
-impl EventStreamListener {
-    pub fn new(
-        processors: Vec<Arc<dyn crate::hydrated_stream_processors::BazelEventHandler>>,
-    ) -> Self {
+impl<T> EventStreamListener<T>
+where
+    T: Send + 'static,
+{
+    pub fn new(processors: Vec<Arc<dyn BazelEventHandler<T>>>) -> Self {
         Self {
             processors,
             run_id: Arc::new(AtomicUsize::new(0)),
         }
     }
 
-    pub fn add_event_handler(
-        &mut self,
-        event_handler: Arc<dyn crate::hydrated_stream_processors::BazelEventHandler>,
-    ) {
+    pub fn add_event_handler(&mut self, event_handler: Arc<dyn BazelEventHandler<T>>) {
         self.processors.push(event_handler);
     }
 
     pub fn handle_stream(
         &self,
         rx: async_channel::Receiver<Option<hydrated_stream::HydratedInfo>>,
-    ) -> async_channel::Receiver<BuildEventResponse> {
+    ) -> async_channel::Receiver<T> {
         let (tx, next_rx) = async_channel::unbounded();
 
         let current_id = self

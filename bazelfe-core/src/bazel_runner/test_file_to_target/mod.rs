@@ -1,16 +1,18 @@
 use std::{collections::HashSet, path::PathBuf};
 
-use crate::{
-    bazel_command_line_parser::{BuiltInAction, ParsedCommandLine},
-    jvm_indexer::bazel_query::BazelQuery,
+use bazelfe_bazel_wrapper::{
+    bazel_command_line_parser::{Action, BuiltInAction, ParsedCommandLine},
+    bazel_subprocess_wrapper::UserReportError,
 };
+
+use crate::jvm_indexer::bazel_query::BazelQuery;
 
 use super::command_line_rewriter_action::RewriteCommandLineError;
 
 fn err(e_string: String) -> Result<(), RewriteCommandLineError> {
-    Err(RewriteCommandLineError::UserErrorReport(
-        super::UserReportError(e_string),
-    ))
+    Err(RewriteCommandLineError::UserErrorReport(UserReportError(
+        e_string,
+    )))
 }
 pub async fn run<B: BazelQuery>(
     command_line: &mut ParsedCommandLine,
@@ -84,8 +86,6 @@ pub async fn run<B: BazelQuery>(
     command_line.remaining_args.clear();
     command_line.remaining_args.extend(targets.into_iter());
 
-    command_line.action = Some(crate::bazel_command_line_parser::Action::BuiltIn(
-        replace_action,
-    ));
+    command_line.action = Some(Action::BuiltIn(replace_action));
     Ok(())
 }

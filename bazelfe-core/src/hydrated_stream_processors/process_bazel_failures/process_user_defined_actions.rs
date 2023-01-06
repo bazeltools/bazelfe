@@ -1,6 +1,6 @@
 use crate::config::{Config, ErrorProcessor};
 
-use crate::build_events::hydrated_stream;
+use bazelfe_bazel_wrapper::bep::build_events::hydrated_stream;
 use regex::Regex;
 use std::time::Instant;
 use std::{collections::HashMap, sync::Arc};

@@ -1,8 +1,10 @@
 use super::junit_xml_error_writer;
-use super::label_to_junit_relative_path;
+
 use super::xml_utils::emit_junit_xml_from_failed_operation;
-use crate::bep_junit::xml_utils::XmlWritable;
-use crate::build_events::hydrated_stream::{ActionFailedErrorInfo, BazelAbortErrorInfo};
+
+use bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::{
+    ActionFailedErrorInfo, BazelAbortErrorInfo,
+};
 use std::path::Path;
 
 pub fn emit_junit_xml_from_aborted_action(
