@@ -14,6 +14,7 @@ use tokio::io::AsyncWriteExt;
 // -1 == don't send signals
 // > 0 == send signals
 static SUB_PROCESS_PID: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+static CTRL_C_HANLDER_SET: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 mod bazel_wrapper;
 mod bazel_wrapper_builder;
@@ -27,6 +28,10 @@ use crate::bazel_command_line_parser::ParsedCommandLine;
 pub use user_report_error::UserReportError;
 
 pub fn register_ctrlc_handler() {
+    if CTRL_C_HANLDER_SET.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        // OK this is already set.
+        return;
+    }
     ctrlc::set_handler(move || {
         let current_sub_process_pid: i32 = SUB_PROCESS_PID.load(Ordering::SeqCst);
 
