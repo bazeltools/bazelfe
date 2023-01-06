@@ -17,18 +17,13 @@ use std::time::Instant;
 
 use std::env;
 
-
-
-
 use bazelfe_bazel_wrapper::bazel_command_line_parser::parse_bazel_command_line;
 use bazelfe_bazel_wrapper::bazel_command_line_parser::{self, ParsedCommandLine};
 use bazelfe_core::jvm_indexer::bazel_query::BazelQuery;
 
-
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::sync::Arc;
-
 
 #[derive(Parser, Debug)]
 #[clap(name = "basic")]

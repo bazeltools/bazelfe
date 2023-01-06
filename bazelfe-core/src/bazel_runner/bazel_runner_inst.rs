@@ -5,9 +5,6 @@ use bazelfe_bazel_wrapper::bazel_subprocess_wrapper::{
 use std::env;
 use tokio::sync::Mutex;
 
-
-
-
 use crate::bazel_query::{BazelQueryEngine, RealBazelQueryEngine};
 use crate::bazel_runner::command_line_rewriter_action::{parse_custom_action, CustomAction};
 
@@ -16,7 +13,6 @@ use crate::buildozer_driver;
 use crate::config::Config;
 use crate::hydrated_stream_processors::index_new_results::IndexNewResults;
 use crate::hydrated_stream_processors::process_bazel_failures::ProcessBazelFailures;
-
 
 use std::sync::Arc;
 

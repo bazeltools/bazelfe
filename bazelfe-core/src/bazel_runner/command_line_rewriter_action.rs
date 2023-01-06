@@ -14,6 +14,7 @@ pub enum CustomAction {
     BuildFile,
 }
 impl CustomAction {
+    #[allow(dead_code)]
     pub fn to_string(&self) -> String {
         match self {
             CustomAction::AutoTest => "autotest",
@@ -76,7 +77,7 @@ pub async fn rewrite_command_line<B: BazelQuery>(
             CustomAction::AutoTest => todo!(),
             CustomAction::TestFile => {
                 test_file_to_target::run(bazel_command_line, BuiltInAction::Test, bazel_query)
-                    .await;
+                    .await?;
             }
             CustomAction::BuildFile => {
                 return test_file_to_target::run(
@@ -197,7 +198,7 @@ mod tests {
 
     use crate::config::command_line_rewriter::*;
     use crate::jvm_indexer::bazel_query::ExecuteResult;
-    
+
     use std::path::PathBuf;
     #[tokio::test]
     async fn test_passthrough_args() {

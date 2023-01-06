@@ -1,29 +1,17 @@
-
-
 use tokio::sync::Mutex;
-
-
-
 
 use crate::bazel_command_line_parser::ParsedCommandLine;
 
-
 use crate::bep::EventStreamListener;
-
-
 
 use std::sync::Arc;
 
-
 use super::ExecuteResult;
-
 
 use crate::bep::build_events::build_event_server::BuildEventAction;
 use crate::bep::build_events::hydrated_stream::HydratedInfo;
 
 use crate::bep::build_events::build_event_server::bazel_event;
-
-
 
 pub struct BazelWrapper<T> {
     sender_arc:
@@ -65,11 +53,13 @@ where
 
         let target_extracted_stream = self.aes.handle_stream(error_stream);
 
-        let recv_task = tokio::spawn(async move {
-            while let Ok(action) = target_extracted_stream.recv().await {
-                user_stream_handler.send(action).await;
-            }
-        });
+        let recv_task: tokio::task::JoinHandle<Result<(), async_channel::SendError<_>>> =
+            tokio::spawn(async move {
+                while let Ok(action) = target_extracted_stream.recv().await {
+                    user_stream_handler.send(action).await?;
+                }
+                Ok(())
+            });
 
         let res =
             super::execute_bazel_output_control(bazel_command_line, self.bes_port, pipe_output)
@@ -78,7 +68,7 @@ where
             let mut locked = self.sender_arc.lock().await;
             locked.take();
         };
-        recv_task.await.unwrap();
+        recv_task.await.unwrap().unwrap();
         Ok(res)
     }
 }
