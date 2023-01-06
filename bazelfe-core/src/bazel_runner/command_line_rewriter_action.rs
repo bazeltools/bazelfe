@@ -15,11 +15,12 @@ pub enum CustomAction {
 }
 impl CustomAction {
     pub fn to_string(&self) -> String {
-match self {
-    CustomAction::AutoTest => "autotest",
-    CustomAction::TestFile => "test_file",
-    CustomAction::BuildFile => "build_file",
-}.to_string()
+        match self {
+            CustomAction::AutoTest => "autotest",
+            CustomAction::TestFile => "test_file",
+            CustomAction::BuildFile => "build_file",
+        }
+        .to_string()
     }
 }
 

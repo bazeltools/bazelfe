@@ -798,9 +798,10 @@ pub async fn main(
                 }
             }
             Err(e) => println!("watch error: {:?}", e),
-        },notify::Config::default())
-        .unwrap();
-
+        },
+        notify::Config::default(),
+    )
+    .unwrap();
 
     // Add a path to be watched. All files and directories at that path and
     // below will be monitored for changes.
@@ -859,8 +860,10 @@ pub async fn main(
                 }
             }
             Err(e) => println!("watch error: {:?}", e),
-        },notify::Config::default())
-        .unwrap();
+        },
+        notify::Config::default(),
+    )
+    .unwrap();
 
     root_watcher
         .watch(&current_dir, RecursiveMode::NonRecursive)

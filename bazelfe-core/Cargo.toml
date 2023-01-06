@@ -22,20 +22,9 @@ path = "src/index_table/load_index_table_app.rs"
 required-features = ["dev-binaries"]
 
 [[bin]]
-name = "build-events"
-path = "src/build_events/build_events_app.rs"
-required-features = ["dev-binaries"]
-
-[[bin]]
 name = "buildozer-driver"
 path = "src/buildozer_driver/buildozer_driver_app.rs"
 required-features = ["dev-binaries"]
-
-[[bin]]
-name = "generate-bazel-command-line"
-path = "src/bazel_command_line_parser/generate_bazel_command_line_app.rs"
-required-features = ["dev-binaries"]
-
 
 [[bin]]
 name = "bazel-runner-daemon-demo-app"

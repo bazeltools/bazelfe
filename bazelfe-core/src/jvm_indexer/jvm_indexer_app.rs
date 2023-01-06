@@ -1,10 +1,10 @@
 use bazelfe_bazel_wrapper::bazel_subprocess_wrapper::{BazelWrapper, BazelWrapperBuilder};
-use bazelfe_bazel_wrapper::bep::{EventStreamListener, build_events, BazelEventHandler};
-use bazelfe_bazel_wrapper::bep::build_events::build_event_server::{BuildEventAction, bazel_event};
+use bazelfe_bazel_wrapper::bep::build_events::build_event_server::{bazel_event, BuildEventAction};
 use bazelfe_bazel_wrapper::bep::target_completed_tracker::TargetCompletedTracker;
+use bazelfe_bazel_wrapper::bep::{build_events, BazelEventHandler, EventStreamListener};
 use bazelfe_core::config::load_config_file;
-use bazelfe_core::hydrated_stream_processors::BuildEventResponse;
 use bazelfe_core::hydrated_stream_processors::index_new_results::IndexNewResults;
+use bazelfe_core::hydrated_stream_processors::BuildEventResponse;
 use clap::Parser;
 #[macro_use]
 extern crate log;
@@ -20,15 +20,15 @@ use tonic::transport::Server;
 
 use bazelfe_protos::*;
 
+use bazelfe_bazel_wrapper::bazel_command_line_parser::parse_bazel_command_line;
+use bazelfe_bazel_wrapper::bazel_command_line_parser::{self, Action, ParsedCommandLine};
 use bazelfe_core::jvm_indexer::bazel_query::BazelQuery;
-use bazelfe_bazel_wrapper::bazel_command_line_parser::{Action, ParsedCommandLine, self};
 use google::devtools::build::v1::publish_build_event_server::PublishBuildEventServer;
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use bazelfe_bazel_wrapper::bazel_command_line_parser::parse_bazel_command_line;
 
 #[derive(Parser, Debug)]
 #[clap(name = "basic")]
@@ -442,7 +442,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .or_else(|| env::var("BIND_ADDRESS").ok())
         .map(|e| e.parse().expect("can't parse BIND_ADDRESS variable"));
 
-
     let bazel_wrapper_builder = BazelWrapperBuilder {
         bes_server_bind_address: addr,
         processors: vec![
@@ -473,27 +472,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let batch_start_time = Instant::now();
 
         let mut parsed_command_line = parsed_command_line.clone();
-        parsed_command_line.set_action(Some(
-            bazel_command_line_parser::Action::BuiltIn(
-                bazel_command_line_parser::BuiltInAction::Build,
-            ),
-        ));
+        parsed_command_line.set_action(Some(bazel_command_line_parser::Action::BuiltIn(
+            bazel_command_line_parser::BuiltInAction::Build,
+        )));
 
         parsed_command_line.add_action_option_if_unset(
-            bazel_command_line_parser::BazelOption::BooleanOption(
-                String::from("keep_going"),
-                true,
-            ),
+            bazel_command_line_parser::BazelOption::BooleanOption(String::from("keep_going"), true),
         );
 
         parsed_command_line.remaining_args.append(chunk);
 
-
         let (tx, rx) = async_channel::unbounded();
-let recv_task =
-        tokio::spawn(async move { while rx.recv().await.is_ok() {} });
+        let recv_task = tokio::spawn(async move { while rx.recv().await.is_ok() {} });
 
-        let bazel_result = bazel_wrapper.spawn_bazel_attempt(&parsed_command_line, false, tx).await.expect("Should succeed");
+        let bazel_result = bazel_wrapper
+            .spawn_bazel_attempt(&parsed_command_line, false, tx)
+            .await
+            .expect("Should succeed");
         recv_task.await.unwrap();
         let remaining_targets = target_completed_tracker.expected_targets.lock().await.len();
 

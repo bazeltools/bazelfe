@@ -13,7 +13,7 @@ use bazelfe_bazel_wrapper::bazel_subprocess_wrapper::BazelWrapper;
 use bazelfe_bazel_wrapper::bazel_subprocess_wrapper::{BazelWrapperError, ExecuteResult};
 use std::sync::Arc;
 
-use tokio::sync::{RwLock};
+use tokio::sync::RwLock;
 
 use super::processor_activity::*;
 
@@ -174,7 +174,10 @@ impl<
         .map_err(|e| BazelWrapperError::Unknown(Box::new(e)))?;
 
         #[cfg(feature = "autotest-action")]
-        if super::auto_test_action::maybe_auto_test_mode(&mut self).await.map_err(|e| BazelWrapperError::Unknown(e))? {
+        if super::auto_test_action::maybe_auto_test_mode(&mut self)
+            .await
+            .map_err(|e| BazelWrapperError::Unknown(e))?
+        {
             return Ok(0);
         };
         let res_data = self
