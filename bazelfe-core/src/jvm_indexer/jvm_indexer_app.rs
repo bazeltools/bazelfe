@@ -1,7 +1,7 @@
 use bazelfe_bazel_wrapper::bazel_subprocess_wrapper::{BazelWrapper, BazelWrapperBuilder};
-use bazelfe_bazel_wrapper::bep::build_events::build_event_server::{bazel_event, BuildEventAction};
+
 use bazelfe_bazel_wrapper::bep::target_completed_tracker::TargetCompletedTracker;
-use bazelfe_bazel_wrapper::bep::{build_events, BazelEventHandler, EventStreamListener};
+
 use bazelfe_core::config::load_config_file;
 use bazelfe_core::hydrated_stream_processors::index_new_results::IndexNewResults;
 use bazelfe_core::hydrated_stream_processors::BuildEventResponse;
@@ -16,19 +16,19 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use std::env;
-use tonic::transport::Server;
 
-use bazelfe_protos::*;
+
+
 
 use bazelfe_bazel_wrapper::bazel_command_line_parser::parse_bazel_command_line;
-use bazelfe_bazel_wrapper::bazel_command_line_parser::{self, Action, ParsedCommandLine};
+use bazelfe_bazel_wrapper::bazel_command_line_parser::{self, ParsedCommandLine};
 use bazelfe_core::jvm_indexer::bazel_query::BazelQuery;
-use google::devtools::build::v1::publish_build_event_server::PublishBuildEventServer;
-use rand::Rng;
+
+
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+
 
 #[derive(Parser, Debug)]
 #[clap(name = "basic")]
@@ -182,7 +182,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let config = load_config_file(&opt.config.as_ref()).await?;
 
-    let mut rng = rand::thread_rng();
+    let _rng = rand::thread_rng();
     let mut builder = pretty_env_logger::formatted_timed_builder();
     builder.format_timestamp_nanos();
     let running_refresh_mode = false;

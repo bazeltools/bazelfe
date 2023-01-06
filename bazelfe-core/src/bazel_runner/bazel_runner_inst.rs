@@ -1,12 +1,12 @@
 use bazelfe_bazel_wrapper::bazel_command_line_parser::{self, ParsedCommandLine};
 use bazelfe_bazel_wrapper::bazel_subprocess_wrapper::{
-    BazelWrapper, BazelWrapperBuilder, BazelWrapperError, UserReportError,
+    BazelWrapperBuilder, BazelWrapperError, UserReportError,
 };
 use std::env;
 use tokio::sync::Mutex;
-use tonic::transport::Server;
 
-use bazelfe_protos::*;
+
+
 
 use crate::bazel_query::{BazelQueryEngine, RealBazelQueryEngine};
 use crate::bazel_runner::command_line_rewriter_action::{parse_custom_action, CustomAction};
@@ -16,8 +16,8 @@ use crate::buildozer_driver;
 use crate::config::Config;
 use crate::hydrated_stream_processors::index_new_results::IndexNewResults;
 use crate::hydrated_stream_processors::process_bazel_failures::ProcessBazelFailures;
-use google::devtools::build::v1::publish_build_event_server::PublishBuildEventServer;
-use rand::Rng;
+
+
 use std::sync::Arc;
 
 use thiserror::Error;
@@ -66,7 +66,7 @@ pub struct BazelRunner {
 
 impl BazelRunner {
     pub async fn run(mut self) -> Result<i32, BazelRunnerError> {
-        let mut rng = rand::thread_rng();
+        let _rng = rand::thread_rng();
 
         bazelfe_bazel_wrapper::bazel_subprocess_wrapper::register_ctrlc_handler();
 

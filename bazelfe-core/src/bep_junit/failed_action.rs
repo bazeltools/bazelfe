@@ -1,7 +1,7 @@
 use super::junit_xml_error_writer;
-use super::label_to_junit_relative_path;
+
 use super::xml_utils::emit_junit_xml_from_failed_operation;
-use crate::bep_junit::xml_utils::XmlWritable;
+
 use bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::{
     ActionFailedErrorInfo, BazelAbortErrorInfo,
 };

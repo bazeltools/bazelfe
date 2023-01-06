@@ -197,7 +197,7 @@ mod tests {
 
     use crate::config::command_line_rewriter::*;
     use crate::jvm_indexer::bazel_query::ExecuteResult;
-    use bazel_command_line_parser::*;
+    
     use std::path::PathBuf;
     #[tokio::test]
     async fn test_passthrough_args() {
