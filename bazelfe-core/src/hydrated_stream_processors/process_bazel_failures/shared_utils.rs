@@ -2,7 +2,9 @@ use std::path::PathBuf;
 
 use bazelfe_protos::build_event_stream;
 
-use crate::build_events::hydrated_stream::{ActionFailedErrorInfo, ActionSuccessInfo};
+use bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::{
+    ActionFailedErrorInfo, ActionSuccessInfo,
+};
 
 pub(in crate::hydrated_stream_processors::process_bazel_failures) fn output_from_paths<'a>(
     files: impl Iterator<Item = &'a build_event_stream::file::File>,

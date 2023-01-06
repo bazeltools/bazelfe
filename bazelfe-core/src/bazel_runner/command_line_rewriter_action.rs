@@ -1,14 +1,54 @@
-use crate::bazel_command_line_parser::CustomAction;
+use crate::config::command_line_rewriter::TestActionMode;
 use crate::config::CommandLineRewriter;
 use crate::jvm_indexer::bazel_query::BazelQuery;
-use crate::{
-    bazel_command_line_parser::{BuiltInAction, ParsedCommandLine},
-    config::command_line_rewriter::TestActionMode,
-};
 
+use bazelfe_bazel_wrapper::bazel_command_line_parser::{
+    self, parse_bazel_command_line, Action, CommandLineParsingError,
+};
+use bazelfe_bazel_wrapper::bazel_subprocess_wrapper::UserReportError;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CustomAction {
+    AutoTest,
+    TestFile,
+    BuildFile,
+}
+impl CustomAction {
+    pub fn to_string(&self) -> String {
+match self {
+    CustomAction::AutoTest => "autotest",
+    CustomAction::TestFile => "test_file",
+    CustomAction::BuildFile => "build_file",
+}.to_string()
+    }
+}
+
+pub fn parse_commandline_with_custom_command_line_options(
+    command_line: &[String],
+) -> Result<ParsedCommandLine, CommandLineParsingError> {
+    let mut m: HashMap<String, BuiltInAction> = Default::default();
+    m.insert("autotest".to_string(), BuiltInAction::Test);
+    m.insert("test_file".to_string(), BuiltInAction::Test);
+    m.insert("build_file".to_string(), BuiltInAction::Build);
+    parse_bazel_command_line(command_line, m)
+}
+
+pub fn parse_custom_action(input: &str) -> Result<CustomAction, RewriteCommandLineError> {
+    match input {
+        "autotest" => Ok(CustomAction::AutoTest),
+        "test_file" => Ok(CustomAction::TestFile),
+        "build_file" => Ok(CustomAction::BuildFile),
+        _ => Err(RewriteCommandLineError::UserErrorReport(UserReportError(
+            format!("Unknown custom command passed in {}", input),
+        ))),
+    }
+}
+
+use std::collections::HashMap;
 #[cfg(feature = "bazelfe-daemon")]
 use std::fmt::Write;
 
+use bazelfe_bazel_wrapper::bazel_command_line_parser::{BuiltInAction, ParsedCommandLine};
 #[cfg(feature = "bazelfe-daemon")]
 use bazelfe_protos::bazel_tools::daemon_service::daemon_service_client::DaemonServiceClient;
 use thiserror::Error;
@@ -20,7 +60,7 @@ use super::test_file_to_target;
 #[derive(Error, Debug)]
 pub enum RewriteCommandLineError {
     #[error("Reporting user error: `{0}`")]
-    UserErrorReport(super::UserReportError),
+    UserErrorReport(UserReportError),
 }
 
 pub async fn rewrite_command_line<B: BazelQuery>(
@@ -29,26 +69,27 @@ pub async fn rewrite_command_line<B: BazelQuery>(
     #[cfg(feature = "bazelfe-daemon")] daemon_client: &mut Option<DaemonServiceClient<Channel>>,
     bazel_query: B,
 ) -> Result<(), RewriteCommandLineError> {
-    if bazel_command_line.action
-        == Some(crate::bazel_command_line_parser::Action::Custom(
-            CustomAction::TestFile,
-        ))
-    {
-        return test_file_to_target::run(bazel_command_line, BuiltInAction::Test, bazel_query)
-            .await;
+    if let Some(Action::Custom(cust)) = bazel_command_line.action.as_ref() {
+        let custom_action = parse_custom_action(cust)?;
+        match custom_action {
+            CustomAction::AutoTest => todo!(),
+            CustomAction::TestFile => {
+                test_file_to_target::run(bazel_command_line, BuiltInAction::Test, bazel_query)
+                    .await;
+            }
+            CustomAction::BuildFile => {
+                return test_file_to_target::run(
+                    bazel_command_line,
+                    BuiltInAction::Build,
+                    bazel_query,
+                )
+                .await;
+            }
+        }
     }
 
     if bazel_command_line.action
-        == Some(crate::bazel_command_line_parser::Action::Custom(
-            CustomAction::BuildFile,
-        ))
-    {
-        return test_file_to_target::run(bazel_command_line, BuiltInAction::Build, bazel_query)
-            .await;
-    }
-
-    if bazel_command_line.action
-        == Some(crate::bazel_command_line_parser::Action::BuiltIn(
+        == Some(bazel_command_line_parser::Action::BuiltIn(
             BuiltInAction::Test,
         ))
     {
@@ -63,7 +104,7 @@ pub async fn rewrite_command_line<B: BazelQuery>(
                         .push(cfg.command_to_use.clone());
                 }
                 TestActionMode::EmptyTestToFail if bazel_command_line.remaining_args.is_empty() => {
-                    return Err(RewriteCommandLineError::UserErrorReport(super::UserReportError("No test target specified.\nUnlike other build tools, bazel requires you specify which test target to test.\nTo test the whole repo add //... to the end. But beware this could be slow!".to_owned())));
+                    return Err(RewriteCommandLineError::UserErrorReport(UserReportError("No test target specified.\nUnlike other build tools, bazel requires you specify which test target to test.\nTo test the whole repo add //... to the end. But beware this could be slow!".to_owned())));
                 }
                 TestActionMode::Passthrough => {}
 
@@ -121,25 +162,23 @@ pub async fn rewrite_command_line<B: BazelQuery>(
                                     buf
                                 )
                             };
-                            return Err(RewriteCommandLineError::UserErrorReport(
-                                super::UserReportError(
-                                    format!(
-                                        r#"|No test target specified.
+                            return Err(RewriteCommandLineError::UserErrorReport(UserReportError(
+                                format!(
+                                    r#"|No test target specified.
                                 |{}"#,
-                                        suggestion_str
-                                    )
-                                    .trim_margin()
-                                    .unwrap(),
-                                ),
-                            ));
+                                    suggestion_str
+                                )
+                                .trim_margin()
+                                .unwrap(),
+                            )));
                         }
                     } else {
-                        return Err(RewriteCommandLineError::UserErrorReport(super::UserReportError(
+                        return Err(RewriteCommandLineError::UserErrorReport(UserReportError(
                             "Configured to suggest possible test targets to run, but no daemon is running".to_owned())));
                     }
 
                     #[cfg(not(feature = "bazelfe-daemon"))]
-                Err(RewriteCommandLineError::UserErrorReport(super::UserReportError(
+                Err(RewriteCommandLineError::UserErrorReport(UserReportError(
                     "Bazelfe is configured to suggest possible test targets to run, however the daemon is not included in this build".to_owned())))?;
                 }
                 _ => {}
@@ -155,9 +194,9 @@ mod tests {
 
     use super::*;
 
-    use crate::bazel_command_line_parser::*;
     use crate::config::command_line_rewriter::*;
     use crate::jvm_indexer::bazel_query::ExecuteResult;
+    use bazel_command_line_parser::*;
     use std::path::PathBuf;
     #[tokio::test]
     async fn test_passthrough_args() {
@@ -290,7 +329,7 @@ mod tests {
         let mut passthrough_command_line = ParsedCommandLine {
             bazel_binary: PathBuf::from("bazel"),
             startup_options: Vec::default(),
-            action: Some(Action::Custom(CustomAction::TestFile)),
+            action: Some(Action::Custom(CustomAction::TestFile.to_string())),
             action_options: Vec::default(),
             remaining_args: vec![
                 temp_dir
@@ -332,7 +371,7 @@ mod tests {
         let mut passthrough_command_line = ParsedCommandLine {
             bazel_binary: PathBuf::from("bazel"),
             startup_options: Vec::default(),
-            action: Some(Action::Custom(CustomAction::BuildFile)),
+            action: Some(Action::Custom(CustomAction::BuildFile.to_string())),
             action_options: Vec::default(),
             remaining_args: vec![
                 temp_dir

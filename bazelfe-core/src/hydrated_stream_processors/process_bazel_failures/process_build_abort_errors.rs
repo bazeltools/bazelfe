@@ -1,12 +1,12 @@
-use crate::{
-    build_events::build_event_server::bazel_event::ProgressEvt, buildozer_driver::BazelAttrTarget,
-    label_utils::sanitize_label,
-};
+use bazelfe_bazel_wrapper::bep::build_events::build_event_server::bazel_event::ProgressEvt;
+use bazelfe_bazel_wrapper::bep::build_events::hydrated_stream;
+
+use crate::{buildozer_driver::BazelAttrTarget, label_utils::sanitize_label};
 use bazelfe_protos::*;
 use lazy_static::lazy_static;
 use tokio::sync::{Mutex, RwLock};
 
-use crate::{build_events::hydrated_stream, buildozer_driver::Buildozer};
+use crate::buildozer_driver::Buildozer;
 use regex::Regex;
 use std::{collections::HashMap, sync::Arc, time::Instant};
 

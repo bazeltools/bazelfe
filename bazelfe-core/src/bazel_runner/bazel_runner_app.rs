@@ -3,8 +3,9 @@ use std::path::PathBuf;
 
 use std::ffi::OsString;
 
+use bazelfe_core::bazel_runner;
+use bazelfe_core::bazel_runner::parse_commandline_with_custom_command_line_options;
 use bazelfe_core::config::load_config_file;
-use bazelfe_core::{bazel_command_line_parser::parse_bazel_command_line, bazel_runner};
 
 #[derive(Parser, Debug)]
 #[clap(name = "basic", trailing_var_arg = true)]
@@ -81,7 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // TODO IN HERE,
     // fixed actions we intercept
     // bail of a bes_backend is already configured.
-    let parsed_command_line = match parse_bazel_command_line(&opt.passthrough_args) {
+    let parsed_command_line = match parse_commandline_with_custom_command_line_options(&opt.passthrough_args) {
         Ok(parsed_command_line) => {
             if parsed_command_line.is_action_option_set("bes_backend") {
                 // Likely tooling is setting this, quietly exec bazel.
@@ -96,11 +97,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Err(cmd_line_parsing_failed) => {
             match cmd_line_parsing_failed {
-                bazelfe_core::bazel_command_line_parser::CommandLineParsingError::MissingBazelPath => {
+                bazelfe_bazel_wrapper::bazel_command_line_parser::CommandLineParsingError::MissingBazelPath => {
                     eprintln!("Missing bazel path, invalid command line arg supplied");
                     std::process::exit(-1);
                 }
-                bazelfe_core::bazel_command_line_parser::CommandLineParsingError::MissingArgToOption(o) => {
+                bazelfe_bazel_wrapper::bazel_command_line_parser::CommandLineParsingError::MissingArgToOption(o) => {
                         eprintln!("Arg parsing from bazelfe doesn't understand the args, missing an option to {}", o);
                         eprintln!("Will just invoke bazel and abort.");
                         return {
@@ -108,7 +109,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             Ok(())
                         };
                 }
-                bazelfe_core::bazel_command_line_parser::CommandLineParsingError::UnknownArgument(o) => {
+                bazelfe_bazel_wrapper::bazel_command_line_parser::CommandLineParsingError::UnknownArgument(o) => {
                     eprintln!("We got an option we didn't know how to parse, to avoid doing something unexpected, we will just invoke bazel.\nGot: {}", o);
                     return {
                         passthrough_to_bazel(opt);

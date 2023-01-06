@@ -8,9 +8,10 @@ use std::{
 
 use lazy_static::lazy_static;
 
+use bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::ActionFailedErrorInfo;
+
 use crate::{
     bazel_query::BazelQueryEngine,
-    build_events::hydrated_stream::ActionFailedErrorInfo,
     buildozer_driver::{BazelAttrTarget, Buildozer},
     error_extraction::{self, ActionRequest},
     index_table,

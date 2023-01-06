@@ -1,4 +1,7 @@
-use bazel_runner::configured_bazel_runner::ConfiguredBazelRunner;
+use bazelfe_bazel_wrapper::bazel_command_line_parser::{self, ParsedCommandLine};
+use bazelfe_bazel_wrapper::bazel_subprocess_wrapper::{
+    BazelWrapper, BazelWrapperBuilder, BazelWrapperError, UserReportError,
+};
 use std::env;
 use tokio::sync::Mutex;
 use tonic::transport::Server;
@@ -6,16 +9,13 @@ use tonic::transport::Server;
 use bazelfe_protos::*;
 
 use crate::bazel_query::{BazelQueryEngine, RealBazelQueryEngine};
-use crate::{bazel_command_line_parser::ParsedCommandLine, buildozer_driver};
+use crate::bazel_runner::command_line_rewriter_action::{parse_custom_action, CustomAction};
 
+use crate::bazel_runner::configured_bazel_runner::ConfiguredBazelRunner;
+use crate::buildozer_driver;
 use crate::config::Config;
-use crate::{
-    bazel_runner,
-    hydrated_stream_processors::{
-        event_stream_listener::EventStreamListener, index_new_results::IndexNewResults,
-        process_bazel_failures::ProcessBazelFailures, BazelEventHandler,
-    },
-};
+use crate::hydrated_stream_processors::index_new_results::IndexNewResults;
+use crate::hydrated_stream_processors::process_bazel_failures::ProcessBazelFailures;
 use google::devtools::build::v1::publish_build_event_server::PublishBuildEventServer;
 use rand::Rng;
 use std::sync::Arc;
@@ -27,7 +27,7 @@ use super::command_line_rewriter_action;
 #[derive(Error, Debug)]
 pub enum BazelRunnerError {
     #[error("Reporting user error: `{0}`")]
-    UserErrorReport(super::UserReportError),
+    UserErrorReport(UserReportError),
     #[error(transparent)]
     CommandLineRewriterActionError(command_line_rewriter_action::RewriteCommandLineError),
 
@@ -51,12 +51,11 @@ impl From<Box<dyn std::error::Error>> for BazelRunnerError {
     }
 }
 
-use crate::bazel_runner::configured_bazel_runner::ConfiguredBazelRunnerError;
-impl From<ConfiguredBazelRunnerError> for BazelRunnerError {
-    fn from(inner: ConfiguredBazelRunnerError) -> Self {
+impl From<BazelWrapperError> for BazelRunnerError {
+    fn from(inner: BazelWrapperError) -> Self {
         match inner {
-            ConfiguredBazelRunnerError::OtherError(o) => Self::Unknown(o),
-            ConfiguredBazelRunnerError::UserErrorReport(u) => Self::UserErrorReport(u),
+            BazelWrapperError::Unknown(o) => Self::Unknown(o),
+            BazelWrapperError::UserErrorReport(u) => Self::UserErrorReport(u),
         }
     }
 }
@@ -69,14 +68,15 @@ impl BazelRunner {
     pub async fn run(mut self) -> Result<i32, BazelRunnerError> {
         let mut rng = rand::thread_rng();
 
-        bazel_runner::register_ctrlc_handler();
+        bazelfe_bazel_wrapper::bazel_subprocess_wrapper::register_ctrlc_handler();
 
         debug!("Based on custom action if present, overriding the daemon option");
-        if let Some(crate::bazel_command_line_parser::Action::Custom(
-            crate::bazel_command_line_parser::CustomAction::AutoTest,
-        )) = self.bazel_command_line.action.as_ref()
+        if let Some(bazel_command_line_parser::Action::Custom(cust_str)) =
+            self.bazel_command_line.action.as_ref()
         {
-            self.config.daemon_config.enabled = true;
+            if CustomAction::AutoTest == parse_custom_action(&cust_str)? {
+                self.config.daemon_config.enabled = true;
+            }
         }
 
         let config = Arc::new(self.config);
@@ -118,49 +118,31 @@ impl BazelRunner {
             Arc::clone(&bazel_query_engine),
         )?);
 
-        let processors: Vec<Arc<dyn BazelEventHandler>> = vec![
-            process_build_failures.clone(),
-            Arc::new(IndexNewResults::new(
-                index_table.clone(),
-                &config.indexer_config,
-            )),
-        ];
-        let aes = EventStreamListener::new(processors);
-
-        let default_port = {
-            let rand_v: u16 = rng.gen();
-            40000 + (rand_v % 3000)
-        };
-
-        let addr: std::net::SocketAddr = config
+        let addr: Option<std::net::SocketAddr> = config
             .bes_server_bind_address
             .map(|s| s.to_owned())
-            .unwrap_or_else(|| {
+            .or_else(|| {
                 env::var("BIND_ADDRESS")
                     .ok()
-                    .unwrap_or_else(|| format!("127.0.0.1:{}", default_port))
-                    .parse()
-                    .expect("can't parse BIND_ADDRESS variable")
+                    .map(|e| e.parse().expect("can't parse BIND_ADDRESS variable"))
             });
 
-        debug!("Services listening on {}", addr);
+        let bazel_wrapper_builder = BazelWrapperBuilder {
+            bes_server_bind_address: addr,
+            processors: vec![
+                process_build_failures.clone(),
+                Arc::new(IndexNewResults::new(
+                    index_table.clone(),
+                    &config.indexer_config,
+                )),
+            ],
+        };
 
-        let (bes, sender_arc, _) =
-            crate::build_events::build_event_server::build_bazel_build_events_service();
-
-        let bes_port: u16 = addr.port();
-
-        let _service_fut = tokio::spawn(async move {
-            Server::builder()
-                .add_service(PublishBuildEventServer::new(bes))
-                .serve(addr)
-                .await
-                .unwrap();
-        });
+        let bazel_wrapper = bazel_wrapper_builder.build().await?;
 
         #[cfg(feature = "bazelfe-daemon")]
-        let runner_daemon = if let Some(crate::bazel_command_line_parser::Action::BuiltIn(
-            crate::bazel_command_line_parser::BuiltInAction::Shutdown,
+        let runner_daemon = if let Some(bazel_command_line_parser::Action::BuiltIn(
+            bazel_command_line_parser::BuiltInAction::Shutdown,
         )) = self.bazel_command_line.action
         {
             crate::bazel_runner_daemon::daemon_manager::try_kill_server_from_cfg(
@@ -176,12 +158,9 @@ impl BazelRunner {
             .await?
         };
 
-        let configured_bazel =
-            super::configured_bazel_runner::ConfiguredBazel::new(&sender_arc, aes, bes_port);
-
         let configured_bazel_runner = ConfiguredBazelRunner::new(
             Arc::clone(&config),
-            configured_bazel,
+            bazel_wrapper,
             #[cfg(feature = "bazelfe-daemon")]
             runner_daemon,
             index_table.clone(),

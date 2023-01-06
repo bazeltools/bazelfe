@@ -1,11 +1,11 @@
+use bazelfe_bazel_wrapper::bep::build_events::build_event_server::BuildEventAction;
 use bazelfe_core::bep_junit::{
     emit_backup_error_data, emit_junit_xml_from_aborted_action, emit_junit_xml_from_failed_action,
     label_to_junit_relative_path, suites_with_error_from_xml,
 };
-use bazelfe_core::build_events::build_event_server::BuildEventAction;
 
-use bazelfe_core::build_events::build_event_server::bazel_event::BazelBuildEvent;
-use bazelfe_core::build_events::hydrated_stream::HydratorState;
+use bazelfe_bazel_wrapper::bep::build_events::build_event_server::bazel_event::BazelBuildEvent;
+use bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::HydratorState;
 use bazelfe_protos::build_event_stream::BuildEvent;
 use clap::Parser;
 use prost::Message;
@@ -76,7 +76,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut failed_tests = Vec::default();
     for build_event in res.iter() {
         match build_event {
-            bazelfe_core::build_events::hydrated_stream::HydratedInfo::BazelAbort(abort_info) => {
+            bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::HydratedInfo::BazelAbort(abort_info) => {
                 emit_junit_xml_from_aborted_action(
                     abort_info,
                     aborted_actions.len(),
@@ -84,15 +84,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 );
                 aborted_actions.push(abort_info.label.clone());
             }
-            bazelfe_core::build_events::hydrated_stream::HydratedInfo::ActionFailed(
+            bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::HydratedInfo::ActionFailed(
                 action_failed,
             ) => {
                 emit_junit_xml_from_failed_action(action_failed, &opt.junit_output_path);
                 failed_actions.push(action_failed.label.clone());
             }
-            bazelfe_core::build_events::hydrated_stream::HydratedInfo::Progress(_) => (),
-            bazelfe_core::build_events::hydrated_stream::HydratedInfo::TestResult(r) => {
-                if let bazelfe_core::build_events::build_event_server::bazel_event::TestStatus::Failed =  r.test_summary_event.test_status {
+            bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::HydratedInfo::Progress(_) => (),
+            bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::HydratedInfo::TestResult(r) => {
+                if let bazelfe_bazel_wrapper::bep::build_events::build_event_server::bazel_event::TestStatus::Failed =  r.test_summary_event.test_status {
                     failed_tests.push(r.test_summary_event.label.clone());
                 }
                 let output_folder = opt.junit_output_path.join(label_to_junit_relative_path(
@@ -134,8 +134,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     std::fs::copy(f, output_file).unwrap();
                 }
             }
-            bazelfe_core::build_events::hydrated_stream::HydratedInfo::ActionSuccess(_) => (),
-            bazelfe_core::build_events::hydrated_stream::HydratedInfo::TargetComplete(_) => (),
+            bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::HydratedInfo::ActionSuccess(_) => (),
+            bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::HydratedInfo::TargetComplete(_) => (),
         }
     }
 

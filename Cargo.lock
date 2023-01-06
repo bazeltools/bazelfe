@@ -154,6 +154,67 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a32fd6af2b5827bce66c29053ba0e7c42b9dcab01835835058558c10851a46b"
 
 [[package]]
+name = "bazelfe-bazel-wrapper"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-channel",
+ "async-stream",
+ "async-trait",
+ "bazelfe-protos",
+ "byteorder",
+ "bytes 1.3.0",
+ "clap",
+ "crossbeam-channel",
+ "crossterm",
+ "ctrlc",
+ "dashmap",
+ "dynfmt",
+ "exec",
+ "flume",
+ "fork",
+ "futures 0.3.25",
+ "humantime 2.1.0",
+ "ignore",
+ "lazy_static",
+ "libc",
+ "log",
+ "mio 0.8.5",
+ "muncher",
+ "nix 0.25.1",
+ "nom",
+ "notify",
+ "once_cell",
+ "pinky-swear",
+ "pretty_env_logger",
+ "prost",
+ "prost-types",
+ "ptyprocess",
+ "rand",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "shellwords",
+ "stdio-override",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-serde",
+ "tokio-signal",
+ "tokio-stream",
+ "tokio-util",
+ "toml",
+ "tonic",
+ "tower",
+ "trim-margin",
+ "tui",
+ "walkdir",
+ "xml-rs",
+ "zip",
+]
+
+[[package]]
 name = "bazelfe-core"
 version = "0.1.0"
 dependencies = [
@@ -161,6 +222,7 @@ dependencies = [
  "async-channel",
  "async-stream",
  "async-trait",
+ "bazelfe-bazel-wrapper",
  "bazelfe-protos",
  "byteorder",
  "bytes 1.3.0",
@@ -1428,6 +1490,20 @@ dependencies = [
  "cfg-if 1.0.0",
  "libc",
  "memoffset 0.6.5",
+]
+
+[[package]]
+name = "nix"
+version = "0.25.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f346ff70e7dbfd675fe90590b92d59ef2de15a8779ae305ebcbfd3f0caf59be4"
+dependencies = [
+ "autocfg",
+ "bitflags",
+ "cfg-if 1.0.0",
+ "libc",
+ "memoffset 0.6.5",
+ "pin-utils",
 ]
 
 [[package]]
