@@ -798,16 +798,9 @@ pub async fn main(
                 }
             }
             Err(e) => println!("watch error: {:?}", e),
-<<<<<<< HEAD
         },notify::Config::default())
         .unwrap();
 
-=======
-        },
-        notify::Config::default(),
-    )
-    .unwrap();
->>>>>>> ianoc/upgradeNotify
 
     // Add a path to be watched. All files and directories at that path and
     // below will be monitored for changes.
