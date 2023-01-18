@@ -181,7 +181,7 @@ dependencies = [
  "log",
  "mio 0.8.5",
  "muncher",
- "nix 0.25.1",
+ "nix 0.26.2",
  "nom",
  "notify",
  "once_cell",
@@ -243,7 +243,7 @@ dependencies = [
  "log",
  "mio 0.8.5",
  "muncher",
- "nix 0.26.1",
+ "nix 0.26.2",
  "nom",
  "notify",
  "once_cell",
@@ -563,7 +563,7 @@ version = "3.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1631ca6e3c59112501a9d87fd86f21591ff77acd31331e8a73f8d80a65bbdd71"
 dependencies = [
- "nix 0.26.1",
+ "nix 0.26.2",
  "windows-sys 0.42.0",
 ]
 
@@ -1494,23 +1494,9 @@ dependencies = [
 
 [[package]]
 name = "nix"
-version = "0.25.1"
+version = "0.26.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f346ff70e7dbfd675fe90590b92d59ef2de15a8779ae305ebcbfd3f0caf59be4"
-dependencies = [
- "autocfg",
- "bitflags",
- "cfg-if 1.0.0",
- "libc",
- "memoffset 0.6.5",
- "pin-utils",
-]
-
-[[package]]
-name = "nix"
-version = "0.26.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46a58d1d356c6597d08cde02c2f09d785b09e28711837b1ed667dc652c08a694"
+checksum = "bfdda3d196821d6af13126e40375cdf7da646a96114af134d5f417a9a1dc8e1a"
 dependencies = [
  "bitflags",
  "cfg-if 1.0.0",
