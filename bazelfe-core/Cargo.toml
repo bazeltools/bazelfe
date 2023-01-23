@@ -46,7 +46,7 @@ path = "src/bazel_runner/bazel_runner_app.rs"
 [dependencies]
 async-channel = "1.8.0"
 async-stream = "0.3.3"
-async-trait = "0.1.62"
+async-trait = "0.1.63"
 byteorder = "1.4.3"
 bytes = "1.3.0"
 clap = { version = "4.1.1", features = ["derive", "env"] }
