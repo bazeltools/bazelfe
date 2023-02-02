@@ -32,7 +32,7 @@ dynfmt = { version = "0.1.5", features = ["curly"] }
 toml = "0.5.11"
 walkdir = "2.3.2"
 shellwords = "1.1.0"
-zip = "0.6.2"
+zip = "0.6.4"
 thiserror = "1.0.37"
 fork = { version = "0.1.20", optional = true }
 serde_json = "1.0.86"
