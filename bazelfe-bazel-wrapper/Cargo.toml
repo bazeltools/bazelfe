@@ -73,7 +73,7 @@ version = "0.3.26"
 
 [dependencies.tokio]
 features = ["full"]
-version = "1.24.2"
+version = "1.25.0"
 
 [dependencies.tokio-stream]
 features = ["net"]
