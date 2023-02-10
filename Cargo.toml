@@ -4,4 +4,5 @@ members = [
     "bazelfe-protos",
     "bazelfe-core",
     "bazelfe-bazel-wrapper",
+    "bzl-remote-core",
 ]

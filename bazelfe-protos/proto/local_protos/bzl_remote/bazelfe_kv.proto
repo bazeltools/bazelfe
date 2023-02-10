@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package bzl_remote.bazelfe_kv;
+
+option java_package = "io.bazeltools.bazelfe_index";
+option java_outer_classname = "BazelFeIndex";
+
+import "bzl_remote/bazelfe_index.proto";
+
+message KeyValKey {
+    oneof keys {
+        bzl_remote.bazelfe_index.BazelFeIndexLookupKey bazelfe_index = 1;
+    }
+  }

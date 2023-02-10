@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package bzl_remote.bazelfe_index;
+
+option java_package = "io.bazeltools.bazelfe_index";
+option java_outer_classname = "BazelFeIndex";
+
+import "build/bazel/remote/execution/v2/remote_execution.proto";
+
+message BazelFeIndexLookupKey {
+    string project = 1;
+    string repo = 2;
+    string commit_sha = 3;
+}
+
+message BazelFeIndexLookupValue {
+    build.bazel.remote.execution.v2.Digest digest = 1;
+}
