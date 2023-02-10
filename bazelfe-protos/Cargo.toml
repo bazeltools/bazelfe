@@ -9,7 +9,17 @@ license = "Apache-2.0"
 tonic = { version = "0.8.3", features = ["tls"] }
 prost = "0.11.6"
 # Required for wellknown types
-prost-types = "0.11.6"
- 
+prost-types = "0.11.5"
+sha2 = "0.10.6"
+thiserror = "1.0.38"
+
+[dependencies.tokio]
+features = ["full"]
+version = "1.24.1"
+
 [build-dependencies]
 tonic-build = { version = "0.8.4", features = ["prost"] }
+
+
+[dev-dependencies]
+tempfile = "3.3.0"

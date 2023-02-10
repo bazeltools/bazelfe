@@ -49,7 +49,34 @@ pub mod build {
                     tonic::include_proto!("build.bazel.remote.execution.v2");
                 }
             }
+            pub mod asset {
+                pub mod v1 {
+                    tonic::include_proto!("build.bazel.remote.asset.v1");
+                }
+            }
         }
+    }
+}
+
+pub mod blaze_query {
+    tonic::include_proto!("blaze_query");
+}
+
+pub mod devtools {
+    pub mod buildozer {
+        tonic::include_proto!("devtools.buildozer");
+    }
+}
+
+pub mod bzl_remote {
+    pub mod bazelfe_index {
+        tonic::include_proto!("bzl_remote.bazelfe_index");
+    }
+    pub mod bazelfe_kv {
+        tonic::include_proto!("bzl_remote.bazelfe_kv");
+    }
+    pub mod metadata_service {
+        tonic::include_proto!("bzl_remote.metadata_service");
     }
 }
 
@@ -82,19 +109,11 @@ pub mod bazel_tools {
                     }
                 } else {
                     ""
-                }
-            }
+                     }
+                 }
+             }
         }
-    }
     tonic::include_proto!("bazel_tools");
 }
 
-pub mod blaze_query {
-    tonic::include_proto!("blaze_query");
-}
-
-pub mod devtools {
-    pub mod buildozer {
-        tonic::include_proto!("devtools.buildozer");
-    }
-}
+pub mod digest_utils;
