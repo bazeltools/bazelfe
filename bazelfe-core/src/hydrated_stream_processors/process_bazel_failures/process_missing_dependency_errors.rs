@@ -222,10 +222,6 @@ async fn inner_process_missing_dependency_errors<'a, T: Buildozer>(
     let unsanitized_label = label;
     let label = crate::label_utils::sanitize_label(String::from(label));
 
-    let target_rdeps = bazel_query_engine
-        .allrdeps(&label)
-        .await
-        .unwrap_or_default();
     let mut total_added = 0;
     'req_point: for req in all_requests.into_iter() {
         let candidates = match &req {
@@ -328,18 +324,24 @@ async fn inner_process_missing_dependency_errors<'a, T: Buildozer>(
                 }
             }
         }
-        if let Some(target) = target_to_add {
+        if let Some(target_to_add) = target_to_add {
             // otherwise... add the dependency with buildozer here
             // then add it ot the local seen dependencies
-            if target_rdeps.contains(&target) {
+
+            let target_to_add_dep = bazel_query_engine
+            .deps(&target_to_add)
+            .await
+            .unwrap_or_default();
+
+            if target_to_add_dep.contains(&label) {
                 debug!(
                     "SKIPPING Due to circular dependency risk: Buildozer action: add dependency {:?} to {:?}",
-                    target, &label
+                    target_to_add_dep, &label
                 );
                 target_stories.push(super::TargetStory {
                     target: unsanitized_label.to_string(),
                     action: super::TargetStoryAction::WouldHaveAddedDependency {
-                        what: target.clone(),
+                        what: target_to_add.clone(),
                         why: format!("Would have added this dependency, but we detected the target already depends on this target. Were going to add because: {}", why),
                     },
                     when: Instant::now(),
@@ -347,18 +349,18 @@ async fn inner_process_missing_dependency_errors<'a, T: Buildozer>(
             } else {
                 info!(
                     "Buildozer action: add dependency {:?} to {:?}",
-                    target, &label
+                    target_to_add, &label
                 );
-                previous_added_for_req.insert(target.clone());
+                previous_added_for_req.insert(target_to_add.clone());
 
                 buildozer
-                    .add_to(&BazelAttrTarget::Deps, &label, &target)
+                    .add_to(&BazelAttrTarget::Deps, &label, &target_to_add)
                     .await
                     .unwrap();
                 target_stories.push(super::TargetStory {
                     target: unsanitized_label.to_string(),
                     action: super::TargetStoryAction::AddedDependency {
-                        added_what: target.clone(),
+                        added_what: target_to_add.clone(),
                         why: why.clone(),
                     },
                     when: Instant::now(),
@@ -369,7 +371,7 @@ async fn inner_process_missing_dependency_errors<'a, T: Buildozer>(
 
             total_added += 1;
 
-            local_previous_seen.insert(target.clone());
+            local_previous_seen.insert(target_to_add.clone());
             if total_added < 5 {
                 continue 'req_point;
             } else {
