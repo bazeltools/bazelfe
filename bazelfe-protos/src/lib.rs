@@ -109,10 +109,10 @@ pub mod bazel_tools {
                     }
                 } else {
                     ""
-                     }
-                 }
-             }
+                }
+            }
         }
+    }
     tonic::include_proto!("bazel_tools");
 }
 

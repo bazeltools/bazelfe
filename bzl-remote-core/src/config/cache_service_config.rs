@@ -36,6 +36,4 @@ fn cache_backend() -> CacheServiceStorage {
 }
 
 #[cfg(test)]
-mod tests {
-
-}
+mod tests {}
