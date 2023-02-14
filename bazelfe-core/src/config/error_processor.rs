@@ -4,7 +4,7 @@ fn clean_command_line<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let s: &str = Deserialize::deserialize(deserializer)?;
+    let s: String = Deserialize::deserialize(deserializer)?;
     Ok(s.lines().map(|ln| ln.trim_start()).collect::<String>())
 }
 
