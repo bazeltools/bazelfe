@@ -55,6 +55,29 @@ pub async fn allrdeps(
     Ok(result)
 }
 
+pub async fn target_deps(
+    bazel_query: Arc<Mutex<Box<dyn BazelQuery>>>,
+    target: &str,
+) -> Result<HashSet<String>, Box<dyn std::error::Error>> {
+    let bazel_query = bazel_query.lock().await;
+    let dependencies_calculated = crate::bazel_query::graph_query(
+        bazel_query.as_ref(),
+        &format!("deps({})", target),
+        &["--noimplicit_deps"],
+        false,
+    )
+    .await?;
+
+    let mut result = HashSet::default();
+
+    for target in dependencies_calculated.target.iter() {
+        if let Some(rule) = target.rule.as_ref() {
+            result.insert(crate::label_utils::sanitize_label(rule.name.to_string()));
+        }
+    }
+    Ok(result)
+}
+
 pub async fn in_repo_dependencies(
     bazel_query: Arc<Mutex<Box<dyn BazelQuery>>>,
     target: &str,
@@ -80,13 +103,8 @@ pub async fn in_repo_dependencies(
 
 #[async_trait::async_trait]
 pub trait BazelQueryEngine: Send + Sync + std::fmt::Debug {
-    async fn dependency_link(
-        &self,
-        edge_src: &str,
-        edge_dest: &str,
-    ) -> Result<bool, Box<dyn std::error::Error>>;
-
     async fn allrdeps(&self, target: &str) -> Result<HashSet<String>, Box<dyn std::error::Error>>;
+    async fn deps(&self, target: &str) -> Result<HashSet<String>, Box<dyn std::error::Error>>;
 }
 
 #[derive(Debug)]
@@ -110,15 +128,9 @@ impl BazelQueryEngine for RealBazelQueryEngine {
         Ok(res_set)
     }
 
-    async fn dependency_link(
-        &self,
-        edge_src: &str,
-        edge_dest: &str,
-    ) -> Result<bool, Box<dyn std::error::Error>> {
-        let res_set = allrdeps(Arc::clone(&self.query), edge_dest).await?;
+    async fn deps(&self, target: &str) -> Result<HashSet<String>, Box<dyn std::error::Error>> {
+        let res_set = target_deps(Arc::clone(&self.query), target).await?;
 
-        // info!("When looking for edges from {} to {}, we found edges: {:#?}", edge_src, edge_dest, res_set);
-
-        Ok(res_set.contains(edge_src))
+        Ok(res_set)
     }
 }
