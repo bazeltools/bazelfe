@@ -55,7 +55,6 @@ pub async fn allrdeps(
     Ok(result)
 }
 
-
 pub async fn target_deps(
     bazel_query: Arc<Mutex<Box<dyn BazelQuery>>>,
     target: &str,
@@ -104,12 +103,6 @@ pub async fn in_repo_dependencies(
 
 #[async_trait::async_trait]
 pub trait BazelQueryEngine: Send + Sync + std::fmt::Debug {
-    async fn dependency_link(
-        &self,
-        edge_src: &str,
-        edge_dest: &str,
-    ) -> Result<bool, Box<dyn std::error::Error>>;
-
     async fn allrdeps(&self, target: &str) -> Result<HashSet<String>, Box<dyn std::error::Error>>;
     async fn deps(&self, target: &str) -> Result<HashSet<String>, Box<dyn std::error::Error>>;
 }
@@ -139,17 +132,5 @@ impl BazelQueryEngine for RealBazelQueryEngine {
         let res_set = target_deps(Arc::clone(&self.query), target).await?;
 
         Ok(res_set)
-    }
-
-    async fn dependency_link(
-        &self,
-        edge_src: &str,
-        edge_dest: &str,
-    ) -> Result<bool, Box<dyn std::error::Error>> {
-        let res_set = allrdeps(Arc::clone(&self.query), edge_dest).await?;
-
-        // info!("When looking for edges from {} to {}, we found edges: {:#?}", edge_src, edge_dest, res_set);
-
-        Ok(res_set.contains(edge_src))
     }
 }

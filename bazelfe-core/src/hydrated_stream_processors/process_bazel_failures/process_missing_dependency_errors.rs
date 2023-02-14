@@ -329,9 +329,9 @@ async fn inner_process_missing_dependency_errors<'a, T: Buildozer>(
             // then add it ot the local seen dependencies
 
             let target_to_add_dep = bazel_query_engine
-            .deps(&target_to_add)
-            .await
-            .unwrap_or_default();
+                .deps(&target_to_add)
+                .await
+                .unwrap_or_default();
 
             if target_to_add_dep.contains(&label) {
                 debug!(
@@ -406,12 +406,8 @@ mod tests {
     struct NoOpMBazelQueryEngine();
     #[async_trait::async_trait]
     impl BazelQueryEngine for NoOpMBazelQueryEngine {
-        async fn dependency_link(
-            &self,
-            _edge_src: &str,
-            _edge_dest: &str,
-        ) -> Result<bool, Box<dyn std::error::Error>> {
-            Ok(false)
+        async fn deps(&self, _target: &str) -> Result<HashSet<String>, Box<dyn std::error::Error>> {
+            Ok(HashSet::default())
         }
 
         async fn allrdeps(
