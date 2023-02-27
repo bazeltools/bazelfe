@@ -68,7 +68,7 @@ aws-config = "0.54.1"
 aws-smithy-http = "0.54.4"
 redis = { version = "0.22.3", features = ["tokio-comp", "connection-manager"] }
 urlencoding = "2.1.2"
-http = "0.2.8"
+http = "0.2.9"
 http-body = "0.4.5"
 sysinfo = "0.27.7"
 
