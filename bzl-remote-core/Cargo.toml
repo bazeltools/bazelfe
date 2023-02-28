@@ -22,7 +22,7 @@ async-stream = "0.3.3"
 async-trait = "0.1.64"
 byteorder = "1.4.3"
 bytes = "1.4.0"
-clap = { version = "4.1.6", features = ["derive", "env"] }
+clap = { version = "4.1.7", features = ["derive", "env"] }
 ctrlc = "3.2.5"
 base64 = "0.21.0"
 exec = "0.3.1"
