@@ -591,7 +591,7 @@ dependencies = [
  "log",
  "mio 0.8.6",
  "muncher",
- "nix 0.26.2",
+ "nix",
  "nom",
  "notify",
  "once_cell",
@@ -653,7 +653,7 @@ dependencies = [
  "log",
  "mio 0.8.6",
  "muncher",
- "nix 0.26.2",
+ "nix",
  "nom",
  "notify",
  "once_cell",
@@ -828,7 +828,7 @@ dependencies = [
  "log",
  "memmap2",
  "muncher",
- "nix 0.26.2",
+ "nix",
  "notify",
  "once_cell",
  "pinky-swear",
@@ -1046,7 +1046,7 @@ dependencies = [
  "autocfg",
  "cfg-if 1.0.0",
  "crossbeam-utils 0.8.14",
- "memoffset 0.7.1",
+ "memoffset",
  "scopeguard",
 ]
 
@@ -1137,7 +1137,7 @@ version = "3.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbcf33c2a618cbe41ee43ae6e9f2e48368cd9f9db2896f10167d8d762679f639"
 dependencies = [
- "nix 0.26.2",
+ "nix",
  "windows-sys 0.45.0",
 ]
 
@@ -2069,15 +2069,6 @@ dependencies = [
 
 [[package]]
 name = "memoffset"
-version = "0.6.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5aa361d4faea93603064a027415f07bd8e1d5c88c9fbf68bf56a285428fd79ce"
-dependencies = [
- "autocfg",
-]
-
-[[package]]
-name = "memoffset"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5de893c32cde5f383baa4c04c5d6dbdd735cfd4a794b0debdb2bb1b421da5ff4"
@@ -2212,19 +2203,6 @@ dependencies = [
 
 [[package]]
 name = "nix"
-version = "0.21.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c3728fec49d363a50a8828a190b379a446cc5cf085c06259bbbeb34447e4ec7"
-dependencies = [
- "bitflags",
- "cc",
- "cfg-if 1.0.0",
- "libc",
- "memoffset 0.6.5",
-]
-
-[[package]]
-name = "nix"
 version = "0.26.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bfdda3d196821d6af13126e40375cdf7da646a96114af134d5f417a9a1dc8e1a"
@@ -2232,7 +2210,7 @@ dependencies = [
  "bitflags",
  "cfg-if 1.0.0",
  "libc",
- "memoffset 0.7.1",
+ "memoffset",
  "pin-utils",
  "static_assertions",
 ]
@@ -2707,11 +2685,11 @@ dependencies = [
 
 [[package]]
 name = "ptyprocess"
-version = "0.3.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69c28fcebfd842bfe19d69409fc321230ea8c1bebe31f274906485c761ce1917"
+checksum = "7e05aef7befb11a210468a2d77d978dde2c6381a0381e33beb575e91f57fe8cf"
 dependencies = [
- "nix 0.21.0",
+ "nix",
 ]
 
 [[package]]
