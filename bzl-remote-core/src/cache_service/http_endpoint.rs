@@ -470,10 +470,7 @@ impl<T: StorageBackend + 'static> HttpEndpoint<T> {
         // 32kb
         let buff_size = 32 * 1024;
 
-        let stream: async_stream::AsyncStream<
-            Result<bytes::Bytes, Box<dyn std::error::Error + Send + Sync>>,
-            _,
-        > = async_stream::try_stream! {
+        let stream =async_stream::try_stream! {
             let data = data;
             let buf = data.as_ref().as_ref();
             let mut remaining = buf.len();
@@ -488,7 +485,7 @@ impl<T: StorageBackend + 'static> HttpEndpoint<T> {
             }
         };
 
-        Ok(Response::new(hyper::Body::wrap_stream(stream)))
+        Ok(Response::new(hyper::Body::wrap_stream::<_, bytes::Bytes, Box<dyn std::error::Error + Send + Sync>>(stream)))
     }
 }
 
