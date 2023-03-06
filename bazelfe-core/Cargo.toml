@@ -49,7 +49,7 @@ async-stream = "0.3.4"
 async-trait = "0.1.66"
 byteorder = "1.4.3"
 bytes = "1.4.0"
-clap = { version = "4.1.6", features = ["derive", "env"] }
+clap = { version = "4.1.8", features = ["derive", "env"] }
 ctrlc = "3.2.5"
 exec = "0.3.1"
 lazy_static = "1.4.0"
