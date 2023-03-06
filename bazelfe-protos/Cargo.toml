@@ -15,7 +15,7 @@ thiserror = "1.0.39"
 
 [dependencies.tokio]
 features = ["full"]
-version = "1.25.0"
+version = "1.26.0"
 
 [build-dependencies]
 tonic-build = { version = "0.8.4", features = ["prost"] }
