@@ -36,7 +36,7 @@ prost = "0.11.6"
 prost-types = "0.11.8"
 rand = "0.8.5"
 regex = "1.7.1"
-serde = { version = "1.0.153", features = ["derive"] }
+serde = { version = "1.0.154", features = ["derive"] }
 dynfmt = { version = "0.1.5", features = ["curly"] }
 serde_derive = "1.0.152"
 toml = "0.7.2"
