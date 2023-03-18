@@ -27,7 +27,7 @@ prost = "0.11.6"
 prost-types = "0.11.8"
 rand = "0.8.5"
 regex = "1.7.1"
-serde = { version = "1.0.155", features = ["derive"] }
+serde = { version = "1.0.156", features = ["derive"] }
 dynfmt = { version = "0.1.5", features = ["curly"] }
 toml = "0.7.3"
 walkdir = "2.3.3"
