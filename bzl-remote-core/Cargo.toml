@@ -55,7 +55,7 @@ dashmap = { version = "5.4.0" }
 muncher = { version = "0.7.0" }
 humantime = "2.1.0"
 tempfile = { version = "3.4.0" }
-anyhow = "1.0.69"
+anyhow = "1.0.70"
 ignore = "0.4.20"
 tower = { version = "0.4" }
 log = "0.4.17"
@@ -75,7 +75,7 @@ sysinfo = "0.28.2"
 
 [build-dependencies]
 vergen = "7.5.1"
-anyhow = "1.0.69"
+anyhow = "1.0.70"
 
 [dependencies.bazelfe-protos]
 path = "../bazelfe-protos"
