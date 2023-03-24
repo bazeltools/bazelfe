@@ -70,7 +70,7 @@ redis = { version = "0.22.3", features = ["tokio-comp", "connection-manager"] }
 urlencoding = "2.1.2"
 http = "0.2.9"
 http-body = "0.4.5"
-sysinfo = "0.28.3"
+sysinfo = "0.28.4"
 
 
 [build-dependencies]
