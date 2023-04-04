@@ -95,7 +95,7 @@ version = "0.1.12"
 
 [dependencies.tonic]
 features = ["tls"]
-version = "0.9.0"
+version = "0.9.1"
 
 [dev-dependencies]
 once_cell = "1.17.1"
