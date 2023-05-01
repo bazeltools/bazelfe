@@ -95,7 +95,7 @@ xml-rs = "0.8.4"
 
 
 [build-dependencies]
-vergen = "7.5.1"
+vergen = "8.1.1"
 anyhow = "1.0.71"
 
 [dependencies.bazelfe-protos]
