@@ -58,7 +58,7 @@ tower = "0.4.13"
 tokio-signal = "0.2.9"
 mio = "0.8.6"
 ptyprocess = "0.4.1"
-xml-rs = "0.8.8"
+xml-rs = "0.8.9"
 
 [build-dependencies]
 anyhow = "1.0.71"
