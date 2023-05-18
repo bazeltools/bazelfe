@@ -1,10 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use aws_sdk_s3::{
-    error::HeadObjectError,
-    types::{ByteStream, SdkError},
-    Client, Region,
-};
+use aws_sdk_s3::{config::Region, error::SdkError, primitives::ByteStream, Client};
 use aws_smithy_http::byte_stream::error::Error as AwsError;
 use futures::{StreamExt, TryStreamExt};
 
@@ -23,12 +19,6 @@ where
     R: std::fmt::Debug,
 {
     fn from(e: SdkError<E, R>) -> Self {
-        StorageBackendError::Unknown(format!("{:?}", e))
-    }
-}
-
-impl From<HeadObjectError> for StorageBackendError {
-    fn from(e: HeadObjectError) -> Self {
         StorageBackendError::Unknown(format!("{:?}", e))
     }
 }

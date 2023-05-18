@@ -1,5 +1,6 @@
 use crate::storage_backend::{BackendIOHelpers, StorageBackendError};
 use crate::{hash::sha256_value::Sha256Value, storage_backend::StorageBackend};
+use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use bazelfe_protos::build::bazel::remote::{
     asset::v1::{
         fetch_server, FetchBlobRequest, FetchBlobResponse, FetchDirectoryRequest,
@@ -44,7 +45,8 @@ fn extract_req_digest(fetch_blob_request: &FetchBlobRequest) -> Result<String, t
     for dig in fetch_blob_request.qualifiers.iter() {
         if dig.name == "checksum.sri" {
             if let Some(sha_v) = dig.value.strip_prefix("sha256-") {
-                let v = base64::decode(sha_v)
+                let v = B64
+                    .decode(sha_v)
                     .map_err(|ex| tonic::Status::invalid_argument(format!("{:#?}", ex)))?;
                 // The result is a binary sha256 value
                 match Sha256Value::new_from_slice(&v) {
