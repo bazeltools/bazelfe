@@ -65,7 +65,7 @@ hyper-tls = "0.5.0"
 sled = "0.34.7"
 memmap2 = "0.6.2"
 aws-sdk-s3 = "0.27.0"
-aws-config = "0.55.2"
+aws-config = "0.55.3"
 aws-smithy-http = "0.55.3"
 redis = { version = "0.23.0", features = ["tokio-comp", "connection-manager"] }
 urlencoding = "2.1.2"
