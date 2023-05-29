@@ -56,7 +56,7 @@ anyhow = "1.0.71"
 ignore = "0.4.20"
 tower = "0.4.13"
 tokio-signal = "0.2.9"
-mio = "0.8.6"
+mio = "0.8.7"
 ptyprocess = "0.4.1"
 xml-rs = "0.8.13"
 
