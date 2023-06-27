@@ -60,7 +60,7 @@ anyhow = "1.0.71"
 ignore = "0.4.20"
 tower = { version = "0.4" }
 log = "0.4.19"
-hyper = "0.14.26"
+hyper = "0.14.27"
 hyper-tls = "0.5.0"
 sled = "0.34.7"
 memmap2 = "0.7.1"
