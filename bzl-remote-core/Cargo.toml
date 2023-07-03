@@ -19,7 +19,7 @@ path = "src/binaries/dump_cache_data/app.rs"
 [dependencies]
 async-channel = "1.8.0"
 async-stream = "0.3.5"
-async-trait = "0.1.68"
+async-trait = "0.1.69"
 byteorder = "1.4.3"
 bytes = "1.4.0"
 clap = { version = "4.3.10", features = ["derive", "env"] }
