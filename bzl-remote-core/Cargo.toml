@@ -39,7 +39,7 @@ regex = "1.8.4"
 serde = { version = "1.0.166", features = ["derive"] }
 dynfmt = { version = "0.1.5", features = ["curly"] }
 serde_derive = "1.0.152"
-toml = "0.7.5"
+toml = "0.7.6"
 thiserror = "1.0.41"
 serde_json = "1.0.100"
 libc = "0.2.147"
