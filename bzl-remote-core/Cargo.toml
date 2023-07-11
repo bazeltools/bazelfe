@@ -51,7 +51,7 @@ sha2 = "0.10.7"
 nix = "0.26.2"
 flume = { version = "0.10.14" }
 trim-margin = { version = "0.1.0" }
-dashmap = { version = "5.4.0" }
+dashmap = { version = "5.5.0" }
 muncher = { version = "0.7.0" }
 time = "0.3.23"
 humantime = "2.1.0"
