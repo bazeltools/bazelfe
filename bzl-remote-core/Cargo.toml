@@ -40,7 +40,7 @@ serde = { version = "1.0.183", features = ["derive"] }
 dynfmt = { version = "0.1.5", features = ["curly"] }
 serde_derive = "1.0.152"
 toml = "0.7.6"
-thiserror = "1.0.44"
+thiserror = "1.0.45"
 serde_json = "1.0.104"
 libc = "0.2.147"
 crossbeam-channel = { version = "0.5.8" }

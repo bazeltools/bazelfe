@@ -11,7 +11,7 @@ prost = "0.11.9"
 # Required for wellknown types
 prost-types = "0.11.9"
 sha2 = "0.10.7"
-thiserror = "1.0.44"
+thiserror = "1.0.45"
 
 [dependencies.tokio]
 features = ["full"]
