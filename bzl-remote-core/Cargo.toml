@@ -56,7 +56,7 @@ muncher = { version = "0.7.0" }
 time = "0.3.25"
 humantime = "2.1.0"
 tempfile = { version = "3.7.1" }
-anyhow = "1.0.74"
+anyhow = "1.0.75"
 ignore = "0.4.20"
 tower = { version = "0.4" }
 log = "0.4.20"
@@ -76,7 +76,7 @@ sysinfo = "0.29.8"
 
 [build-dependencies]
 vergen = { version = "8.2.4", features = [ "build", "git", "gitcl" ]}
-anyhow = "1.0.74"
+anyhow = "1.0.75"
 
 [dependencies.bazelfe-protos]
 path = "../bazelfe-protos"
