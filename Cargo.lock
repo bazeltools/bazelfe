@@ -618,7 +618,7 @@ dependencies = [
  "dashmap",
  "dynfmt",
  "exec",
- "flume",
+ "flume 0.11.0",
  "fork",
  "futures 0.3.28",
  "humantime",
@@ -680,7 +680,7 @@ dependencies = [
  "dashmap",
  "dynfmt",
  "exec",
- "flume",
+ "flume 0.11.0",
  "fork",
  "futures 0.3.28",
  "humantime",
@@ -859,7 +859,7 @@ dependencies = [
  "dashmap",
  "dynfmt",
  "exec",
- "flume",
+ "flume 0.11.0",
  "futures 0.3.28",
  "http",
  "http-body",
@@ -1394,11 +1394,19 @@ version = "0.10.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1657b4441c3403d9f7b3409e47575237dac27b1b5726df654a6ecbf92f0f7577"
 dependencies = [
+ "spin 0.9.8",
+]
+
+[[package]]
+name = "flume"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "55ac459de2512911e4b674ce33cf20befaba382d05b62b008afc1c8b57cbf181"
+dependencies = [
  "futures-core",
  "futures-sink",
  "nanorand",
- "pin-project",
- "spin 0.9.5",
+ "spin 0.9.8",
 ]
 
 [[package]]
@@ -2533,7 +2541,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d894b67aa7a4bf295db5e85349078c604edaa6fa5c8721e8eca3c7729a27f2ac"
 dependencies = [
  "doc-comment",
- "flume",
+ "flume 0.10.14",
  "parking_lot 0.12.1",
  "tracing",
 ]
@@ -3191,9 +3199,9 @@ checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
 
 [[package]]
 name = "spin"
-version = "0.9.5"
+version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7dccf47db1b41fa1573ed27ccf5e08e3ca771cb994f776668c5ebda893b248fc"
+checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
 dependencies = [
  "lock_api 0.4.10",
 ]
