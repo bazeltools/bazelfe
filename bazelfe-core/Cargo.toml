@@ -73,7 +73,7 @@ serde_json = "1.0.105"
 stdio-override = { version = "0.1.3", optional = true }
 libc = "0.2.147"
 crossbeam-channel = { version = "0.5.8", optional = true }
-notify = { version = "6.0.1", optional = true }
+notify = { version = "6.1.1", optional = true }
 tokio-serde = { version = "0.8.0", features = ["bincode"], optional = true }
 tokio-util = { version = "0.7.8", features = ["compat"] }
 sha2 = "0.10.7"
