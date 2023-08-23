@@ -53,7 +53,7 @@ flume = { version = "0.11.0" }
 trim-margin = { version = "0.1.0" }
 dashmap = { version = "5.5.1" }
 muncher = { version = "0.7.0" }
-time = "0.3.25"
+time = "0.3.27"
 humantime = "2.1.0"
 tempfile = { version = "3.8.0" }
 anyhow = "1.0.75"
