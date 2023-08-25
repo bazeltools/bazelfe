@@ -9,7 +9,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        os: [macos-latest, ubuntu-20.04, ubuntu-18.04]
+        os: [macos-latest, ubuntu-20.04]
         include:
           - os: macos-latest
             platform: macos
@@ -17,9 +17,6 @@ jobs:
           - os: ubuntu-20.04
             platform: linux-ubuntu-20.04
             artifact: bazelfe-linux-ubuntu-20.04
-          - os: ubuntu-18.04
-            platform: linux-ubuntu-18.04
-            artifact: bazelfe-linux-ubuntu-18.04
     steps:
       - uses: actions/checkout@v2
       - name: Install Protoc
@@ -101,11 +98,6 @@ jobs:
         with:
           name: bazelfe-linux-ubuntu-20.04
           path: downloads
-      - name: Download linux bazelfe 18
-        uses: actions/download-artifact@v1
-        with:
-          name: bazelfe-linux-ubuntu-18.04
-          path: downloads
       - name: Download macos bazelfe
         uses: actions/download-artifact@v1
         with:
@@ -135,25 +127,17 @@ jobs:
             downloads/bazel-runner-linux-ubuntu-20.04.sha256
             downloads/bazel-runner-with-daemon-linux-ubuntu-20.04
             downloads/bazel-runner-with-daemon-linux-ubuntu-20.04.sha256
-            downloads/bazel-runner-linux-ubuntu-18.04
-            downloads/bazel-runner-linux-ubuntu-18.04.sha256
-            downloads/bazel-runner-with-daemon-linux-ubuntu-18.04
-            downloads/bazel-runner-with-daemon-linux-ubuntu-18.04.sha256
             downloads/jvm-indexer-macos
             downloads/jvm-indexer-macos.sha256
             downloads/jvm-indexer-macos-arm64
             downloads/jvm-indexer-macos-arm64.sha256
             downloads/jvm-indexer-linux-ubuntu-20.04
             downloads/jvm-indexer-linux-ubuntu-20.04.sha256
-            downloads/jvm-indexer-linux-ubuntu-18.04
-            downloads/jvm-indexer-linux-ubuntu-18.04.sha256
             downloads/bep-junit-macos
             downloads/bep-junit-macos.sha256
             downloads/bep-junit-macos-arm64
             downloads/bep-junit-macos-arm64.sha256
             downloads/bep-junit-linux-ubuntu-20.04
             downloads/bep-junit-linux-ubuntu-20.04.sha256
-            downloads/bep-junit-linux-ubuntu-18.04
-            downloads/bep-junit-linux-ubuntu-18.04.sha256
 
         id: "automatic_releases"
