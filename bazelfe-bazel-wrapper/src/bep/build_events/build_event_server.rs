@@ -22,29 +22,69 @@ pub mod bazel_event {
         pub event: Evt,
     }
 
+    fn label_of(id: &build_event_stream::build_event_id::Id) -> Option<String> {
+        match id {
+            build_event_stream::build_event_id::Id::TargetConfigured(target_configured_id) => {
+                Some(target_configured_id.label.clone())
+            }
+
+            build_event_stream::build_event_id::Id::TargetCompleted(target_completed_id) => {
+                Some(target_completed_id.label.clone())
+            }
+
+            build_event_stream::build_event_id::Id::ActionCompleted(action_completed_id) => {
+                Some(action_completed_id.label.clone())
+            }
+
+            build_event_stream::build_event_id::Id::UnconfiguredLabel(unconfigured_id) => {
+                Some(unconfigured_id.label.clone())
+            }
+
+            build_event_stream::build_event_id::Id::ConfiguredLabel(configured_label_id) => {
+                Some(configured_label_id.label.clone())
+            }
+
+            build_event_stream::build_event_id::Id::TestResult(test_result_id) => {
+                Some(test_result_id.label.clone())
+            }
+
+            build_event_stream::build_event_id::Id::TestSummary(test_summary_id) => {
+                Some(test_summary_id.label.clone())
+            }
+
+            build_event_stream::build_event_id::Id::TargetSummary(target_summary_id) => {
+                Some(target_summary_id.label.clone())
+            }
+
+            build_event_stream::build_event_id::Id::NamedSet(fileset_id) => {
+                Some(fileset_id.id.clone())
+            }
+
+            _ =>
+            // The rest of the ids don't have labels associated with them
+            {
+                None
+            }
+        }
+    }
+
     impl From<build_event_stream::BuildEvent> for BazelBuildEvent {
         fn from(v: build_event_stream::BuildEvent) -> Self {
-            let target_configured_evt: Option<TargetConfiguredEvt> = {
+            let target_configured_evt: Option<Evt> = {
                 let target_kind_opt = v.payload.as_ref().and_then(|e| match e {
                     build_event_stream::build_event::Payload::Configured(cfg) => {
                         Some(cfg.target_kind.replace(" rule", ""))
                     }
                     _ => None,
                 });
-                let target_label_opt =
-                    v.id.as_ref()
-                        .and_then(|e| e.id.as_ref())
-                        .and_then(|e| match e {
-                            build_event_stream::build_event_id::Id::TargetConfigured(
-                                target_configured_id,
-                            ) => Some(target_configured_id.label.clone()),
-                            _ => None,
-                        });
+                let target_label_opt = v.id.as_ref().and_then(|e| e.id.as_ref()).and_then(label_of);
 
                 target_kind_opt.and_then(|e| {
-                    target_label_opt.map(|u| TargetConfiguredEvt {
-                        rule_kind: e,
-                        label: u,
+                    target_label_opt.map(|u| {
+                        Evt::TargetConfigured(TargetConfiguredEvt {
+                            rule_kind: e,
+                            label: u,
+                        })
                     })
                 })
             };
@@ -57,15 +97,7 @@ pub mod bazel_event {
                     )),
                     _ => None,
                 });
-                let target_label_opt =
-                    v.id.as_ref()
-                        .and_then(|e| e.id.as_ref())
-                        .and_then(|e| match e {
-                            build_event_stream::build_event_id::Id::ConfiguredLabel(
-                                configured_label_id,
-                            ) => Some(configured_label_id.label.clone()),
-                            _ => None,
-                        });
+                let target_label_opt = v.id.as_ref().and_then(|e| e.id.as_ref()).and_then(label_of);
 
                 abort_info.map(|(reason, description)| {
                     Evt::Aborted(AbortedEvt {
@@ -91,15 +123,7 @@ pub mod bazel_event {
             });
 
             let action_info: Option<Evt> = {
-                let target_label_opt =
-                    v.id.as_ref()
-                        .and_then(|e| e.id.as_ref())
-                        .and_then(|e| match e {
-                            build_event_stream::build_event_id::Id::ActionCompleted(
-                                action_completed_id,
-                            ) => Some(action_completed_id.label.clone()),
-                            _ => None,
-                        });
+                let target_label_opt = v.id.as_ref().and_then(|e| e.id.as_ref()).and_then(label_of);
 
                 target_label_opt.and_then(|label| {
                     v.payload.as_ref().and_then(|e| match e {
@@ -146,18 +170,17 @@ pub mod bazel_event {
             };
 
             let target_complete: Option<Evt> = {
-                let target_label_opt =
-                    v.id.as_ref()
-                        .and_then(|e| e.id.as_ref())
-                        .and_then(|e| match e {
-                            build_event_stream::build_event_id::Id::TargetCompleted(
-                                target_completed_id,
-                            ) => Some((
-                                target_completed_id.label.clone(),
-                                Some(target_completed_id.aspect.clone()).filter(|e| !e.is_empty()),
-                            )),
-                            _ => None,
-                        });
+                let target_label_opt = v.id.as_ref().and_then(|e| e.id.as_ref()).and_then(|e| {
+                    label_of(e).and_then(|label| match e {
+                        build_event_stream::build_event_id::Id::TargetCompleted(
+                            target_completed_id,
+                        ) => Some((
+                            label,
+                            Some(target_completed_id.aspect.clone()).filter(|e| !e.is_empty()),
+                        )),
+                        _ => None,
+                    })
+                });
 
                 target_label_opt.and_then(|(label, aspect)| {
                     v.payload.as_ref().and_then(|e| match e {
@@ -189,15 +212,7 @@ pub mod bazel_event {
                     _ => None,
                 });
 
-                let target_label_opt =
-                    v.id.as_ref()
-                        .and_then(|e| e.id.as_ref())
-                        .and_then(|e| match e {
-                            build_event_stream::build_event_id::Id::TestResult(test_summary_id) => {
-                                Some(test_summary_id.label.clone())
-                            }
-                            _ => None,
-                        });
+                let target_label_opt = v.id.as_ref().and_then(|e| e.id.as_ref()).and_then(label_of);
 
                 failed_file_data.and_then(|(test_status, output_files)| {
                     target_label_opt.map(|u| {
@@ -227,23 +242,14 @@ pub mod bazel_event {
                 })
             };
 
-            let ev = if let Some(e) = target_configured_evt {
-                Evt::TargetConfigured(e)
-            } else if let Some(e) = action_info {
-                e
-            } else if let Some(e) = target_complete {
-                e
-            } else if let Some(e) = test_outputs {
-                e
-            } else if let Some(e) = named_set_of_files {
-                e
-            } else if let Some(e) = aborted {
-                e
-            } else if let Some(e) = progress_info {
-                e
-            } else {
-                Evt::BazelEvent(v)
-            };
+            let ev = target_configured_evt
+                .or(action_info)
+                .or(target_complete)
+                .or(test_outputs)
+                .or(named_set_of_files)
+                .or(aborted)
+                .or(progress_info)
+                .unwrap_or(Evt::BazelEvent(v));
 
             BazelBuildEvent { event: ev }
         }
