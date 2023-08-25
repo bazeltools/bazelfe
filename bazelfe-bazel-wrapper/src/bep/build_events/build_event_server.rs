@@ -169,14 +169,14 @@ pub mod bazel_event {
 
             let target_complete: Option<Evt> = {
                 let target_label_opt = v.id.as_ref().and_then(|e| e.id.as_ref()).and_then(|e| {
-                    label_of(e).map(|label| {
-                        let opt_aspect = match e {
-                            build_event_stream::build_event_id::Id::TargetCompleted(
-                                target_completed_id,
-                            ) => Some(target_completed_id.aspect.clone()).filter(|e| !e.is_empty()),
-                            _ => None,
-                        };
-                        (label, opt_aspect)
+                    label_of(e).and_then(|label| match e {
+                        build_event_stream::build_event_id::Id::TargetCompleted(
+                            target_completed_id,
+                        ) => Some((
+                            label,
+                            Some(target_completed_id.aspect.clone()).filter(|e| !e.is_empty()),
+                        )),
+                        _ => None,
                     })
                 });
 
