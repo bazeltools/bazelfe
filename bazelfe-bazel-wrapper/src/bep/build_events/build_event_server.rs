@@ -70,7 +70,7 @@ pub mod bazel_event {
 
     impl From<build_event_stream::BuildEvent> for BazelBuildEvent {
         fn from(v: build_event_stream::BuildEvent) -> Self {
-            let target_configured_evt: Option<TargetConfiguredEvt> = {
+            let target_configured_evt: Option<Evt> = {
                 let target_kind_opt = v.payload.as_ref().and_then(|e| match e {
                     build_event_stream::build_event::Payload::Configured(cfg) => {
                         Some(cfg.target_kind.replace(" rule", ""))
@@ -80,9 +80,11 @@ pub mod bazel_event {
                 let target_label_opt = v.id.as_ref().and_then(|e| e.id.as_ref()).and_then(label_of);
 
                 target_kind_opt.and_then(|e| {
-                    target_label_opt.map(|u| TargetConfiguredEvt {
-                        rule_kind: e,
-                        label: u,
+                    target_label_opt.map(|u| {
+                        Evt::TargetConfigured(TargetConfiguredEvt {
+                            rule_kind: e,
+                            label: u,
+                        })
                     })
                 })
             };
@@ -240,23 +242,14 @@ pub mod bazel_event {
                 })
             };
 
-            let ev = if let Some(e) = target_configured_evt {
-                Evt::TargetConfigured(e)
-            } else if let Some(e) = action_info {
-                e
-            } else if let Some(e) = target_complete {
-                e
-            } else if let Some(e) = test_outputs {
-                e
-            } else if let Some(e) = named_set_of_files {
-                e
-            } else if let Some(e) = aborted {
-                e
-            } else if let Some(e) = progress_info {
-                e
-            } else {
-                Evt::BazelEvent(v)
-            };
+            let ev = target_configured_evt
+                .or(action_info)
+                .or(target_complete)
+                .or(test_outputs)
+                .or(named_set_of_files)
+                .or(aborted)
+                .or(progress_info)
+                .unwrap_or(Evt::BazelEvent(v));
 
             BazelBuildEvent { event: ev }
         }
