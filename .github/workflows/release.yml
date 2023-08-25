@@ -27,26 +27,71 @@ jobs:
         with:
           toolchain: stable
       - run: rustup component add rustfmt
-      - uses: actions-rs/cargo@v1
+      # Handle the Linux MUSL cases
+      - if: ${{ runner.os == 'Linux' }}
+        uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: musl-tools # provides musl-gcc
+          version: 1.0
+      - if: ${{ runner.os == 'Linux' }}
+        run: rustup target add x86_64-unknown-linux-musl
+      - if: ${{ runner.os == 'Linux' }}
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --target=x86_64-unknown-linux-musl
+      - name: Prepare bazel-runner output
+        run: ./.github/ci_scripts/prepare_output.sh bazel-runner-${{ matrix.platform }} staging-directory target/x86_64-unknown-linux-musl/release/bazel-runner
+        if: ${{ runner.os == 'Linux' }}
+      - name: Prepare jvm-indexer
+        run: ./.github/ci_scripts/prepare_output.sh jvm-indexer-${{ matrix.platform }} staging-directory target/x86_64-unknown-linux-musl/release/jvm-indexer
+        if: ${{ runner.os == 'Linux' }}
+      - name: Prepare bep-junit
+        run: ./.github/ci_scripts/prepare_output.sh bep-junit-${{ matrix.platform }} staging-directory target/x86_64-unknown-linux-musl/release/bep-junit
+        if: ${{ runner.os == 'Linux' }}
+      - if: ${{ runner.os == 'Linux' }}
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --all-features --target=x86_64-unknown-linux-musl
+      - name: Prepare bazel-runner output (not Linux)
+        run: ./.github/ci_scripts/prepare_output.sh bazel-runner-with-daemon-${{ matrix.platform }} staging-directory target/x86_64-unknown-linux-musl/release/bazel-runner
+        if: ${{ runner.os == 'Linux' }}
+      - name: Prepare jvm-indexer (not Linux)
+        run: ./.github/ci_scripts/prepare_output.sh jvm-indexer-with-daemon-${{ matrix.platform }} staging-directory target/x86_64-unknown-linux-musl/release/jvm-indexer
+        if: ${{ runner.os == 'Linux' }}
+      - name: Prepare bep-junit (not Linux)
+        run: ./.github/ci_scripts/prepare_output.sh bep-junit-with-daemon-${{ matrix.platform }} staging-directory target/x86_64-unknown-linux-musl/release/bep-junit
+        if: ${{ runner.os == 'Linux' }}
+      # Handle the non-Linux cases
+      - if: ${{ runner.os != 'Linux' }}
+        uses: actions-rs/cargo@v1
         with:
           command: build
           args: --release
       - name: Prepare bazel-runner output
         run: ./.github/ci_scripts/prepare_output.sh bazel-runner-${{ matrix.platform }} staging-directory target/release/bazel-runner
+        if: ${{ runner.os != 'Linux' }}
       - name: Prepare jvm-indexer
         run: ./.github/ci_scripts/prepare_output.sh jvm-indexer-${{ matrix.platform }} staging-directory target/release/jvm-indexer
+        if: ${{ runner.os != 'Linux' }}
       - name: Prepare bep-junit
         run: ./.github/ci_scripts/prepare_output.sh bep-junit-${{ matrix.platform }} staging-directory target/release/bep-junit
-      - uses: actions-rs/cargo@v1
+        if: ${{ runner.os != 'Linux' }}
+      - if: ${{ runner.os != 'Linux' }}
+        uses: actions-rs/cargo@v1
         with:
           command: build
           args: --release --all-features
-      - name: Prepare bazel-runner output
+      - name: Prepare bazel-runner output (not Linux)
         run: ./.github/ci_scripts/prepare_output.sh bazel-runner-with-daemon-${{ matrix.platform }} staging-directory target/release/bazel-runner
-      - name: Prepare jvm-indexer
+        if: ${{ runner.os != 'Linux' }}
+      - name: Prepare jvm-indexer (not Linux)
         run: ./.github/ci_scripts/prepare_output.sh jvm-indexer-with-daemon-${{ matrix.platform }} staging-directory target/release/jvm-indexer
-      - name: Prepare bep-junit
+        if: ${{ runner.os != 'Linux' }}
+      - name: Prepare bep-junit (not Linux)
         run: ./.github/ci_scripts/prepare_output.sh bep-junit-with-daemon-${{ matrix.platform }} staging-directory target/release/bep-junit
+        if: ${{ runner.os != 'Linux' }}
       - uses: actions/upload-artifact@master
         with:
           name: ${{ matrix.artifact }}
