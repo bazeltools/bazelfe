@@ -23,40 +23,44 @@ struct Opt {
     junit_output_path: PathBuf,
 }
 
-fn load_build_event_proto(d: &Path) -> impl Iterator<Item = BuildEvent> {
+fn load_build_event_proto(
+    d: &Path,
+) -> Result<impl Iterator<Item = Result<BuildEvent, Box<dyn Error>>>, Box<dyn Error>> {
     struct IterC(VecDeque<u8>);
     impl Iterator for IterC {
-        type Item = BuildEvent;
+        type Item = Result<BuildEvent, Box<dyn Error>>;
 
         fn next(&mut self) -> Option<Self::Item> {
             if self.0.is_empty() {
                 None
             } else {
-                let decoded = BuildEvent::decode_length_delimited(&mut self.0).unwrap();
-                Some(decoded)
+                let decoded = BuildEvent::decode_length_delimited(&mut self.0);
+                let right_err =
+                    decoded.map_err(|de| Box::new(Into::<std::io::Error>::into(de)).into());
+                Some(right_err)
             }
         }
     }
 
-    let mut file = std::fs::File::open(d).expect("Expected to be able to open input test data");
+    let mut file = std::fs::File::open(d)?;
 
     let mut data_vec = VecDeque::default();
-    std::io::copy(&mut file, &mut data_vec).unwrap();
+    std::io::copy(&mut file, &mut data_vec)?;
 
-    IterC(data_vec)
+    Ok(IterC(data_vec))
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let opt = Opt::parse();
-    let r = load_build_event_proto(opt.build_event_binary_output.as_path());
+    let r = load_build_event_proto(opt.build_event_binary_output.as_path())?;
 
-    std::fs::create_dir_all(&opt.junit_output_path).expect("Make output tree");
+    std::fs::create_dir_all(&opt.junit_output_path)?;
 
     let mut hydrator = HydratorState::default();
     let mut res = Vec::default();
     for e in r {
-        let dec: BazelBuildEvent = e.into();
+        let dec: BazelBuildEvent = e?.into();
         res.extend(
             &mut hydrator
                 .consume(BuildEventAction::BuildEvent(dec))
