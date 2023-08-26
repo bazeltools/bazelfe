@@ -27,6 +27,7 @@ ctrlc = "3.4.0"
 base64 = "0.21.2"
 exec = "0.3.1"
 lazy_static = "1.4.0"
+openssl = { version = "0.10.56", features = ["vendored"] }
 tracing = "0.1.38"
 tracing-attributes = "0.1"
 tracing-futures = "0.2"
