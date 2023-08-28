@@ -319,6 +319,18 @@ pub mod bazel_event {
         FailedToBuild,
         ToolHaltedBeforeTesting,
     }
+    impl TestStatus {
+        pub fn didnt_pass(&self) -> bool {
+            match self {
+                Self::Timeout => true,
+                Self::Failed => true,
+                Self::Incomplete => true,
+                Self::RemoteFailure => true,
+                Self::FailedToBuild => true,
+                _ => false,
+            }
+        }
+    }
     #[derive(Clone, PartialEq, Debug)]
     pub struct TestResultEvt {
         pub label: String,

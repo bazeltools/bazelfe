@@ -12,7 +12,32 @@ use super::build_event_server::bazel_event::{self, TestResultEvt};
 use super::build_event_server::BuildEventAction;
 use bazelfe_protos::build_event_stream::NamedSetOfFiles;
 use bazelfe_protos::*;
+use std::path::PathBuf;
 
+pub trait HasFiles {
+    fn files(&self) -> Vec<build_event_stream::File>;
+    fn uri_or_contents(&self) -> Vec<build_event_stream::file::File> {
+        self.files().into_iter().filter_map(|e| e.file).collect()
+    }
+    fn path_bufs(&self) -> Vec<PathBuf> {
+        self.uri_or_contents()
+            .into_iter()
+            .flat_map(|e| match e {
+                build_event_stream::file::File::Uri(e) => {
+                    if e.starts_with("file://") {
+                        let u: PathBuf = e.strip_prefix("file://").unwrap().into();
+                        Some(u)
+                    } else {
+                        log::warn!("Path isn't a file, so skipping...{:?}", e);
+
+                        None
+                    }
+                }
+                build_event_stream::file::File::Contents(_) => None,
+            })
+            .collect()
+    }
+}
 // This is keeping some state as we go through a stream to hydrate values with things like rule kinds
 // not on the indvidual events.
 
@@ -23,8 +48,8 @@ pub struct ActionFailedErrorInfo {
     pub stderr: Option<build_event_stream::File>,
     pub target_kind: Option<String>,
 }
-impl ActionFailedErrorInfo {
-    pub fn files(&self) -> Vec<build_event_stream::File> {
+impl HasFiles for ActionFailedErrorInfo {
+    fn files(&self) -> Vec<build_event_stream::File> {
         let mut r = Vec::default();
 
         if let Some(s) = self.stdout.as_ref() {
@@ -58,8 +83,8 @@ pub struct ActionSuccessInfo {
     pub target_kind: Option<String>,
 }
 
-impl ActionSuccessInfo {
-    pub fn files(&self) -> Vec<build_event_stream::File> {
+impl HasFiles for ActionSuccessInfo {
+    fn files(&self) -> Vec<build_event_stream::File> {
         let mut r = Vec::default();
 
         if let Some(s) = self.stdout.as_ref() {
