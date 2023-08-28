@@ -22,9 +22,9 @@ async-trait = "0.1.73"
 byteorder = "1.4.3"
 bytes = "1.4.0"
 clap = { version = "4.4.0", features = ["derive", "env"] }
-base64 = "0.21.2"
+base64 = "0.21.3"
 lazy_static = "1.4.0"
-openssl = { version = "0.10.56", features = ["vendored"] }
+openssl = { version = "0.10.57", features = ["vendored"] }
 tracing = "0.1.38"
 tracing-attributes = "0.1"
 tracing-appender = "0.2"
@@ -32,7 +32,7 @@ tracing-subscriber = { version = "0.3", features = ["tracing-log", "env-filter"]
 prost = "0.11.9"
 prost-types = "0.11.9"
 rand = "0.8.5"
-regex = "1.9.3"
+regex = "1.9.4"
 serde = { version = "1.0.188", features = ["derive"] }
 serde_derive = "1.0.152"
 toml = "0.7.6"

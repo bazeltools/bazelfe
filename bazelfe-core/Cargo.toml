@@ -56,12 +56,12 @@ lazy_static = "1.4.0"
 ignore = "0.4.20"
 log = "0.4.20"
 nom = "7.1.3"
-openssl = { version = "0.10.56", features = ["vendored"] }
+openssl = { version = "0.10.57", features = ["vendored"] }
 pretty_env_logger = "0.5.0"
 prost = "0.11.9"
 prost-types = "0.11.9"
 rand = "0.8.5"
-regex = "1.9.3"
+regex = "1.9.4"
 serde = { version = "1.0.188", features = ["derive"] }
 dynfmt = { version = "0.1.5", features = ["curly"] }
 toml = "0.7.6"
