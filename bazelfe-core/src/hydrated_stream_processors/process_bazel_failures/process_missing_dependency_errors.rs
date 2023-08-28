@@ -8,7 +8,7 @@ use std::{
 
 use lazy_static::lazy_static;
 
-use bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::ActionFailedErrorInfo;
+use bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::{ActionFailedErrorInfo, HasFiles};
 
 use crate::{
     bazel_query::BazelQueryEngine,
@@ -18,8 +18,6 @@ use crate::{
 };
 
 use super::CurrentState;
-
-use super::shared_utils::output_error_paths;
 
 fn is_potentially_valid_target(target_kind: &Option<String>, label: &str) -> bool {
     lazy_static! {
@@ -154,7 +152,7 @@ async fn generate_all_action_requests(
     action_failed_error_info: &ActionFailedErrorInfo,
 ) -> Vec<ActionRequest> {
     let mut action_requests: Vec<ActionRequest> = vec![];
-    for path in output_error_paths(action_failed_error_info).into_iter() {
+    for path in action_failed_error_info.path_bufs().into_iter() {
         path_to_import_requests(action_failed_error_info, &path, &mut action_requests).await
     }
     expand_candidate_import_requests(action_requests)
@@ -389,6 +387,7 @@ async fn inner_process_missing_dependency_errors<'a, T: Buildozer>(
 
 #[cfg(test)]
 mod tests {
+    use bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::HasFiles;
     use bazelfe_protos::*;
 
     use once_cell::sync::Lazy;
@@ -466,7 +465,7 @@ mod tests {
             target_kind: Some(String::from("scala_library")),
         };
 
-        let result: Vec<PathBuf> = output_error_paths(&action_failed_error_info);
+        let result: Vec<PathBuf> = action_failed_error_info.path_bufs();
         let expected: Vec<PathBuf> = vec![Path::new("/foo/bar/baz").to_path_buf()];
         assert_eq!(result, expected);
     }

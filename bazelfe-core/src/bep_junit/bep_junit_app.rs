@@ -4,8 +4,7 @@ use bazelfe_core::bep_junit::{
     label_to_junit_relative_path, suites_with_error_from_xml,
 };
 
-use bazelfe_bazel_wrapper::bep::build_events::build_event_server::bazel_event::BazelBuildEvent;
-use bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::HydratorState;
+use bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::{HydratedInfo, HydratorState};
 use bazelfe_protos::build_event_stream::BuildEvent;
 use clap::Parser;
 use prost::Message;
@@ -53,22 +52,22 @@ fn load_build_event_proto(
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let opt = Opt::parse();
-    let r = load_build_event_proto(opt.build_event_binary_output.as_path())?;
-
     std::fs::create_dir_all(&opt.junit_output_path)?;
 
+    let result_protos = load_build_event_proto(opt.build_event_binary_output.as_path())?;
+
     let mut hydrator = HydratorState::default();
-    let mut res = Vec::default();
-    for e in r {
-        let dec: BazelBuildEvent = e?.into();
-        res.extend(
+    let mut hydrated_infos = Vec::default();
+    // we use a for loop so we can use .? which gets complex with a map/flat_map
+    for result_build_event in result_protos {
+        hydrated_infos.extend(
             &mut hydrator
-                .consume(BuildEventAction::BuildEvent(dec))
+                .consume(BuildEventAction::BuildEvent(result_build_event?.into()))
                 .into_iter()
                 .flatten(),
         );
     }
-    res.extend(
+    hydrated_infos.extend(
         &mut hydrator
             .consume(BuildEventAction::BuildCompleted)
             .into_iter()
@@ -78,25 +77,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut failed_actions = Vec::default();
     let mut aborted_actions = Vec::default();
     let mut failed_tests = Vec::default();
-    for build_event in res.iter() {
+    for build_event in hydrated_infos.into_iter() {
         match build_event {
-            bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::HydratedInfo::BazelAbort(abort_info) => {
+            HydratedInfo::BazelAbort(abort_info) => {
                 emit_junit_xml_from_aborted_action(
-                    abort_info,
+                    &abort_info,
                     aborted_actions.len(),
                     &opt.junit_output_path,
                 );
-                aborted_actions.push(abort_info.label.clone());
+                aborted_actions.push(abort_info.label);
             }
-            bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::HydratedInfo::ActionFailed(
-                action_failed,
-            ) => {
-                emit_junit_xml_from_failed_action(action_failed, &opt.junit_output_path);
-                failed_actions.push(action_failed.label.clone());
+            HydratedInfo::ActionFailed(action_failed) => {
+                emit_junit_xml_from_failed_action(&action_failed, &opt.junit_output_path);
+                failed_actions.push(action_failed.label);
             }
-            bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::HydratedInfo::Progress(_) => (),
-            bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::HydratedInfo::TestResult(r) => {
-                if let bazelfe_bazel_wrapper::bep::build_events::build_event_server::bazel_event::TestStatus::Failed =  r.test_summary_event.test_status {
+            HydratedInfo::TestResult(r) => {
+                if r.test_summary_event.test_status.didnt_pass() {
                     failed_tests.push(r.test_summary_event.label.clone());
                 }
                 let output_folder = opt.junit_output_path.join(label_to_junit_relative_path(
@@ -131,15 +127,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 });
 
                 if have_errors {
-                    emit_backup_error_data(r, &opt.junit_output_path);
+                    emit_backup_error_data(&r, &opt.junit_output_path);
                 }
                 for (idx, f) in files.iter().enumerate() {
                     let output_file = output_folder.join(format!("test.{}.xml", idx));
                     std::fs::copy(f, output_file).unwrap();
                 }
             }
-            bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::HydratedInfo::ActionSuccess(_) => (),
-            bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::HydratedInfo::TargetComplete(_) => (),
+            HydratedInfo::Progress(_) => (),
+            HydratedInfo::ActionSuccess(_) => (),
+            HydratedInfo::TargetComplete(_) => (),
         }
     }
 
