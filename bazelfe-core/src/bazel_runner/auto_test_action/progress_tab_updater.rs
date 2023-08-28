@@ -1,6 +1,7 @@
 use std::time::Instant;
 
 use bazelfe_bazel_wrapper::bep::{build_events, BazelEventHandler};
+use build_events::hydrated_stream::HasFiles;
 
 use crate::hydrated_stream_processors::BuildEventResponse;
 
@@ -48,7 +49,7 @@ impl BazelEventHandler<BuildEventResponse> for ProgressTabUpdater {
                         success: false,
                         label: af.label.clone(),
                         when: Instant::now(),
-                        files: af.files().clone(),
+                        files: af.files(),
                         target_kind: af.target_kind.clone(),
                         bazel_run_id,
                     })

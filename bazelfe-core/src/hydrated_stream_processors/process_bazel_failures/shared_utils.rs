@@ -1,4 +1,3 @@
-use bazelfe_protos::build_event_stream;
 use std::path::PathBuf;
 
 use bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::{
