@@ -321,14 +321,14 @@ pub mod bazel_event {
     }
     impl TestStatus {
         pub fn didnt_pass(&self) -> bool {
-            match self {
-                Self::Timeout => true,
-                Self::Failed => true,
-                Self::Incomplete => true,
-                Self::RemoteFailure => true,
-                Self::FailedToBuild => true,
-                _ => false,
-            }
+            matches!(
+                self,
+                Self::Timeout
+                    | Self::Failed
+                    | Self::Incomplete
+                    | Self::RemoteFailure
+                    | Self::FailedToBuild
+            )
         }
     }
     #[derive(Clone, PartialEq, Debug)]
