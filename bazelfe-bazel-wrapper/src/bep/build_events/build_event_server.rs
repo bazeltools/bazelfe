@@ -330,6 +330,20 @@ pub mod bazel_event {
                     | Self::FailedToBuild
             )
         }
+
+        pub fn description(&self) -> String {
+            (match self {
+                Self::Passed => "Passed",
+                Self::Flaky => "Flaky",
+                Self::Timeout => "Timeout",
+                Self::Failed => "Failed",
+                Self::Incomplete => "Incomplete",
+                Self::RemoteFailure => "Remote failure",
+                Self::FailedToBuild => "Failed to build",
+                Self::ToolHaltedBeforeTesting => "Tool halted before testing",
+            })
+            .into()
+        }
     }
     #[derive(Clone, PartialEq, Debug)]
     pub struct TestResultEvt {

@@ -129,7 +129,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 if have_errors {
                     emit_backup_error_data(&r, &opt.junit_output_path);
                 }
-                for (idx, f) in files.iter().enumerate() {
+                for (idx, f) in files.into_iter().enumerate() {
                     let output_file = output_folder.join(format!("test.{}.xml", idx));
                     std::fs::copy(f, output_file).unwrap();
                 }

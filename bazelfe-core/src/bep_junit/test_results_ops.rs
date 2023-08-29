@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use nom::combinator::fail;
 use xml::reader::EventReader;
 use xml::reader::XmlEvent;
 
@@ -31,28 +32,31 @@ fn extract_file_content(test_result: &TestResultInfo) -> Vec<String> {
 }
 
 pub fn emit_backup_error_data(test_result: &TestResultInfo, output_root: &Path) {
-    let label_name = test_result.test_summary_event.label.clone();
+    if test_result.test_summary_event.test_status.didnt_pass() {
+        let label_name = test_result.test_summary_event.label.clone();
 
-    // we have ran into issues with non-utf-8 characters in the output logs
-    // so we will replace anything not-ascii to '?' cut it right back
-    let output_data = extract_file_content(test_result).join("\n").replace(
-        |c: char| !c.is_ascii() || (c != '\n' && c != '\r' && c.is_ascii_control()),
-        "?",
-    );
+        let desc = test_result.test_summary_event.test_status.description();
+        // we have ran into issues with non-utf-8 characters in the output logs
+        // so we will replace anything not-ascii to '?' cut it right back
+        let output_data = extract_file_content(test_result).join("\n").replace(
+            |c: char| !c.is_ascii() || (c != '\n' && c != '\r' && c.is_ascii_control()),
+            "?",
+        );
 
-    let known_failures = vec![junit_xml_error_writer::Failure {
-        message: format!("Test aborted, {}", label_name),
-        tpe_name: "ERROR".to_string(),
-        value: output_data,
-    }];
+        let known_failures = vec![junit_xml_error_writer::Failure {
+            message: format!("{} result: {}", label_name, desc),
+            tpe_name: "ERROR".to_string(),
+            value: output_data,
+        }];
 
-    let test_cases = vec![junit_xml_error_writer::TestCase {
-        name: "Test aborted".to_string(),
-        time: 1.0f64,
-        failures: known_failures,
-    }];
+        let test_cases = vec![junit_xml_error_writer::TestCase {
+            name: desc,
+            time: 1.0f64,
+            failures: known_failures,
+        }];
 
-    emit_junit_xml_from_failed_operation(test_cases, label_name, output_root)
+        emit_junit_xml_from_failed_operation(test_cases, label_name, output_root)
+    }
 }
 
 // In bazel if a test system.exits or otherwise exits abnormally we end up with xml files which are kinda useless with no output
