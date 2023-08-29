@@ -92,7 +92,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 failed_actions.push(action_failed.label);
             }
             HydratedInfo::TestResult(r) => {
-                if r.test_summary_event.test_status.didnt_pass() {
+                let is_failure = r.test_summary_event.test_status.didnt_pass();
+                if is_failure {
                     failed_tests.push(r.test_summary_event.label.clone());
                 }
                 let output_folder = opt.junit_output_path.join(label_to_junit_relative_path(
@@ -119,17 +120,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     })
                     .collect();
 
-                let have_errors = files.iter().any(|result_xml| {
-                    suites_with_error_from_xml(
-                        std::fs::File::open(result_xml)
-                            .expect("Should be able to open the found xml"),
-                    )
-                });
-
-                if have_errors {
+                if is_failure {
+                    // Some failures don't get to the phase of writing junit output
+                    // this ensures we write something
                     emit_backup_error_data(&r, &opt.junit_output_path);
                 }
-                for (idx, f) in files.iter().enumerate() {
+                for (idx, f) in files.into_iter().enumerate() {
                     let output_file = output_folder.join(format!("test.{}.xml", idx));
                     std::fs::copy(f, output_file).unwrap();
                 }
