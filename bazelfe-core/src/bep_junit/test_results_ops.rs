@@ -1,6 +1,5 @@
 use std::path::Path;
 
-use nom::combinator::fail;
 use xml::reader::EventReader;
 use xml::reader::XmlEvent;
 
