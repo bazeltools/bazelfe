@@ -66,7 +66,7 @@ serde = { version = "1.0.188", features = ["derive"] }
 dynfmt = { version = "0.1.5", features = ["curly"] }
 toml = "0.7.6"
 time = "0.3.28"
-walkdir = "2.3.3"
+walkdir = "2.4.0"
 shellwords = "1.1.0"
 zip = "0.6.6"
 thiserror = "1.0.48"
