@@ -39,7 +39,7 @@ toml = "0.8.0"
 thiserror = "1.0.48"
 libc = "0.2.148"
 crossbeam-channel = { version = "0.5.8" }
-tokio-util = { version = "0.7.8", features = ["compat"] }
+tokio-util = { version = "0.7.9", features = ["compat"] }
 sha2 = "0.10.7"
 flume = { version = "0.11.0" }
 dashmap = { version = "5.5.3" }
