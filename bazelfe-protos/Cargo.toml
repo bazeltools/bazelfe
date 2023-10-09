@@ -16,7 +16,7 @@ openssl = { version = "0.10.57", features = ["vendored"] }
 
 [dependencies.tokio]
 features = ["full"]
-version = "1.32.0"
+version = "1.33.0"
 
 [build-dependencies]
 tonic-build = { version = "0.10.2", features = ["prost"] }
