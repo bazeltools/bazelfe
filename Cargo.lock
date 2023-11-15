@@ -631,7 +631,7 @@ dependencies = [
  "crossterm 0.27.0",
  "ctrlc",
  "dashmap",
- "flume 0.11.0",
+ "flume",
  "fork",
  "futures",
  "lazy_static",
@@ -682,7 +682,7 @@ dependencies = [
  "dashmap",
  "dynfmt",
  "exec",
- "flume 0.11.0",
+ "flume",
  "fork",
  "futures",
  "humantime",
@@ -848,7 +848,7 @@ dependencies = [
  "clap",
  "crossbeam-channel",
  "dashmap",
- "flume 0.11.0",
+ "flume",
  "futures",
  "http",
  "http-body",
@@ -1334,15 +1334,6 @@ checksum = "a8a2db397cb1c8772f31494cb8917e48cd1e64f0fa7efac59fbd741a0a8ce841"
 dependencies = [
  "crc32fast",
  "miniz_oxide",
-]
-
-[[package]]
-name = "flume"
-version = "0.10.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1657b4441c3403d9f7b3409e47575237dac27b1b5726df654a6ecbf92f0f7577"
-dependencies = [
- "spin 0.9.8",
 ]
 
 [[package]]
@@ -2371,12 +2362,12 @@ checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 
 [[package]]
 name = "pinky-swear"
-version = "6.1.0"
+version = "6.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d894b67aa7a4bf295db5e85349078c604edaa6fa5c8721e8eca3c7729a27f2ac"
+checksum = "6cfae3ead413ca051a681152bd266438d3bfa301c9bdf836939a14c721bb2a21"
 dependencies = [
  "doc-comment",
- "flume 0.10.14",
+ "flume",
  "parking_lot 0.12.1",
  "tracing",
 ]
