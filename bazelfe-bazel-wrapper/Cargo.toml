@@ -41,7 +41,7 @@ crossterm = "0.27.0"
 muncher = { version = "0.7.0", optional = true }
 tempfile = { version = "3.8.1", optional = true }
 tower = "0.4.13"
-mio = "0.8.9"
+mio = "0.8.10"
 ptyprocess = "0.4.1"
 openssl = { version = "0.10.61", features = ["vendored"] }
 
