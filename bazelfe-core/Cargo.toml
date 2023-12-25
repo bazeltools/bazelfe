@@ -107,7 +107,7 @@ path = "../bazelfe-bazel-wrapper"
 [dependencies.futures]
 default-features = false
 features = ["alloc", "bilock", "unstable"]
-version = "0.3.29"
+version = "0.3.30"
 
 [dependencies.tokio]
 features = ["full"]
