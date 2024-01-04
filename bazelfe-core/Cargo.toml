@@ -71,7 +71,7 @@ shellwords = "1.1.0"
 zip = "0.6.6"
 thiserror = "1.0.56"
 fork = { version = "0.1.22", optional = true }
-serde_json = "1.0.110"
+serde_json = "1.0.111"
 stdio-override = { version = "0.1.3", optional = true }
 libc = "0.2.151"
 crossbeam-channel = { version = "0.5.10", optional = true }
