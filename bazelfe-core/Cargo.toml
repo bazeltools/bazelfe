@@ -74,7 +74,7 @@ fork = { version = "0.1.22", optional = true }
 serde_json = "1.0.111"
 stdio-override = { version = "0.1.3", optional = true }
 libc = "0.2.152"
-crossbeam-channel = { version = "0.5.10", optional = true }
+crossbeam-channel = { version = "0.5.11", optional = true }
 notify = { version = "6.1.1", optional = true }
 tokio-serde = { version = "0.8.0", features = ["bincode"], optional = true }
 tokio-util = { version = "0.7.10", features = ["compat"] }
