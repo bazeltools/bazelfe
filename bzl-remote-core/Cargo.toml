@@ -63,7 +63,7 @@ sysinfo = "0.29.11"
 
 
 [build-dependencies]
-vergen = { version = "8.2.7", features = [ "build", "git", "gitcl" ]}
+vergen = { version = "8.2.9", features = [ "build", "git", "gitcl" ]}
 anyhow = "1.0.79"
 
 [dependencies.bazelfe-protos]
