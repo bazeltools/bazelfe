@@ -13,6 +13,7 @@ use super::build_event_server::BuildEventAction;
 use bazelfe_protos::build_event_stream::NamedSetOfFiles;
 use bazelfe_protos::*;
 use std::path::PathBuf;
+use std::pin::pin;
 
 pub trait HasFiles {
     fn files(&self) -> Vec<build_event_stream::File>;
@@ -351,7 +352,7 @@ mod tests {
     #[tokio::test]
     async fn test_no_history() {
         let (tx, rx) = async_channel::unbounded();
-        let mut child_rx = HydratedInfo::build_transformer(rx);
+        let mut child_rx = pin!(HydratedInfo::build_transformer(rx));
 
         tx.send(BuildEventAction::BuildEvent(bazel_event::BazelBuildEvent {
             event: bazel_event::Evt::ActionCompleted(bazel_event::ActionCompletedEvt {
@@ -380,7 +381,7 @@ mod tests {
     #[tokio::test]
     async fn test_with_files() {
         let (tx, rx) = async_channel::unbounded();
-        let mut child_rx = HydratedInfo::build_transformer(rx);
+        let mut child_rx = pin!(HydratedInfo::build_transformer(rx));
 
         tx.send(BuildEventAction::BuildEvent(bazel_event::BazelBuildEvent {
             event: bazel_event::Evt::ActionCompleted(bazel_event::ActionCompletedEvt {
@@ -430,7 +431,7 @@ mod tests {
     #[tokio::test]
     async fn test_with_history() {
         let (tx, rx) = async_channel::unbounded();
-        let mut child_rx = HydratedInfo::build_transformer(rx);
+        let mut child_rx = pin!(HydratedInfo::build_transformer(rx));
 
         tx.send(BuildEventAction::BuildEvent(bazel_event::BazelBuildEvent {
             event: bazel_event::Evt::TargetConfigured(bazel_event::TargetConfiguredEvt {
@@ -489,7 +490,7 @@ mod tests {
     #[tokio::test]
     async fn state_resets_on_new_build() {
         let (tx, rx) = async_channel::unbounded();
-        let mut child_rx = HydratedInfo::build_transformer(rx);
+        let mut child_rx = pin!(HydratedInfo::build_transformer(rx));
 
         tx.send(BuildEventAction::BuildEvent(bazel_event::BazelBuildEvent {
             event: bazel_event::Evt::TargetConfigured(bazel_event::TargetConfiguredEvt {
