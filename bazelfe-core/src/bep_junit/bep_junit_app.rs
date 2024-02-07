@@ -8,8 +8,10 @@ use bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::{HydratedInfo, Hy
 use bazelfe_protos::build_event_stream::BuildEvent;
 use clap::Parser;
 use prost::Message;
+use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::error::Error;
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
 #[derive(Parser, Debug)]
@@ -77,19 +79,26 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut failed_actions = Vec::default();
     let mut aborted_actions = Vec::default();
     let mut failed_tests = Vec::default();
+    let mut failed_xml_writes = Vec::default();
     for build_event in hydrated_infos.into_iter() {
-        match build_event {
+        match &build_event {
             HydratedInfo::BazelAbort(abort_info) => {
-                emit_junit_xml_from_aborted_action(
+                aborted_actions.push(abort_info.label.clone());
+                match emit_junit_xml_from_aborted_action(
                     &abort_info,
                     aborted_actions.len(),
                     &opt.junit_output_path,
-                );
-                aborted_actions.push(abort_info.label);
+                ) {
+                    Ok(_) => (),
+                    Err(e) => failed_xml_writes.push((build_event, e)),
+                }
             }
             HydratedInfo::ActionFailed(action_failed) => {
-                emit_junit_xml_from_failed_action(&action_failed, &opt.junit_output_path);
-                failed_actions.push(action_failed.label);
+                failed_actions.push(action_failed.label.clone());
+                match emit_junit_xml_from_failed_action(&action_failed, &opt.junit_output_path) {
+                    Ok(_) => (),
+                    Err(e) => failed_xml_writes.push((build_event, e)),
+                }
             }
             HydratedInfo::TestResult(r) => {
                 let is_failure = r.test_summary_event.test_status.didnt_pass();
@@ -99,35 +108,60 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 let output_folder = opt.junit_output_path.join(label_to_junit_relative_path(
                     r.test_summary_event.label.as_str(),
                 ));
-                std::fs::create_dir_all(&output_folder).expect("Make dir failed");
 
-                let files: Vec<&str> = r
-                    .test_summary_event
-                    .output_files
-                    .iter()
-                    .flat_map(|e| match e {
-                        bazelfe_protos::build_event_stream::file::File::Uri(uri) => {
-                            let p = uri
-                                .strip_prefix("file://")
-                                .unwrap_or_else(|| panic!("Wasn't a local file for {}", uri));
-                            if p.ends_with("/test.xml") {
-                                Some(p)
-                            } else {
-                                None
+                match std::fs::create_dir_all(&output_folder) {
+                    Ok(_) => {
+                        let files: Vec<&str> = r
+                            .test_summary_event
+                            .output_files
+                            .iter()
+                            .flat_map(|e| match e {
+                                bazelfe_protos::build_event_stream::file::File::Uri(uri) => {
+                                    let p = uri.strip_prefix("file://").unwrap_or_else(|| {
+                                        panic!("Wasn't a local file for {}", uri)
+                                    });
+                                    if p.ends_with("/test.xml") {
+                                        Some(p)
+                                    } else {
+                                        None
+                                    }
+                                }
+                                bazelfe_protos::build_event_stream::file::File::Contents(_) => None,
+                            })
+                            .collect();
+
+                        for (idx, f) in files.into_iter().enumerate() {
+                            match std::fs::metadata(f) {
+                          Ok(m) => {
+                            if m.size() > 0 {
+                              let output_file = output_folder.join(format!("test.{}.xml", idx));
+                              match std::fs::copy(f, output_file) {
+                                Ok(_) => (),
+                                Err(e) =>
+                                  println!("could not access metadata for test result {} at file {}.\nError {}",
+                                    r.test_summary_event.label,
+                                    f,
+                                    e)
+                              }
+                            }
+                          }
+                          Err(e) =>
+                            println!("could not access metadata for test result {} at file {}.\nError {}",
+                              r.test_summary_event.label,
+                              f,
+                              e)
+                        }
+                        }
+                        if is_failure {
+                            // Some failures don't get to the phase of writing junit output
+                            // this ensures we write something
+                            match emit_backup_error_data(&r, &opt.junit_output_path) {
+                                Ok(_) => (),
+                                Err(err) => failed_xml_writes.push((build_event, err)),
                             }
                         }
-                        bazelfe_protos::build_event_stream::file::File::Contents(_) => None,
-                    })
-                    .collect();
-
-                if is_failure {
-                    // Some failures don't get to the phase of writing junit output
-                    // this ensures we write something
-                    emit_backup_error_data(&r, &opt.junit_output_path);
-                }
-                for (idx, f) in files.into_iter().enumerate() {
-                    let output_file = output_folder.join(format!("test.{}.xml", idx));
-                    std::fs::copy(f, output_file).unwrap();
+                    }
+                    Err(e) => failed_xml_writes.push((build_event, e.into())),
                 }
             }
             HydratedInfo::Progress(_) => (),
@@ -136,32 +170,53 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    if failed_actions.is_empty() && failed_tests.is_empty() && aborted_actions.is_empty() {
-        println!("Have zero failures, all successful.")
+    if failed_actions.is_empty()
+        && failed_tests.is_empty()
+        && aborted_actions.is_empty()
+        && failed_xml_writes.is_empty()
+    {
+        println!("Have zero failures, all successful.");
+        Ok(())
     } else {
         if !failed_actions.is_empty() {
             println!("Have {} failed actions", failed_actions.len());
-            for a in failed_actions.iter() {
+            for a in failed_actions {
                 println!("  - {}", a);
             }
         }
 
         if !failed_tests.is_empty() {
             println!("Have {} failed tests", failed_tests.len());
-            for a in failed_tests.iter() {
+            failed_tests.sort();
+            for a in failed_tests {
                 println!("  - {}", a);
             }
         }
 
         if !aborted_actions.is_empty() {
             println!("Have {} aborted actions", aborted_actions.len());
-            for a in aborted_actions.iter() {
+            aborted_actions.sort();
+            for a in aborted_actions {
+                println!("  - {}", a.unwrap_or_else(|| "Unknown".to_string()));
+            }
+        }
+
+        if !failed_xml_writes.is_empty() {
+            println!("Got {} xml write failures", failed_xml_writes.len());
+            failed_xml_writes.sort_by(|p1, p2| p1.0.label().cmp(&p2.0.label()));
+            for (r, err) in failed_xml_writes {
                 println!(
-                    "  - {}",
-                    a.to_owned().unwrap_or_else(|| "Unknown".to_string())
+                    "Target label = {} failed to write: {}",
+                    r.label().unwrap_or("<unknown>"),
+                    err
                 );
             }
         }
+
+        let err: Box<dyn Error> = Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "non-zero error count.",
+        ));
+        Err(err)
     }
-    Ok(())
 }

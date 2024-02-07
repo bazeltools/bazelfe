@@ -2,6 +2,7 @@ use std::path::Path;
 
 use xml::reader::EventReader;
 use xml::reader::XmlEvent;
+use xml::writer::Error as XmlError;
 
 use bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::TestResultInfo;
 
@@ -30,7 +31,10 @@ fn extract_file_content(test_result: &TestResultInfo) -> Vec<String> {
     r
 }
 
-pub fn emit_backup_error_data(test_result: &TestResultInfo, output_root: &Path) {
+pub fn emit_backup_error_data(
+    test_result: &TestResultInfo,
+    output_root: &Path,
+) -> Result<(), XmlError> {
     if test_result.test_summary_event.test_status.didnt_pass() {
         let label_name = test_result.test_summary_event.label.clone();
 
@@ -55,6 +59,8 @@ pub fn emit_backup_error_data(test_result: &TestResultInfo, output_root: &Path) 
         }];
 
         emit_junit_xml_from_failed_operation(test_cases, label_name, output_root)
+    } else {
+        Ok(())
     }
 }
 

@@ -323,6 +323,24 @@ impl HydratedInfo {
         });
         next_rx
     }
+
+    pub fn label(&self) -> Option<&str> {
+        match self {
+            HydratedInfo::BazelAbort(ba) =>
+            // this is a dance to return the ref
+            {
+                match &ba.label {
+                    Some(s) => Some(s.as_str()),
+                    None => None,
+                }
+            }
+            HydratedInfo::ActionFailed(af) => Some(af.label.as_str()),
+            HydratedInfo::Progress(pe) => None,
+            HydratedInfo::TestResult(tri) => Some(tri.test_summary_event.label.as_str()),
+            HydratedInfo::ActionSuccess(asucc) => Some(asucc.label.as_str()),
+            HydratedInfo::TargetComplete(tc) => Some(tc.label.as_str()),
+        }
+    }
 }
 
 #[cfg(test)]
