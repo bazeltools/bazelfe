@@ -2,23 +2,17 @@ use std::{collections::HashSet, path::PathBuf};
 
 use bazelfe_bazel_wrapper::bep::BazelEventHandler;
 use bazelfe_protos::build_event_stream;
+use build_event_stream::file::File::Uri;
 
 use crate::{config::IndexerConfig, index_table};
 
 use super::BuildEventResponse;
 
-#[derive(Clone, Debug)]
-
+#[derive(Clone, Debug, Default)]
 pub struct Response {
     pub jvm_segments_indexed: u32,
 }
-impl Default for Response {
-    fn default() -> Self {
-        Self {
-            jvm_segments_indexed: 0,
-        }
-    }
-}
+
 impl Response {
     pub fn new(jvm_segments_indexed: u32) -> Self {
         Self {
@@ -84,23 +78,21 @@ impl IndexNewResults {
                 };
 
                 for of in tce.output_files.iter() {
-                    if let Some(of) = of.file.as_ref() {
-                        if let build_event_stream::file::File::Uri(e) = of {
-                            if e.ends_with(".jar") && e.starts_with("file://") {
-                                let a = e.strip_prefix("file://").unwrap();
-                                let allowed = if let Some(ref external_repo) = external_match {
-                                    a.contains(external_repo)
-                                } else {
-                                    !a.contains("/external/")
-                                };
-                                if allowed {
-                                    let u: PathBuf = a.into();
-                                    files.push(u);
-                                }
+                    if let Some(Uri(e)) = of.file.as_ref() {
+                        if e.ends_with(".jar") && e.starts_with("file://") {
+                            let a = e.strip_prefix("file://").unwrap();
+                            let allowed = if let Some(ref external_repo) = external_match {
+                                a.contains(external_repo)
+                            } else {
+                                !a.contains("/external/")
+                            };
+                            if allowed {
+                                let u: PathBuf = a.into();
+                                files.push(u);
                             }
-                        }
+                          }
                     }
-                }
+              }
 
                 let jvm_segments_indexed = self
                     .index_table

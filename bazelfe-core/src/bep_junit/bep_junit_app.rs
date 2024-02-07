@@ -94,7 +94,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
             HydratedInfo::ActionFailed(action_failed) => {
                 failed_actions.push(action_failed.label.clone());
-                match emit_junit_xml_from_failed_action(&action_failed, &opt.junit_output_path) {
+                match emit_junit_xml_from_failed_action(action_failed, &opt.junit_output_path) {
                     Ok(_) => (),
                     Err(e) => failed_xml_writes.push((build_event, e)),
                 }

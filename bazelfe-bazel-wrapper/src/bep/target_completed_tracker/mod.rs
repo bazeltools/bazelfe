@@ -16,13 +16,10 @@ impl<T> super::BazelEventHandler<T> for TargetCompletedTracker {
         _bazel_run_id: usize,
         event: &hydrated_stream::HydratedInfo,
     ) -> Vec<T> {
-        match event {
-            hydrated_stream::HydratedInfo::TargetComplete(tce) => {
-                let mut guard = self.expected_targets.lock().await;
-                guard.remove(&tce.label);
-            }
-            _ => (),
-        };
+        if let hydrated_stream::HydratedInfo::TargetComplete(tce) = event {
+            let mut guard = self.expected_targets.lock().await;
+            guard.remove(&tce.label);
+        }
         Vec::default()
     }
 }

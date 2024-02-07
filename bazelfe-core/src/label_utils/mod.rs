@@ -66,7 +66,7 @@ pub fn class_name_to_prefixes(class_name: &str, allow_all_minor_domains: bool) -
     let mut long_running_string = String::new();
     let mut result = Vec::new();
     let mut loop_cnt = 0;
-    let major_domains = vec!["com", "net", "org"];
+    let major_domains = ["com", "net", "org"];
     let mut is_major_domain_opt = None;
     class_name.split('.').for_each(|segment| {
         let is_major_domain = if let Some(v) = is_major_domain_opt {

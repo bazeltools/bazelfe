@@ -451,7 +451,7 @@ where
                         let sequence_number = build_event.sequence_number;
                     yield PublishBuildToolEventStreamResponse {
                         stream_id: build_event.stream_id.clone(),
-                        sequence_number: sequence_number
+                        sequence_number
                     };
 
             }

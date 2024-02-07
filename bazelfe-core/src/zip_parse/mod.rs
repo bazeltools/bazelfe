@@ -43,7 +43,7 @@ fn transform_file_names_into_class_names(class_names: Vec<String>) -> Vec<String
                 None
             }
         })
-        .map(|e| e.replace("/$", "/").replace('$', ".").replace('/', "."))
+        .map(|e| e.replace("/$", "/").replace(['$', '/'], "."))
         .collect();
     vec.sort();
     vec.dedup();

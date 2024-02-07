@@ -68,9 +68,10 @@ fn compute_redirect(old_url: &str, location_uri: &str) -> Result<hyper::Uri, Sto
     if location_parts.scheme.is_none() {
         location_parts.scheme = old_parts.scheme;
     }
-    Ok(location_parts.try_into().map_err(|e| {
+
+    location_parts.try_into().map_err(|e| {
         StorageBackendError::Unknown(format!("Unable to convert parts back into uri {:#?}", e))
-    })?)
+    })
 }
 
 const MAX_REDIRECT_DEPTH: usize = 5;
@@ -111,11 +112,11 @@ async fn inner_download_file_to_cas<T: StorageBackend>(
                 }
             }
             if !res.status().is_success() {
-                return Err(StorageBackendError::Unknown(format!(
+                Err(StorageBackendError::Unknown(format!(
                     "couldn't fetch uri {}, had status {:?}",
                     url,
                     res.status()
-                )));
+                )))
             } else {
                 let r = store_body_in_cas(storage, res.body_mut()).await?;
                 Ok(RedirectOrValue::Value(r))

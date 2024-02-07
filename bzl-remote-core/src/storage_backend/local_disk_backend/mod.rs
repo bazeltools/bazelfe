@@ -60,7 +60,7 @@ impl LocalDiskStorageBackend {
         digest: &execution::Digest,
         data: UploadType,
     ) -> Result<DataLocation, StorageBackendError> {
-        Ok(self.content_addressable_store.insert(digest, data).await?)
+        self.content_addressable_store.insert(digest, data).await
     }
 
     pub async fn cas_to_vec(

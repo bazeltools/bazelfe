@@ -44,7 +44,7 @@ pub fn emit_junit_xml_from_failed_operation(
         Err(e) => {
             // we should remove the file when we fail
             std::fs::remove_file(output_file)?;
-            return Err(e);
+            Err(e)
         }
     }
 }

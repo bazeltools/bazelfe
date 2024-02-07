@@ -105,7 +105,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
             let layer = tower::ServiceBuilder::new()
                 // Apply our own middleware
-                .layer(GrpcErrorTraceLayer::default())
+                .layer(GrpcErrorTraceLayer)
                 .into_inner();
 
             let capabilites_service = CapabilitiesService::new();

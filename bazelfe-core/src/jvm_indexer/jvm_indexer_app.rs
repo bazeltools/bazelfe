@@ -189,9 +189,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     builder.init();
 
-    let target_blacklist = (&opt.blacklist_targets_from_index)
-        .clone()
-        .unwrap_or_default();
+    let target_blacklist = opt.blacklist_targets_from_index.clone().unwrap_or_default();
 
     let allowed_rule_kinds: Vec<String> = vec![
         "java_library",
@@ -286,7 +284,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut processed_count = 0;
         let mut remaining_chunks: Vec<Vec<RuleQuery>> = all_queries
             .chunks(query_rule_attr_batch_size)
-            .into_iter()
             .map(|e| e.to_vec())
             .collect();
         lazy_static! {
@@ -376,17 +373,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 }
                             }
 
-                            remaining_chunks.extend(
-                                current_chunk.chunks(next_chunk_len).into_iter().map(|e| {
-                                    e.to_vec()
-                                        .into_iter()
+                            remaining_chunks.extend(current_chunk.chunks(next_chunk_len).map(
+                                |e| {
+                                    e.iter()
+                                        .cloned()
                                         .filter(|e| {
                                             !must_go_solo.contains(&e.root)
                                                 && !global_banned_roots.contains(&e.root)
                                         })
                                         .collect()
-                                }),
-                            );
+                                },
+                            ));
                         }
                     }
                 } else {
@@ -499,7 +496,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut batch_idx = 0;
     let mut batch_elements = Vec::default();
     for cur in all_targets_to_use
-        .into_iter()
         .into_iter()
         .flat_map(|(_, e)| e.into_iter())
     {

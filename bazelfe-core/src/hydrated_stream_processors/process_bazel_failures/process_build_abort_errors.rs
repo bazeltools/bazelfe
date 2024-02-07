@@ -382,7 +382,7 @@ pub async fn apply_candidates<T: Buildozer + Clone + Send + Sync + 'static>(
                     dep_like, target_to_operate_on
                 );
 
-                for attr in vec![BazelAttrTarget::Deps, BazelAttrTarget::RuntimeDeps] {
+                for attr in [BazelAttrTarget::Deps, BazelAttrTarget::RuntimeDeps] {
                     if let Ok(deps_for_target) =
                         buildozer.print_attr(&attr, &target_to_operate_on).await
                     {

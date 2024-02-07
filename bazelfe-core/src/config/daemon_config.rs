@@ -47,7 +47,7 @@ fn default_enabled() -> bool {
     false
 }
 
-fn serialize_regex<'de, S>(regexes: &NotifyRegexes, serializer: S) -> Result<S::Ok, S::Error>
+fn serialize_regex<S>(regexes: &NotifyRegexes, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
 {

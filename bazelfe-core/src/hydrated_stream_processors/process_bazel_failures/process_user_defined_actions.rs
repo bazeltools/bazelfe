@@ -55,7 +55,7 @@ struct CommandLineAction {
     pub why: String,
 }
 
-fn extract_configured_regexes<'a, 'b, 'c>(
+fn extract_configured_regexes<'a>(
     target_label: &'a String,
     input_error_streams: &'a Vec<String>,
     command_stream: &'a mut Vec<CommandLineAction>,
