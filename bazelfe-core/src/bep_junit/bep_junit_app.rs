@@ -1,14 +1,13 @@
 use bazelfe_bazel_wrapper::bep::build_events::build_event_server::BuildEventAction;
 use bazelfe_core::bep_junit::{
     emit_backup_error_data, emit_junit_xml_from_aborted_action, emit_junit_xml_from_failed_action,
-    label_to_junit_relative_path, suites_with_error_from_xml,
+    label_to_junit_relative_path,
 };
 
 use bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::{HydratedInfo, HydratorState};
 use bazelfe_protos::build_event_stream::BuildEvent;
 use clap::Parser;
 use prost::Message;
-use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::error::Error;
 use std::os::unix::fs::MetadataExt;
