@@ -14,12 +14,10 @@ use http::Uri;
 use hyper::{Body, Request, Response, StatusCode};
 use prost::Message;
 use sha2::Digest;
-use sysinfo::System;
+use sysinfo::Disks;
 // Import the multer types.
 use tempfile::NamedTempFile;
 
-use sysinfo::DiskExt;
-use sysinfo::SystemExt;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
 
@@ -69,7 +67,6 @@ pub enum HttpEndpointError {
 
 #[derive(Debug)]
 struct HealthStatus {
-    system: System,
     last_update: Instant,
     last_status_code: StatusCode,
     last_description: String,
@@ -78,7 +75,6 @@ struct HealthStatus {
 impl Default for HealthStatus {
     fn default() -> Self {
         Self {
-            system: System::new_all(),
             last_update: Instant::now(),
             last_status_code: StatusCode::OK,
             last_description: String::from("HEALTHY"),
@@ -92,7 +88,9 @@ impl HealthStatus {
             self.last_update = now;
             self.last_description = String::from("OK -- unable to find disk space");
             self.last_status_code = StatusCode::OK;
-            for disk in (&mut self.system).disks_mut() {
+            let mut disks = Disks::new_with_refreshed_list();
+            for disk in disks.list_mut() {
+              //(&mut self.system).disks_mut() {
                 if disk.mount_point() == PathBuf::from("/") {
                     disk.refresh();
                     let available_space = disk.available_space() as f64 / disk.total_space() as f64;
