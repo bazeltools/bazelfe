@@ -90,7 +90,6 @@ impl HealthStatus {
             self.last_status_code = StatusCode::OK;
             let mut disks = Disks::new_with_refreshed_list();
             for disk in disks.list_mut() {
-              //(&mut self.system).disks_mut() {
                 if disk.mount_point() == PathBuf::from("/") {
                     disk.refresh();
                     let available_space = disk.available_space() as f64 / disk.total_space() as f64;
