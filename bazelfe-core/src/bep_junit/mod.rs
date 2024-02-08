@@ -1,7 +1,7 @@
 mod failed_action;
 pub mod junit_xml_error_writer;
 mod test_results_ops;
-mod xml_utils;
+pub mod xml_utils;
 
 pub use failed_action::emit_junit_xml_from_aborted_action;
 pub use failed_action::emit_junit_xml_from_failed_action;

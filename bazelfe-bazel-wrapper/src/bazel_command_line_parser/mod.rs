@@ -329,7 +329,7 @@ pub fn parse_bazel_command_line(
             if cur_options.is_empty() {
                 break 'outer;
             } else {
-                action_options.extend(cur_options.into_iter());
+                action_options.extend(cur_options);
             }
         }
         action_args.extend(command_line_iter.cloned());

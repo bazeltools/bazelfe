@@ -58,7 +58,7 @@ pub async fn run<B: BazelQuery>(
         };
 
         let query_for_target = bazel_query
-            .execute(&vec![
+            .execute(&[
                 String::from("query"),
                 format!(
                     "rdeps(//{}/..., {},1)",

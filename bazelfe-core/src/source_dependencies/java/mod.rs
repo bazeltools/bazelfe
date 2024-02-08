@@ -77,9 +77,8 @@ fn extract_package_from_line(ln: &str) -> Result<&str> {
 fn extract_package_from_file(file_lines: &str) -> Result<Option<&str>> {
     for ln in file_lines.lines() {
         if ln.contains("package") {
-            match extract_package_from_line(ln) {
-                Ok(pkg) => return Ok(Some(pkg)),
-                Err(_) => (),
+            if let Ok(pkg) = extract_package_from_line(ln) {
+                return Ok(Some(pkg));
             }
         }
     }

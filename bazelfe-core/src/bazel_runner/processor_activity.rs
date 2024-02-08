@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::hydrated_stream_processors::process_bazel_failures::{TargetStory, TargetStoryAction};
 
+#[derive(Default)]
 pub struct ProcessorActivity {
     pub jvm_segments_indexed: u32,
     pub actions_taken: u32,
@@ -61,14 +62,5 @@ impl ProcessorActivity {
 
         self.jvm_segments_indexed += o.jvm_segments_indexed;
         self.actions_taken += o.actions_taken;
-    }
-}
-impl Default for ProcessorActivity {
-    fn default() -> Self {
-        ProcessorActivity {
-            jvm_segments_indexed: 0,
-            actions_taken: 0,
-            target_story_actions: HashMap::new(),
-        }
     }
 }

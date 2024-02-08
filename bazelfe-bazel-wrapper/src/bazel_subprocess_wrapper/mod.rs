@@ -148,7 +148,7 @@ async fn execute_tokio_subprocess(
                 break;
             }
             if show_output {
-                if let Err(_) = stdout.write_all(&buffer[0..bytes_read]).await {
+                if stdout.write_all(&buffer[0..bytes_read]).await.is_err() {
                     break;
                 }
             }
@@ -165,7 +165,7 @@ async fn execute_tokio_subprocess(
                 break;
             }
             if show_output {
-                if let Err(_) = stderr.write_all(&buffer[0..bytes_read]).await {
+                if stderr.write_all(&buffer[0..bytes_read]).await.is_err() {
                     break;
                 }
             }

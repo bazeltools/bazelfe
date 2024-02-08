@@ -1,6 +1,7 @@
 use super::junit_xml_error_writer;
 
 use super::xml_utils::emit_junit_xml_from_failed_operation;
+use xml::writer::Error as XmlError;
 
 use bazelfe_bazel_wrapper::bep::build_events::hydrated_stream::{
     ActionFailedErrorInfo, BazelAbortErrorInfo,
@@ -11,7 +12,7 @@ pub fn emit_junit_xml_from_aborted_action(
     aborted_evt: &BazelAbortErrorInfo,
     abort_idx: usize,
     output_root: &Path,
-) {
+) -> Result<(), XmlError> {
     let label_name = aborted_evt
         .label
         .to_owned()
@@ -32,7 +33,10 @@ pub fn emit_junit_xml_from_aborted_action(
     emit_junit_xml_from_failed_operation(test_cases, label_name, output_root)
 }
 
-pub fn emit_junit_xml_from_failed_action(action: &ActionFailedErrorInfo, output_root: &Path) {
+pub fn emit_junit_xml_from_failed_action(
+    action: &ActionFailedErrorInfo,
+    output_root: &Path,
+) -> Result<(), XmlError> {
     emit_junit_xml_from_failed_operation(
         vec![generate_struct_from_failed_action(action)],
         action.label.clone(),

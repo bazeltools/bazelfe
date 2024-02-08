@@ -70,7 +70,7 @@ impl BazelRunner {
         if let Some(bazel_command_line_parser::Action::Custom(cust_str)) =
             self.bazel_command_line.action.as_ref()
         {
-            if CustomAction::AutoTest == parse_custom_action(&cust_str)? {
+            if CustomAction::AutoTest == parse_custom_action(cust_str)? {
                 self.config.daemon_config.enabled = true;
             }
         }

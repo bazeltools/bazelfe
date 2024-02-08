@@ -132,7 +132,7 @@ impl ContentAddressableStore {
                     resource_name: if write_offset == 0 { resource_url.clone() } else { String::from("") },
                     write_offset: write_offset as i64
                 };
-                write_offset += bytes_read as usize;
+                write_offset += bytes_read;
 
                 yield buf;
                 if remaining == 0 {

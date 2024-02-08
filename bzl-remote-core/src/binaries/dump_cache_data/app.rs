@@ -223,7 +223,7 @@ impl std::fmt::Debug for PackerV {
         match self {
             Self::Value(a) => a.fmt(f),
             Self::Layer(nme, v) => {
-                let mut r = f.debug_struct(&nme);
+                let mut r = f.debug_struct(nme);
                 for (k, v) in v.iter() {
                     r.field(k, v);
                 }

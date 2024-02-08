@@ -91,10 +91,12 @@ pub mod bazel_event {
 
             let aborted: Option<Evt> = {
                 let abort_info = v.payload.as_ref().and_then(|e| match e {
-                    build_event_stream::build_event::Payload::Aborted(cfg) => Some((
-                        build_event_stream::aborted::AbortReason::from_i32(cfg.reason),
-                        cfg.description.clone(),
-                    )),
+                    build_event_stream::build_event::Payload::Aborted(cfg) => Some(
+                        match build_event_stream::aborted::AbortReason::try_from(cfg.reason) {
+                            Ok(ar) => (Some(ar), cfg.description.clone()),
+                            Err(_) => (None, cfg.description.clone()),
+                        },
+                    ),
                     _ => None,
                 });
                 let target_label_opt = v.id.as_ref().and_then(|e| e.id.as_ref()).and_then(label_of);
@@ -449,7 +451,7 @@ where
                         let sequence_number = build_event.sequence_number;
                     yield PublishBuildToolEventStreamResponse {
                         stream_id: build_event.stream_id.clone(),
-                        sequence_number: sequence_number
+                        sequence_number
                     };
 
             }

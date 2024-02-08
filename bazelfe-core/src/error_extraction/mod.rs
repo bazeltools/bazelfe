@@ -78,7 +78,7 @@ pub fn extract_errors(target_kind: &Option<String>, input: &str) -> Vec<ActionRe
         existing
     } else {
         let mut v = scala::extract_errors(input);
-        v.extend(java::extract_errors(input).into_iter());
+        v.extend(java::extract_errors(input));
         v
     }
 }

@@ -13,7 +13,6 @@ use super::build_event_server::BuildEventAction;
 use bazelfe_protos::build_event_stream::NamedSetOfFiles;
 use bazelfe_protos::*;
 use std::path::PathBuf;
-use std::pin::pin;
 
 pub trait HasFiles {
     fn files(&self) -> Vec<build_event_stream::File>;
@@ -324,6 +323,24 @@ impl HydratedInfo {
         });
         next_rx
     }
+
+    pub fn label(&self) -> Option<&str> {
+        match self {
+            HydratedInfo::BazelAbort(ba) =>
+            // this is a dance to return the ref
+            {
+                match &ba.label {
+                    Some(s) => Some(s.as_str()),
+                    None => None,
+                }
+            }
+            HydratedInfo::ActionFailed(af) => Some(af.label.as_str()),
+            HydratedInfo::Progress(_) => None,
+            HydratedInfo::TestResult(tri) => Some(tri.test_summary_event.label.as_str()),
+            HydratedInfo::ActionSuccess(asucc) => Some(asucc.label.as_str()),
+            HydratedInfo::TargetComplete(tc) => Some(tc.label.as_str()),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -334,7 +351,7 @@ mod tests {
     #[tokio::test]
     async fn test_no_history() {
         let (tx, rx) = async_channel::unbounded();
-        let mut child_rx = pin!(HydratedInfo::build_transformer(rx));
+        let mut child_rx = std::pin::pin!(HydratedInfo::build_transformer(rx));
 
         tx.send(BuildEventAction::BuildEvent(bazel_event::BazelBuildEvent {
             event: bazel_event::Evt::ActionCompleted(bazel_event::ActionCompletedEvt {
@@ -363,7 +380,7 @@ mod tests {
     #[tokio::test]
     async fn test_with_files() {
         let (tx, rx) = async_channel::unbounded();
-        let mut child_rx = pin!(HydratedInfo::build_transformer(rx));
+        let mut child_rx = std::pin::pin!(HydratedInfo::build_transformer(rx));
 
         tx.send(BuildEventAction::BuildEvent(bazel_event::BazelBuildEvent {
             event: bazel_event::Evt::ActionCompleted(bazel_event::ActionCompletedEvt {
@@ -413,7 +430,7 @@ mod tests {
     #[tokio::test]
     async fn test_with_history() {
         let (tx, rx) = async_channel::unbounded();
-        let mut child_rx = pin!(HydratedInfo::build_transformer(rx));
+        let mut child_rx = std::pin::pin!(HydratedInfo::build_transformer(rx));
 
         tx.send(BuildEventAction::BuildEvent(bazel_event::BazelBuildEvent {
             event: bazel_event::Evt::TargetConfigured(bazel_event::TargetConfiguredEvt {
@@ -472,7 +489,7 @@ mod tests {
     #[tokio::test]
     async fn state_resets_on_new_build() {
         let (tx, rx) = async_channel::unbounded();
-        let mut child_rx = pin!(HydratedInfo::build_transformer(rx));
+        let mut child_rx = std::pin::pin!(HydratedInfo::build_transformer(rx));
 
         tx.send(BuildEventAction::BuildEvent(bazel_event::BazelBuildEvent {
             event: bazel_event::Evt::TargetConfigured(bazel_event::TargetConfiguredEvt {

@@ -68,10 +68,10 @@ fn regex_resource_to_digest(
             },
         })
     } else {
-        return Err(tonic::Status::invalid_argument(format!(
+        Err(tonic::Status::invalid_argument(format!(
             "Invalid resource name: '{}'",
             resource_name
-        )));
+        )))
     }
 }
 

@@ -96,7 +96,7 @@ impl ContentAddressableStore {
         &self,
         hash: &String,
     ) -> Result<Option<execution::Digest>, StorageBackendError> {
-        if let Some(metadata) = self.get_metadata(&hash)? {
+        if let Some(metadata) = self.get_metadata(hash)? {
             match metadata {
                 InMemoryLutTreeType::OnDisk => {
                     let metadata = self.expected_path_hash(hash).metadata().map_err(|e| {
@@ -121,7 +121,7 @@ impl ContentAddressableStore {
     }
 
     fn expected_path_hash(&self, hash: &String) -> PathBuf {
-        self.large_blob_path.join(&hash)
+        self.large_blob_path.join(hash)
     }
 
     fn expected_path(&self, digest: &execution::Digest) -> PathBuf {

@@ -136,7 +136,7 @@ pub fn expand_candidate_import_requests(action_requests: Vec<ActionRequest>) -> 
         }
     }
 
-    candidate_import_requests.extend(extras.into_iter());
+    candidate_import_requests.extend(extras);
 
     for y in candidate_import_requests.into_iter() {
         res_action_requests.push(ActionRequest::Prefix(y));

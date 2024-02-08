@@ -67,21 +67,13 @@ impl Response {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct CurrentState {
     pub ignore_list: HashSet<String>,
     pub added_target_for_class: HashMap<crate::error_extraction::ActionRequest, HashSet<String>>,
     pub epoch: usize,
 }
-impl Default for CurrentState {
-    fn default() -> Self {
-        Self {
-            ignore_list: HashSet::default(),
-            added_target_for_class: HashMap::default(),
-            epoch: 0,
-        }
-    }
-}
+
 #[derive(Clone, Debug)]
 pub struct ProcessBazelFailures<T: Buildozer, U: CommandLineRunner> {
     index_table: index_table::IndexTable,
@@ -170,7 +162,7 @@ impl<T: Buildozer, U: CommandLineRunner> ProcessBazelFailures<T, U> {
 
                 let missing_dependencies_response =
                     process_missing_dependency_errors::process_missing_dependency_errors(
-                        &mut *prev_data,
+                        &mut prev_data,
                         self.buildozer.clone(),
                         action_failed_error_info,
                         &self.index_table,
@@ -205,7 +197,7 @@ impl<T: Buildozer, U: CommandLineRunner> ProcessBazelFailures<T, U> {
                     let mut prev_data = arc_resp.lock().await;
                     res.push(
                         process_build_abort_errors::apply_candidates(
-                            &mut *prev_data,
+                            &mut prev_data,
                             errors,
                             self.buildozer.clone(),
                         )
@@ -250,7 +242,7 @@ impl<T: Buildozer, U: CommandLineRunner> ProcessBazelFailures<T, U> {
                     let mut prev_data = arc_resp.lock().await;
                     res.push(
                         process_build_abort_errors::apply_candidates(
-                            &mut *prev_data,
+                            &mut prev_data,
                             errors,
                             self.buildozer.clone(),
                         )

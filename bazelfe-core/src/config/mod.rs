@@ -31,7 +31,7 @@ pub async fn load_config_file(
         path = Some((*p).clone())
     };
 
-    if path == None {
+    if path.is_none() {
         if let Ok(home_dir) = std::env::var("HOME") {
             let cur_p = PathBuf::from(format!("{}/.bazelfe_config", home_dir));
             if cur_p.exists() {

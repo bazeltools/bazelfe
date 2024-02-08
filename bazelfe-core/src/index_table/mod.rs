@@ -41,7 +41,7 @@ pub struct DebugIndexTable {
     pub data_map: Vec<(String, Vec<(u16, String)>)>,
 }
 
-impl<'a> Default for IndexTable {
+impl Default for IndexTable {
     fn default() -> Self {
         Self::new()
     }
@@ -106,7 +106,7 @@ impl<'a> IndexTable {
     pub async fn set_popularity(&self, label_id: usize, popularity: u16) {
         let mut lock = self.id_to_popularity.write().await;
         if label_id >= lock.len() {
-            lock.resize_with((label_id + 100) as usize, Default::default);
+            lock.resize_with(label_id + 100, Default::default);
         }
         lock[label_id] = popularity;
     }
@@ -166,7 +166,7 @@ impl<'a> IndexTable {
         file.write_u64::<LittleEndian>(id_to_ctime.len() as u64)
             .unwrap();
         for e in id_to_ctime.iter() {
-            file.write_u64::<LittleEndian>(*e as u64).unwrap();
+            file.write_u64::<LittleEndian>(*e).unwrap();
         }
 
         let id_to_popularity = self.id_to_popularity.read().await;

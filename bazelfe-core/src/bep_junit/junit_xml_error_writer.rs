@@ -1,4 +1,4 @@
-use xml::writer::XmlEvent;
+use xml::writer::{Error as XmlError, XmlEvent};
 
 use super::xml_utils::XmlWritable;
 
@@ -7,14 +7,17 @@ pub struct TestSuites {
     pub testsuites: Vec<TestSuite>,
 }
 impl XmlWritable for TestSuites {
-    fn write_xml<W: std::io::Write>(&self, writer: &mut xml::writer::EventWriter<W>) {
+    fn write_xml<W: std::io::Write>(
+        &self,
+        writer: &mut xml::writer::EventWriter<W>,
+    ) -> Result<(), XmlError> {
         let e = XmlEvent::start_element("testsuites");
-        writer.write(e).unwrap();
+        writer.write(e)?;
 
         for s in self.testsuites.iter() {
-            s.write_xml(writer);
+            s.write_xml(writer)?;
         }
-        writer.write(XmlEvent::end_element()).unwrap();
+        writer.write(XmlEvent::end_element())
     }
 }
 
@@ -26,7 +29,10 @@ pub struct TestSuite {
     pub testcases: Vec<TestCase>,
 }
 impl XmlWritable for TestSuite {
-    fn write_xml<W: std::io::Write>(&self, writer: &mut xml::writer::EventWriter<W>) {
+    fn write_xml<W: std::io::Write>(
+        &self,
+        writer: &mut xml::writer::EventWriter<W>,
+    ) -> Result<(), XmlError> {
         let tests = self.tests.to_string();
         let failures = self.failures.to_string();
         let e = XmlEvent::start_element("testsuite")
@@ -37,9 +43,9 @@ impl XmlWritable for TestSuite {
         writer.write(e).unwrap();
 
         for s in self.testcases.iter() {
-            s.write_xml(writer);
+            s.write_xml(writer)?;
         }
-        writer.write(XmlEvent::end_element()).unwrap();
+        writer.write(XmlEvent::end_element())
     }
 }
 
@@ -51,18 +57,21 @@ pub struct TestCase {
 }
 
 impl XmlWritable for TestCase {
-    fn write_xml<W: std::io::Write>(&self, writer: &mut xml::writer::EventWriter<W>) {
+    fn write_xml<W: std::io::Write>(
+        &self,
+        writer: &mut xml::writer::EventWriter<W>,
+    ) -> Result<(), XmlError> {
         let time = self.time.to_string();
         let e = XmlEvent::start_element("testcase")
             .attr("name", self.name.as_str())
             .attr("time", time.as_str());
 
-        writer.write(e).unwrap();
+        writer.write(e)?;
 
         for s in self.failures.iter() {
-            s.write_xml(writer);
+            s.write_xml(writer)?;
         }
-        writer.write(XmlEvent::end_element()).unwrap();
+        writer.write(XmlEvent::end_element())
     }
 }
 
@@ -74,15 +83,18 @@ pub struct Failure {
 }
 
 impl XmlWritable for Failure {
-    fn write_xml<W: std::io::Write>(&self, writer: &mut xml::writer::EventWriter<W>) {
+    fn write_xml<W: std::io::Write>(
+        &self,
+        writer: &mut xml::writer::EventWriter<W>,
+    ) -> Result<(), XmlError> {
         let e = XmlEvent::start_element("failure")
             .attr("message", self.message.as_str())
             .attr("type", self.tpe_name.as_str());
 
-        writer.write(e).unwrap();
+        writer.write(e)?;
 
-        writer.write(XmlEvent::CData(self.value.as_str())).unwrap();
-        writer.write(XmlEvent::end_element()).unwrap();
+        writer.write(XmlEvent::CData(self.value.as_str()))?;
+        writer.write(XmlEvent::end_element())
     }
 }
 
