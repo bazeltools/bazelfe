@@ -54,13 +54,13 @@ jobs:
         with:
           command: build
           args: --release --all-features --target=x86_64-unknown-linux-musl
-      - name: Prepare bazel-runner output (not Linux)
+      - name: Prepare bazel-runner-with-daemon output
         run: ./.github/ci_scripts/prepare_output.sh bazel-runner-with-daemon-${{ matrix.platform }} staging-directory target/x86_64-unknown-linux-musl/release/bazel-runner
         if: ${{ runner.os == 'Linux' }}
-      - name: Prepare jvm-indexer (not Linux)
+      - name: Prepare jvm-indexer-with-daemon
         run: ./.github/ci_scripts/prepare_output.sh jvm-indexer-with-daemon-${{ matrix.platform }} staging-directory target/x86_64-unknown-linux-musl/release/jvm-indexer
         if: ${{ runner.os == 'Linux' }}
-      - name: Prepare bep-junit (not Linux)
+      - name: Prepare bep-junit-with-daemon
         run: ./.github/ci_scripts/prepare_output.sh bep-junit-with-daemon-${{ matrix.platform }} staging-directory target/x86_64-unknown-linux-musl/release/bep-junit
         if: ${{ runner.os == 'Linux' }}
       # Handle the non-Linux cases
@@ -69,13 +69,13 @@ jobs:
         with:
           command: build
           args: --release
-      - name: Prepare bazel-runner output
+      - name: Prepare bazel-runner output (not Linux)
         run: ./.github/ci_scripts/prepare_output.sh bazel-runner-${{ matrix.platform }} staging-directory target/release/bazel-runner
         if: ${{ runner.os != 'Linux' }}
-      - name: Prepare jvm-indexer
+      - name: Prepare jvm-indexer (not Linux)
         run: ./.github/ci_scripts/prepare_output.sh jvm-indexer-${{ matrix.platform }} staging-directory target/release/jvm-indexer
         if: ${{ runner.os != 'Linux' }}
-      - name: Prepare bep-junit
+      - name: Prepare bep-junit (not Linux)
         run: ./.github/ci_scripts/prepare_output.sh bep-junit-${{ matrix.platform }} staging-directory target/release/bep-junit
         if: ${{ runner.os != 'Linux' }}
       - if: ${{ runner.os != 'Linux' }}
@@ -83,13 +83,13 @@ jobs:
         with:
           command: build
           args: --release --all-features
-      - name: Prepare bazel-runner output (not Linux)
+      - name: Prepare bazel-runner-with-daemon output (not Linux)
         run: ./.github/ci_scripts/prepare_output.sh bazel-runner-with-daemon-${{ matrix.platform }} staging-directory target/release/bazel-runner
         if: ${{ runner.os != 'Linux' }}
-      - name: Prepare jvm-indexer (not Linux)
+      - name: Prepare jvm-indexer-with-daemon (not Linux)
         run: ./.github/ci_scripts/prepare_output.sh jvm-indexer-with-daemon-${{ matrix.platform }} staging-directory target/release/jvm-indexer
         if: ${{ runner.os != 'Linux' }}
-      - name: Prepare bep-junit (not Linux)
+      - name: Prepare bep-junit-with-daemon (not Linux)
         run: ./.github/ci_scripts/prepare_output.sh bep-junit-with-daemon-${{ matrix.platform }} staging-directory target/release/bep-junit
         if: ${{ runner.os != 'Linux' }}
       - uses: actions/upload-artifact@master
@@ -135,21 +135,21 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Install Protoc
-        uses: arduino/setup-protoc@v1
+        uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Download linux ubuntu 20 bazelfe
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v4
         with:
           name: bazelfe-linux-ubuntu-20.04
           path: downloads
       - name: Download macos bazelfe
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v4
         with:
           name: bazelfe-macos
           path: downloads
       - name: Download macos arm64 bazelfe
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v4
         with:
           name: bazelfe-macos-arm64
           path: downloads
