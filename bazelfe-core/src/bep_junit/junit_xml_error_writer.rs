@@ -115,7 +115,7 @@ fn contains_disallowed_xml_chars(input: &str) -> bool {
         // - Control characters except tab (U+0009), line feed (U+000A), and carriage return (U+000D)
         // - Null character (U+0000)
         // - Characters in the range U+007F to U+009F
-        (u <= 0x001F && u != 0x0009 && u != 0x000A && u != 0x000D) || (0x007F <= u && u <= 0x009F)
+        (u <= 0x001F && u != 0x0009 && u != 0x000A && u != 0x000D) || (0x007F..=0x009F).contains(&u)
     })
 }
 
@@ -184,6 +184,16 @@ mod tests {
         assert_eq!(
             xml_writable_to_string(&f3),
             "<?xml version=\"1.0\" encoding=\"utf-8\"?><failure message=\"Failed to build\" type=\"BuildFailure\">System failed to build &lt;sometag> and ]]></failure>".to_string()
+        );
+        let f4 = Failure {
+            message: "Failed to build".to_string(),
+            tpe_name: "BuildFailure".to_string(),
+            value: "System failed to build \u{009F}".to_string(),
+        };
+
+        assert_eq!(
+            xml_writable_to_string(&f4),
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?><failure message=\"Failed to build\" type=\"BuildFailure\">System failed to build \u{9F}</failure>".to_string()
         );
     }
 
