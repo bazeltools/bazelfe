@@ -40,7 +40,7 @@ impl XmlWritable for TestSuite {
             .attr("tests", tests.as_str())
             .attr("failures", failures.as_str());
 
-        writer.write(e).unwrap();
+        writer.write(e)?;
 
         for s in self.testcases.iter() {
             s.write_xml(writer)?;
@@ -93,9 +93,30 @@ impl XmlWritable for Failure {
 
         writer.write(e)?;
 
-        writer.write(XmlEvent::CData(self.value.as_str()))?;
+        let msg = self.value.as_str();
+        if contains_disallowed_xml_chars(msg) || msg.contains("]]>") {
+            // CDATA can't have escapes inside so here we use normal character data and
+            // let the library escape
+            writer.write(XmlEvent::Characters(msg))?;
+        } else {
+            // we should just be able to use a raw CData here without bothering to escape
+            // which is easier to inspect
+            writer.write(XmlEvent::CData(msg))?;
+        }
         writer.write(XmlEvent::end_element())
     }
+}
+
+fn contains_disallowed_xml_chars(input: &str) -> bool {
+    input.chars().any(|c| {
+        let u = c as u32;
+        // Convert character to its Unicode code point
+        // Check for disallowed characters:
+        // - Control characters except tab (U+0009), line feed (U+000A), and carriage return (U+000D)
+        // - Null character (U+0000)
+        // - Characters in the range U+007F to U+009F
+        (u <= 0x001F && u != 0x0009 && u != 0x000A && u != 0x000D) || (0x007F..=0x009F).contains(&u)
+    })
 }
 
 #[cfg(test)]
@@ -116,6 +137,63 @@ mod tests {
         assert_eq!(
             xml_writable_to_string(&f),
             "<?xml version=\"1.0\" encoding=\"utf-8\"?><failure message=\"Failed to build\" type=\"BuildFailure\"><![CDATA[System failed to build]]></failure>".to_string()
+        );
+    }
+
+    #[test]
+    fn test_failure_with_control_serialization() {
+        let f = Failure {
+            message: "Failed to build".to_string(),
+            tpe_name: "BuildFailure".to_string(),
+            value: "System failed to build\u{0000}".to_string(),
+        };
+
+        assert_eq!(
+            xml_writable_to_string(&f),
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?><failure message=\"Failed to build\" type=\"BuildFailure\">System failed to build\0</failure>".to_string()
+        );
+
+        let f1 = Failure {
+            message: "Failed to build".to_string(),
+            tpe_name: "BuildFailure".to_string(),
+            value: "System failed to build]]>".to_string(),
+        };
+
+        assert_eq!(
+            xml_writable_to_string(&f1),
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?><failure message=\"Failed to build\" type=\"BuildFailure\">System failed to build]]></failure>".to_string()
+        );
+
+        let f2 = Failure {
+            message: "Failed to build".to_string(),
+            tpe_name: "BuildFailure".to_string(),
+            value: "System failed to build <sometag>".to_string(),
+        };
+
+        assert_eq!(
+            xml_writable_to_string(&f2),
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?><failure message=\"Failed to build\" type=\"BuildFailure\"><![CDATA[System failed to build <sometag>]]></failure>".to_string()
+        );
+
+        let f3 = Failure {
+            message: "Failed to build".to_string(),
+            tpe_name: "BuildFailure".to_string(),
+            value: "System failed to build <sometag> and ]]>".to_string(),
+        };
+
+        assert_eq!(
+            xml_writable_to_string(&f3),
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?><failure message=\"Failed to build\" type=\"BuildFailure\">System failed to build &lt;sometag> and ]]></failure>".to_string()
+        );
+        let f4 = Failure {
+            message: "Failed to build".to_string(),
+            tpe_name: "BuildFailure".to_string(),
+            value: "System failed to build \u{009F}".to_string(),
+        };
+
+        assert_eq!(
+            xml_writable_to_string(&f4),
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?><failure message=\"Failed to build\" type=\"BuildFailure\">System failed to build \u{9F}</failure>".to_string()
         );
     }
 
