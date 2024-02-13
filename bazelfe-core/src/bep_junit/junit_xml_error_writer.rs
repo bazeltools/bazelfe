@@ -1,5 +1,4 @@
 use xml::writer::{Error as XmlError, XmlEvent};
-use xml::escape::escape_str_pcdata;
 
 use super::xml_utils::XmlWritable;
 
