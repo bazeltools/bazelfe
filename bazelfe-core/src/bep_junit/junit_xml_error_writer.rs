@@ -187,7 +187,6 @@ mod tests {
         );
     }
 
-
     #[test]
     fn test_testsuites_serialization() {
         let f = Failure {
