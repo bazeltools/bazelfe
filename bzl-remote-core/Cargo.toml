@@ -24,7 +24,7 @@ bytes = "1.5.0"
 clap = { version = "4.5.1", features = ["derive", "env"] }
 base64 = "0.21.7"
 lazy_static = "1.4.0"
-openssl = { version = "0.10.63", features = ["vendored"] }
+openssl = { version = "0.10.64", features = ["vendored"] }
 tracing = "0.1.40"
 tracing-attributes = "0.1"
 tracing-appender = "0.2"
