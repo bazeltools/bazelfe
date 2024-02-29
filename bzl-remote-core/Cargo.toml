@@ -47,7 +47,7 @@ time = "0.3.34"
 tempfile = { version = "3.10.1" }
 anyhow = "1.0.80"
 tower = { version = "0.4" }
-log = "0.4.20"
+log = "0.4.21"
 hyper = "0.14.27"
 hyper-tls = "0.5.0"
 sled = "0.34.7"
