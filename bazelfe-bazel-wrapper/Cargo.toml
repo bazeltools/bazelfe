@@ -20,7 +20,7 @@ clap = { version = "4.5.4", features = ["derive", "env"] }
 lazy_static = "1.4.0"
 log = "0.4.21"
 prost = "0.12.4"
-prost-types = "0.12.3"
+prost-types = "0.12.4"
 rand = "0.8.5"
 serde = { version = "1.0.197", features = ["derive"] }
 thiserror = "1.0.58"
