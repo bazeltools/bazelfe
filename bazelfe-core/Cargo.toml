@@ -65,7 +65,7 @@ regex = "1.10.4"
 serde = { version = "1.0.197", features = ["derive"] }
 dynfmt = { version = "0.1.5", features = ["curly"] }
 toml = "0.8.12"
-time = "0.3.35"
+time = "0.3.36"
 walkdir = "2.5.0"
 shellwords = "1.1.0"
 zip = "0.6.6"
