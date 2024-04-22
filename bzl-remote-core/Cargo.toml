@@ -36,7 +36,7 @@ regex = "1.10.4"
 serde = { version = "1.0.198", features = ["derive"] }
 serde_derive = "1.0.152"
 toml = "0.8.12"
-thiserror = "1.0.58"
+thiserror = "1.0.59"
 libc = "0.2.153"
 crossbeam-channel = { version = "0.5.12" }
 tokio-util = { version = "0.7.10", features = ["compat"] }
