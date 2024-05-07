@@ -11,19 +11,19 @@ path = "src/bazel_command_line_parser/generate_bazel_command_line_app.rs"
 required-features = ["dev-binaries"]
 
 [dependencies]
-async-channel = "2.2.0"
+async-channel = "2.2.1"
 async-stream = "0.3.5"
-async-trait = "0.1.79"
+async-trait = "0.1.80"
 bytes = "1.6.0"
 ctrlc = "3.4.2"
 clap = { version = "4.5.4", features = ["derive", "env"] }
 lazy_static = "1.4.0"
 log = "0.4.21"
-prost = "0.12.3"
-prost-types = "0.12.3"
+prost = "0.12.4"
+prost-types = "0.12.4"
 rand = "0.8.5"
-serde = { version = "1.0.197", features = ["derive"] }
-thiserror = "1.0.58"
+serde = { version = "1.0.198", features = ["derive"] }
+thiserror = "1.0.59"
 fork = { version = "0.1.23", optional = true }
 stdio-override = { version = "0.1.3", optional = true }
 libc = "0.2.153"
@@ -57,7 +57,7 @@ version = "0.3.30"
 
 [dependencies.tokio]
 features = ["full"]
-version = "1.36.0"
+version = "1.37.0"
 
 [dependencies.tokio-stream]
 features = ["net"]
