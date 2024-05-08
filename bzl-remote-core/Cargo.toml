@@ -36,7 +36,7 @@ regex = "1.10.4"
 serde = { version = "1.0.198", features = ["derive"] }
 serde_derive = "1.0.152"
 toml = "0.8.12"
-thiserror = "1.0.59"
+thiserror = "1.0.60"
 libc = "0.2.153"
 crossbeam-channel = { version = "0.5.12" }
 tokio-util = { version = "0.7.11", features = ["compat"] }
@@ -45,7 +45,7 @@ flume = { version = "0.11.0" }
 dashmap = { version = "5.5.3" }
 time = "0.3.36"
 tempfile = { version = "3.10.1" }
-anyhow = "1.0.82"
+anyhow = "1.0.83"
 tower = { version = "0.4" }
 log = "0.4.21"
 hyper = "0.14.27"
@@ -64,7 +64,7 @@ sysinfo = "0.30.11"
 
 [build-dependencies]
 vergen = { version = "8.3.1", features = [ "build", "git", "gitcl" ]}
-anyhow = "1.0.82"
+anyhow = "1.0.83"
 
 [dependencies.bazelfe-protos]
 path = "../bazelfe-protos"
