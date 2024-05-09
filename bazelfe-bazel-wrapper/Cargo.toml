@@ -22,17 +22,17 @@ log = "0.4.21"
 prost = "0.12.4"
 prost-types = "0.12.4"
 rand = "0.8.5"
-serde = { version = "1.0.198", features = ["derive"] }
-thiserror = "1.0.59"
+serde = { version = "1.0.200", features = ["derive"] }
+thiserror = "1.0.60"
 fork = { version = "0.1.23", optional = true }
 stdio-override = { version = "0.1.3", optional = true }
-libc = "0.2.153"
+libc = "0.2.154"
 crossbeam-channel = { version = "0.5.12", optional = true }
 notify = { version = "6.1.1", optional = true }
 tokio-serde = { version = "0.9.0", features = ["bincode"], optional = true }
-tokio-util = { version = "0.7.10", features = ["compat"] }
+tokio-util = { version = "0.7.11", features = ["compat"] }
 sha2 = "0.10.8"
-nix = "0.27.1"
+nix = { version = "0.28.0", features = ["signal"] }
 flume = { version = "0.11.0", optional = true }
 trim-margin = { version = "0.1.0", optional = true }
 dashmap = { version = "5.5.3", optional = true }

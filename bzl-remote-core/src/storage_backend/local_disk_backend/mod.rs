@@ -1,7 +1,6 @@
 use bazelfe_protos::build::bazel::remote::execution::v2::{self as execution};
 
 mod content_addressable_store;
-pub use content_addressable_store::ArcDynBox;
 use content_addressable_store::ContentAddressableStore;
 
 mod action_cache;
