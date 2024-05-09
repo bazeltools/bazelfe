@@ -48,17 +48,18 @@ tempfile = { version = "3.10.1" }
 anyhow = "1.0.83"
 tower = { version = "0.4" }
 log = "0.4.21"
-hyper = "0.14.27"
-hyper-tls = "0.5.0"
+hyper = "1.3.1"
+hyper-util = { version = "0.1.3", features = ["client-legacy", "http1", "http2"] }
+hyper-tls = "0.6.0"
 sled = "0.34.7"
 memmap2 = "0.9.4"
-aws-sdk-s3 = "0.34.0"
-aws-config = "0.56.1"
-aws-smithy-http = "0.56.1"
+aws-sdk-s3 = "1.27.0"
+aws-config = "1.4.0"
+aws-smithy-http = "0.60.8"
 redis = { version = "0.25.3", features = ["tokio-comp", "connection-manager"] }
 urlencoding = "2.1.3"
-http = "0.2.11"
-http-body = "0.4.5"
+http = "1.1.0"
+http-body = "1.0.0"
 sysinfo = "0.30.12"
 
 
@@ -84,7 +85,7 @@ version = "0.1.15"
 
 [dependencies.tonic]
 features = ["tls"]
-version = "0.10.2"
+version = "0.11.0"
 
 [dev-dependencies]
 once_cell = "1.19.0"

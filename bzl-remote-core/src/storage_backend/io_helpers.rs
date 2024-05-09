@@ -4,6 +4,7 @@ use http::header;
 use sha2::Digest as Sha2Digest;
 use tempfile::NamedTempFile;
 use tokio::io::AsyncWriteExt;
+use hyper_util::client::legacy::Client;
 
 use crate::hash::sha256_value::Sha256Value;
 
@@ -11,7 +12,7 @@ use super::{StorageBackend, StorageBackendError, UploadType};
 
 pub async fn store_body_in_cas<T: StorageBackend>(
     storage_backend: &T,
-    body: &mut hyper::Body,
+    body: &mut impl http_body::Body<Data = bytes::Bytes, Error = hyper::Error>,
 ) -> Result<Digest, StorageBackendError> {
     let tmp_file = NamedTempFile::new()?;
     let mut tokio_output = tokio::fs::File::create(tmp_file.path()).await?;
@@ -88,7 +89,7 @@ async fn inner_download_file_to_cas<T: StorageBackend>(
 ) -> Result<RedirectOrValue, StorageBackendError> {
     let uri = url.parse::<hyper::Uri>().unwrap();
     let https = hyper_tls::HttpsConnector::new();
-    let client = hyper::Client::builder().build::<_, hyper::Body>(https);
+    let client = Client::builder().build::<_, http_body::Body>(https);
     match client.get(uri).await {
         Ok(mut res) => {
             if res.status().is_redirection() {

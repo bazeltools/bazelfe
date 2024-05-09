@@ -10,8 +10,10 @@ use bazelfe_protos::build::bazel::remote::execution::v2::{self as execution};
 use futures::StreamExt;
 use http::Method;
 
+use bytes::Bytes;
 use http::Uri;
-use hyper::{Body, Request, Response, StatusCode};
+use hyper::{Request, Response, StatusCode, Error};
+use http_body::Body;
 use prost::Message;
 use sha2::Digest;
 use sysinfo::Disks;
@@ -26,7 +28,7 @@ use crate::storage_backend::BackendIOHelpers;
 use crate::storage_backend::{StorageBackend, StorageBackendError, UploadType};
 static NOTFOUND: &[u8] = b"Not Found";
 
-fn internal_server_error(message: String) -> Response<Body> {
+fn internal_server_error(message: String) -> ResponseBody {
     Response::builder()
         .status(StatusCode::INTERNAL_SERVER_ERROR)
         .body(message.into())
@@ -240,7 +242,7 @@ impl<T: StorageBackend + 'static> HttpEndpoint<T> {
             health_status: Default::default(),
         }
     }
-    pub async fn dispatch(&self, req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
+    pub async fn dispatch<B: Body<Data = Bytes, Error = Error>>(&self, req: Request<B>) -> Result<Response<B>, Error> {
         match self.inner_dispatch(req).await {
             Ok(r) => Ok(r),
             Err(err) => {
@@ -257,10 +259,10 @@ impl<T: StorageBackend + 'static> HttpEndpoint<T> {
         }
     }
 
-    async fn inner_dispatch(
+    async fn inner_dispatch<B: Body<Data = Bytes, Error = Error>>(
         &self,
-        req: Request<Body>,
-    ) -> Result<Response<Body>, HttpEndpointError> {
+        req: Request<B>,
+    ) -> Result<Response<B>, HttpEndpointError> {
         let first_segment = req.uri().path().split('/').nth(1).unwrap_or("");
         match (req.method(), first_segment) {
             (&Method::GET, "healthcheck") => {
@@ -298,9 +300,9 @@ impl<T: StorageBackend + 'static> HttpEndpoint<T> {
         }
     }
 
-    async fn body_into_cas(
+    async fn body_into_cas<B: Body<Data = Bytes, Error = Error>>(
         &self,
-        req: &mut Request<Body>,
+        req: &mut Request<B>,
     ) -> Result<execution::Digest, HttpEndpointError> {
         let tmp_file = NamedTempFile::new()?;
         let mut tokio_output = tokio::fs::File::create(tmp_file.path()).await.unwrap();
@@ -339,7 +341,7 @@ impl<T: StorageBackend + 'static> HttpEndpoint<T> {
         Ok(digest)
     }
 
-    async fn recv_cas(&self, mut req: Request<Body>) -> Result<Response<Body>, HttpEndpointError> {
+    async fn recv_cas(&self, mut req: RequestBody) -> Result<ResponseBody, HttpEndpointError> {
         let digest = self.body_into_cas(&mut req).await?;
 
         tracing::debug!("Receiving cas for produced digest: {:?}", digest);
@@ -352,8 +354,8 @@ impl<T: StorageBackend + 'static> HttpEndpoint<T> {
 
     async fn recv_bazelfe_index(
         &self,
-        mut req: Request<Body>,
-    ) -> Result<Response<Body>, HttpEndpointError> {
+        mut req: RequestBody,
+    ) -> Result<ResponseBody, HttpEndpointError> {
         let key = parse_bazel_fe_key(req.uri())?;
         let digest = self.body_into_cas(&mut req).await?;
 
@@ -379,8 +381,8 @@ impl<T: StorageBackend + 'static> HttpEndpoint<T> {
 
     async fn process_upstream_mirror(
         &self,
-        req: Request<Body>,
-    ) -> Result<Response<Body>, HttpEndpointError> {
+        req: RequestBody,
+    ) -> Result<ResponseBody, HttpEndpointError> {
         let mirror_request = parse_mirror_request(req.uri())?;
         tracing::debug!("Got mirror request for: {:?}", mirror_request);
 
@@ -416,8 +418,8 @@ impl<T: StorageBackend + 'static> HttpEndpoint<T> {
 
     async fn send_bazelfe_index(
         &self,
-        req: Request<Body>,
-    ) -> Result<Response<Body>, HttpEndpointError> {
+        req: RequestBody
+    ) -> Result<ResponseBody, HttpEndpointError> {
         let key = parse_bazel_fe_key(req.uri())?;
         tracing::debug!("Requesting bazelfe index for configuration: {:?}", key);
         let scoped_key = KeyValKey {
@@ -445,7 +447,7 @@ impl<T: StorageBackend + 'static> HttpEndpoint<T> {
     }
 
     /// HTTP status code 404
-    fn not_found(&self) -> Response<Body> {
+    fn not_found(&self) -> ResponseBody {
         Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(NOTFOUND.into())
@@ -455,7 +457,7 @@ impl<T: StorageBackend + 'static> HttpEndpoint<T> {
     async fn send_cas(
         &self,
         digest: &execution::Digest,
-    ) -> Result<Response<Body>, HttpEndpointError> {
+    ) -> Result<ResponseBody, HttpEndpointError> {
         let data = self.storage_backend.cas_get_data(digest).await?;
         let data = if let Some(d) = data {
             d
@@ -482,7 +484,7 @@ impl<T: StorageBackend + 'static> HttpEndpoint<T> {
             }
         };
 
-        Ok(Response::new(hyper::Body::wrap_stream::<
+        Ok(Response::new(hyper::body::Body::wrap_stream::<
             _,
             bytes::Bytes,
             Box<dyn std::error::Error + Send + Sync>,

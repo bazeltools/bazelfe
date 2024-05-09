@@ -3,7 +3,7 @@ use std::{
     task::{Context, Poll},
 };
 
-use super::{map_option_err, BoxError};
+use super::BoxError;
 
 pub enum EitherBody<A, B> {
     Left(A),
@@ -27,23 +27,13 @@ where
         }
     }
 
-    fn poll_data(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        match self.get_mut() {
-            EitherBody::Left(b) => Pin::new(b).poll_data(cx).map(map_option_err),
-            EitherBody::Right(b) => Pin::new(b).poll_data(cx).map(map_option_err),
-        }
-    }
-
-    fn poll_trailers(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<Option<http::HeaderMap>, Self::Error>> {
-        match self.get_mut() {
-            EitherBody::Left(b) => Pin::new(b).poll_trailers(cx).map_err(Into::into),
-            EitherBody::Right(b) => Pin::new(b).poll_trailers(cx).map_err(Into::into),
+    fn poll_frame(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+        ) -> Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
+          match self.get_mut() {
+            EitherBody::Left(b) => Pin::new(b).poll_frame(cx).map_err(Into::into),
+            EitherBody::Right(b) => Pin::new(b).poll_frame(cx).map_err(Into::into),
         }
     }
 }
