@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use aws_sdk_s3::{config::Region, error::SdkError, primitives::ByteStream, Client};
-use aws_smithy_http::byte_stream::error::Error as AwsError;
+use aws_smithy_http::error::Error as AwsError;
 use futures::{StreamExt, TryStreamExt};
 
 use crate::storage_backend::StorageBackendError;

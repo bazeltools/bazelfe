@@ -1,4 +1,5 @@
-use hyper::Body;
+use http_body::Body;
+use hyper::Request;
 use std::task::{Context, Poll};
 
 use tonic::body::BoxBody;
@@ -20,10 +21,11 @@ pub struct GrpcErrorTraceService<S> {
     inner: S,
 }
 
-impl<S> Service<hyper::Request<Body>> for GrpcErrorTraceService<S>
+impl<S, B> Service<Request<B>> for GrpcErrorTraceService<S>
 where
-    S: Service<hyper::Request<Body>, Response = hyper::Response<BoxBody>> + Clone + Send + 'static,
+    S: Service<Request<B>, Response = hyper::Response<BoxBody>> + Clone + Send + 'static,
     S::Future: Send + 'static,
+    B: Body<Data = bytes::Bytes, Error = hyper::Error>,
 {
     type Response = S::Response;
     type Error = S::Error;
@@ -33,7 +35,7 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, req: hyper::Request<Body>) -> Self::Future {
+    fn call(&mut self, req: Request<B>) -> Self::Future {
         // This is necessary because tonic internally uses `tower::buffer::Buffer`.
         // See https://github.com/tower-rs/tower/issues/547#issuecomment-767629149
         // for details on why this is necessary
