@@ -62,22 +62,22 @@ prost = "0.12.4"
 prost-types = "0.12.4"
 rand = "0.8.5"
 regex = "1.10.4"
-serde = { version = "1.0.198", features = ["derive"] }
+serde = { version = "1.0.200", features = ["derive"] }
 dynfmt = { version = "0.1.5", features = ["curly"] }
 toml = "0.8.12"
 time = "0.3.36"
 walkdir = "2.5.0"
 shellwords = "1.1.0"
 zip = "0.6.6"
-thiserror = "1.0.59"
+thiserror = "1.0.60"
 fork = { version = "0.1.23", optional = true }
-serde_json = "1.0.116"
+serde_json = "1.0.117"
 stdio-override = { version = "0.1.3", optional = true }
-libc = "0.2.153"
+libc = "0.2.154"
 crossbeam-channel = { version = "0.5.12", optional = true }
 notify = { version = "6.1.1", optional = true }
 tokio-serde = { version = "0.9.0", features = ["bincode"], optional = true }
-tokio-util = { version = "0.7.10", features = ["compat"] }
+tokio-util = { version = "0.7.11", features = ["compat"] }
 sha2 = "0.10.8"
 nix = "0.28.0"
 flume = { version = "0.11.0", optional = true }
@@ -88,7 +88,7 @@ crossterm = "0.27.0"
 muncher = { version = "0.7.0", optional = true }
 humantime = "2.1.0"
 tempfile = { version = "3.10.1", optional = true }
-anyhow = "1.0.82"
+anyhow = "1.0.83"
 tower = "0.4.13"
 mio = "0.8.11"
 ptyprocess = "0.4.1"
@@ -96,7 +96,7 @@ xml-rs = "0.8.19"
 
 [build-dependencies]
 vergen = { version = "8.3.1", features = [ "build", "git", "gitcl" ]}
-anyhow = "1.0.82"
+anyhow = "1.0.83"
 
 [dependencies.bazelfe-protos]
 path = "../bazelfe-protos"
