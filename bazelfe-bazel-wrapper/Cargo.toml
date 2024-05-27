@@ -22,7 +22,7 @@ log = "0.4.21"
 prost = "0.12.6"
 prost-types = "0.12.6"
 rand = "0.8.5"
-serde = { version = "1.0.202", features = ["derive"] }
+serde = { version = "1.0.203", features = ["derive"] }
 thiserror = "1.0.61"
 fork = { version = "0.1.23", optional = true }
 stdio-override = { version = "0.1.3", optional = true }
