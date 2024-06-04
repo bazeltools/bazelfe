@@ -35,7 +35,7 @@ rand = "0.8.5"
 regex = "1.10.4"
 serde = { version = "1.0.203", features = ["derive"] }
 serde_derive = "1.0.152"
-toml = "0.8.13"
+toml = "0.8.14"
 thiserror = "1.0.61"
 libc = "0.2.155"
 crossbeam-channel = { version = "0.5.13" }
