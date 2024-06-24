@@ -17,7 +17,7 @@ async-trait = "0.1.80"
 bytes = "1.6.0"
 ctrlc = "3.4.4"
 clap = { version = "4.5.7", features = ["derive", "env"] }
-lazy_static = "1.4.0"
+lazy_static = "1.5.0"
 log = "0.4.21"
 prost = "0.12.6"
 prost-types = "0.12.6"
