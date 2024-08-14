@@ -15,7 +15,7 @@ async-channel = "2.3.1"
 async-stream = "0.3.5"
 async-trait = "0.1.81"
 bytes = "1.7.1"
-ctrlc = "3.4.4"
+ctrlc = "3.4.5"
 clap = { version = "4.5.15", features = ["derive", "env"] }
 lazy_static = "1.5.0"
 log = "0.4.22"
