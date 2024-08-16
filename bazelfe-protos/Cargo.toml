@@ -19,7 +19,7 @@ features = ["full"]
 version = "1.38.1"
 
 [build-dependencies]
-tonic-build = { version = "0.11.0", features = ["prost"] }
+tonic-build = { version = "0.12.1", features = ["prost"] }
 
 
 [dev-dependencies]
