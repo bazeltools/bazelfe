@@ -45,7 +45,7 @@ flume = { version = "0.11.0" }
 dashmap = { version = "6.1.0" }
 time = "0.3.36"
 tempfile = { version = "3.12.0" }
-anyhow = "1.0.87"
+anyhow = "1.0.88"
 tower = { version = "0.4" }
 log = "0.4.22"
 hyper = "0.14.27"
@@ -64,7 +64,7 @@ sysinfo = "0.31.4"
 
 [build-dependencies]
 vergen = { version = "8.3.2", features = [ "build", "git", "gitcl" ]}
-anyhow = "1.0.87"
+anyhow = "1.0.88"
 
 [dependencies.bazelfe-protos]
 path = "../bazelfe-protos"
