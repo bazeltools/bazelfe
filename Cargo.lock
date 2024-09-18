@@ -651,8 +651,8 @@ dependencies = [
  "once_cell",
  "openssl",
  "pinky-swear",
- "prost",
- "prost-types",
+ "prost 0.12.6",
+ "prost-types 0.13.2",
  "ptyprocess",
  "rand",
  "serde",
@@ -705,8 +705,8 @@ dependencies = [
  "openssl",
  "pinky-swear",
  "pretty_env_logger",
- "prost",
- "prost-types",
+ "prost 0.12.6",
+ "prost-types 0.13.2",
  "ptyprocess",
  "rand",
  "regex",
@@ -738,8 +738,8 @@ name = "bazelfe-protos"
 version = "0.1.0"
 dependencies = [
  "openssl",
- "prost",
- "prost-types",
+ "prost 0.12.6",
+ "prost-types 0.13.2",
  "sha2",
  "tempfile",
  "thiserror",
@@ -867,8 +867,8 @@ dependencies = [
  "once_cell",
  "openssl",
  "pinky-swear",
- "prost",
- "prost-types",
+ "prost 0.12.6",
+ "prost-types 0.13.2",
  "rand",
  "redis",
  "regex",
@@ -2466,7 +2466,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "deb1435c188b76130da55f17a466d252ff7b1418b2ad3e037d127b94e3411f29"
 dependencies = [
  "bytes",
- "prost-derive",
+ "prost-derive 0.12.6",
+]
+
+[[package]]
+name = "prost"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3b2ecbe40f08db5c006b5764a2645f7f3f141ce756412ac9e1dd6087e6d32995"
+dependencies = [
+ "bytes",
+ "prost-derive 0.13.2",
 ]
 
 [[package]]
@@ -2483,8 +2493,8 @@ dependencies = [
  "once_cell",
  "petgraph",
  "prettyplease",
- "prost",
- "prost-types",
+ "prost 0.12.6",
+ "prost-types 0.12.6",
  "regex",
  "syn 2.0.46",
  "tempfile",
@@ -2505,12 +2515,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "prost-derive"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "acf0c195eebb4af52c752bec4f52f645da98b6e92077a04110c7f349477ae5ac"
+dependencies = [
+ "anyhow",
+ "itertools",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.46",
+]
+
+[[package]]
 name = "prost-types"
 version = "0.12.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9091c90b0a32608e984ff2fa4091273cbdd755d54935c51d520887f4a1dbd5b0"
 dependencies = [
- "prost",
+ "prost 0.12.6",
+]
+
+[[package]]
+name = "prost-types"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "60caa6738c7369b940c3d49246a8d1749323674c65cb13010134f5c9bad5b519"
+dependencies = [
+ "prost 0.13.2",
 ]
 
 [[package]]
@@ -3366,7 +3398,7 @@ dependencies = [
  "hyper-timeout",
  "percent-encoding",
  "pin-project",
- "prost",
+ "prost 0.12.6",
  "rustls",
  "rustls-pemfile",
  "tokio",
