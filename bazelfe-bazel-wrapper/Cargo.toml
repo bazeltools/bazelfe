@@ -13,7 +13,7 @@ required-features = ["dev-binaries"]
 [dependencies]
 async-channel = "2.3.1"
 async-stream = "0.3.5"
-async-trait = "0.1.82"
+async-trait = "0.1.83"
 bytes = "1.7.2"
 ctrlc = "3.4.5"
 clap = { version = "4.5.18", features = ["derive", "env"] }
