@@ -91,7 +91,7 @@ anyhow = "1.0.89"
 tower = "0.4.13"
 mio = "0.8.11"
 ptyprocess = "0.4.1"
-xml-rs = "0.8.19"
+xml-rs = "0.8.22"
 
 [build-dependencies]
 vergen = { version = "8.3.2", features = [ "build", "git", "gitcl" ]}
