@@ -161,7 +161,7 @@ mod tests {
 
         assert_eq!(
             xml_writable_to_string(&f1),
-            "<?xml version=\"1.0\" encoding=\"utf-8\"?><failure message=\"Failed to build\" type=\"BuildFailure\">System failed to build]]></failure>".to_string()
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?><failure message=\"Failed to build\" type=\"BuildFailure\">System failed to build]]&gt;</failure>".to_string()
         );
 
         let f2 = Failure {
@@ -183,7 +183,7 @@ mod tests {
 
         assert_eq!(
             xml_writable_to_string(&f3),
-            "<?xml version=\"1.0\" encoding=\"utf-8\"?><failure message=\"Failed to build\" type=\"BuildFailure\">System failed to build &lt;sometag> and ]]></failure>".to_string()
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?><failure message=\"Failed to build\" type=\"BuildFailure\">System failed to build &lt;sometag&gt; and ]]&gt;</failure>".to_string()
         );
         let f4 = Failure {
             message: "Failed to build".to_string(),
