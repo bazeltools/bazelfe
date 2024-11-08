@@ -73,7 +73,7 @@ thiserror = "2.0.0"
 fork = { version = "0.2.0", optional = true }
 serde_json = "1.0.132"
 stdio-override = { version = "0.1.3", optional = true }
-libc = "0.2.161"
+libc = "0.2.162"
 crossbeam-channel = { version = "0.5.13", optional = true }
 notify = { version = "6.1.1", optional = true }
 tokio-serde = { version = "0.9.0", features = ["bincode"], optional = true }
