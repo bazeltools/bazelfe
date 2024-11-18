@@ -37,7 +37,7 @@ serde = { version = "1.0.215", features = ["derive"] }
 serde_derive = "1.0.152"
 toml = "0.8.19"
 thiserror = "2.0.3"
-libc = "0.2.162"
+libc = "0.2.164"
 crossbeam-channel = { version = "0.5.13" }
 tokio-util = { version = "0.7.12", features = ["compat"] }
 sha2 = "0.10.8"
