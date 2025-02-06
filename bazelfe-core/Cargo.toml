@@ -64,7 +64,7 @@ rand = "0.8.5"
 regex = "1.11.1"
 serde = { version = "1.0.217", features = ["derive"] }
 dynfmt = { version = "0.1.5", features = ["curly"] }
-toml = "0.8.19"
+toml = "0.8.20"
 time = "0.3.37"
 walkdir = "2.5.0"
 shellwords = "1.1.0"
