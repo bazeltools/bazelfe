@@ -43,7 +43,7 @@ tokio-util = { version = "0.7.14", features = ["compat"] }
 sha2 = "0.10.8"
 flume = { version = "0.11.1" }
 dashmap = { version = "6.1.0" }
-time = "0.3.39"
+time = "0.3.40"
 tempfile = { version = "3.19.0" }
 anyhow = "1.0.97"
 tower = { version = "0.4" }
