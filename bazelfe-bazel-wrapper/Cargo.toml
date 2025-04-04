@@ -43,7 +43,7 @@ tempfile = { version = "3.19.1", optional = true }
 tower = "0.4.13"
 mio = "1.0.3"
 ptyprocess = "0.4.1"
-openssl = { version = "0.10.71", features = ["vendored"] }
+openssl = { version = "0.10.72", features = ["vendored"] }
 
 [build-dependencies]
 
