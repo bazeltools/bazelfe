@@ -32,7 +32,7 @@ notify = { version = "8.0.0", optional = true }
 tokio-serde = { version = "0.9.0", features = ["bincode"], optional = true }
 tokio-util = { version = "0.7.15", features = ["compat"] }
 sha2 = "0.10.9"
-nix = { version = "0.30.0", features = ["signal"] }
+nix = { version = "0.30.1", features = ["signal"] }
 flume = { version = "0.11.1", optional = true }
 trim-margin = { version = "0.1.0", optional = true }
 dashmap = { version = "6.1.0", optional = true }
