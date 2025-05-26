@@ -645,7 +645,7 @@ dependencies = [
  "lazy_static",
  "libc",
  "log",
- "mio 1.0.3",
+ "mio 1.0.4",
  "muncher",
  "nix 0.30.1",
  "notify",
@@ -698,7 +698,7 @@ dependencies = [
  "lazy_static",
  "libc",
  "log",
- "mio 1.0.3",
+ "mio 1.0.4",
  "muncher",
  "nom",
  "notify",
@@ -1122,7 +1122,7 @@ dependencies = [
  "crossterm_winapi",
  "derive_more",
  "document-features",
- "mio 1.0.3",
+ "mio 1.0.4",
  "parking_lot 0.12.1",
  "rustix 1.0.1",
  "signal-hook",
@@ -2097,14 +2097,14 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "1.0.3"
+version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2886843bf800fba2e3377cff24abf6379b4c4d5c6681eaf9ea5b0d15090450bd"
+checksum = "78bed444cc8a2160f01cbcf811ef18cac863ad68ae8ca62092e8db51d51c761c"
 dependencies = [
  "libc",
  "log",
  "wasi 0.11.0+wasi-snapshot-preview1",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2194,7 +2194,7 @@ dependencies = [
  "kqueue",
  "libc",
  "log",
- "mio 1.0.3",
+ "mio 1.0.4",
  "notify-types",
  "walkdir",
  "windows-sys 0.59.0",
@@ -3026,7 +3026,7 @@ checksum = "34db1a06d485c9142248b7a054f034b349b212551f3dfd19c94d45a754a217cd"
 dependencies = [
  "libc",
  "mio 0.8.11",
- "mio 1.0.3",
+ "mio 1.0.4",
  "signal-hook",
 ]
 
@@ -3297,7 +3297,7 @@ dependencies = [
  "backtrace",
  "bytes",
  "libc",
- "mio 1.0.3",
+ "mio 1.0.4",
  "parking_lot 0.12.1",
  "pin-project-lite",
  "signal-hook-registry",
