@@ -9,7 +9,7 @@ license = "Apache-2.0"
 tonic = { version = "0.10.2", features = ["tls"] }
 prost = "0.12.6"
 # Required for wellknown types
-prost-types = "0.12.6"
+prost-types = "0.14.0"
 sha2 = "0.10.9"
 thiserror = "2.0.12"
 openssl = { version = "0.10.73", features = ["vendored"] }
