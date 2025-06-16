@@ -19,7 +19,7 @@ ctrlc = "3.4.7"
 clap = { version = "4.5.40", features = ["derive", "env"] }
 lazy_static = "1.5.0"
 log = "0.4.27"
-prost = "0.12.6"
+prost = "0.14.0"
 prost-types = "0.12.6"
 rand = "0.8.5"
 serde = { version = "1.0.219", features = ["derive"] }
