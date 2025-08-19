@@ -88,7 +88,7 @@ version = "0.10.2"
 
 [dev-dependencies]
 once_cell = "1.21.3"
-pinky-swear = "6.2.0"
+pinky-swear = "6.2.1"
 tower = "0.4.13"
 tempfile = "3.20.0"
 
