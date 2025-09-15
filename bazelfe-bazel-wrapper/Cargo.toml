@@ -42,7 +42,7 @@ muncher = { version = "0.7.0", optional = true }
 tempfile = { version = "3.22.0", optional = true }
 tower = "0.4.13"
 mio = "1.0.4"
-ptyprocess = "0.4.1"
+ptyprocess = "0.5.0"
 openssl = { version = "0.10.73", features = ["vendored"] }
 
 [build-dependencies]

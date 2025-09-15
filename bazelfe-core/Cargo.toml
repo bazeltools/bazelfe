@@ -90,7 +90,7 @@ tempfile = { version = "3.22.0", optional = true }
 anyhow = "1.0.99"
 tower = "0.4.13"
 mio = "1.0.4"
-ptyprocess = "0.4.1"
+ptyprocess = "0.5.0"
 xml-rs = "0.8.22"
 
 [build-dependencies]
