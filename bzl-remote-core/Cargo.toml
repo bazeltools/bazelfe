@@ -21,7 +21,7 @@ async-stream = "0.3.6"
 async-trait = "0.1.89"
 byteorder = "1.5.0"
 bytes = "1.10.1"
-clap = { version = "4.5.50", features = ["derive", "env"] }
+clap = { version = "4.5.51", features = ["derive", "env"] }
 base64 = "0.22.1"
 lazy_static = "1.5.0"
 openssl = { version = "0.10.74", features = ["vendored"] }
