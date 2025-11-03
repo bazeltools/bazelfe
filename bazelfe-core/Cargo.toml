@@ -77,7 +77,7 @@ libc = "0.2.177"
 crossbeam-channel = { version = "0.5.15", optional = true }
 notify = { version = "8.2.0", optional = true }
 tokio-serde = { version = "0.9.0", features = ["bincode"], optional = true }
-tokio-util = { version = "0.7.16", features = ["compat"] }
+tokio-util = { version = "0.7.17", features = ["compat"] }
 sha2 = "0.10.9"
 flume = { version = "0.11.1", optional = true }
 trim-margin = { version = "0.1.0", optional = true }
