@@ -11,7 +11,7 @@ prost = "0.12.6"
 # Required for wellknown types
 prost-types = "0.12.6"
 sha2 = "0.10.9"
-thiserror = "2.0.17"
+thiserror = "2.0.18"
 openssl = { version = "0.10.75", features = ["vendored"] }
 
 [dependencies.tokio]
